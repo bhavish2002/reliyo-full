@@ -13,6 +13,9 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -46,6 +49,10 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        cta: {
+          DEFAULT: "hsl(var(--cta-background))",
+          foreground: "hsl(var(--cta-foreground))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
