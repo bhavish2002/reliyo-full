@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 
@@ -18,8 +19,8 @@ const HeroSection = () => {
         escrow, and every action is auditable.
       </p>
 
-      <Button size="lg" className="mt-8 gap-2 px-8 text-base">
-        Start Now <ArrowRight className="h-4 w-4" />
+      <Button size="lg" className="mt-8 gap-2 px-8 text-base" asChild>
+        <Link to="/sign-up">Start Now <ArrowRight className="h-4 w-4" /></Link>
       </Button>
     </section>
   );
