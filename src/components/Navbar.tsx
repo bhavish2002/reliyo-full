@@ -14,10 +14,12 @@ const Navbar = () => {
         </Link>
 
         <div className="flex items-center gap-3">
-          <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
-            Log In
+          <Button variant="ghost" className="text-muted-foreground hover:text-foreground" asChild>
+            <Link to="/sign-in">Log In</Link>
           </Button>
-          <Button>Get Started</Button>
+          <Button asChild>
+            <Link to="/sign-up">Get Started</Link>
+          </Button>
         </div>
       </div>
     </nav>

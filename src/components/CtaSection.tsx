@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 const CtaSection = () => {
@@ -14,8 +15,9 @@ const CtaSection = () => {
           <Button
             size="lg"
             className="mt-8 px-8 text-base"
+            asChild
           >
-            Create Your Account
+            <Link to="/sign-up">Create Your Account</Link>
           </Button>
         </div>
       </div>
