@@ -144,10 +144,11 @@ const SignUp = () => {
         dialCode: selectedCountry?.dialCode || "+91",
       };
       console.log("SignUp payload:", formatted);
-      // Simulate API call
       await new Promise((r) => setTimeout(r, 1200));
-      toast({ title: "Account created!", description: "Welcome to Reliyo." });
-      navigate("/sign-in");
+      toast({ title: "OTP Sent!", description: "Verify your phone to complete registration." });
+      navigate("/verify-otp", {
+        state: { phone: data.phone, dialCode: selectedCountry?.dialCode || "+91", from: "sign-up" },
+      });
     } catch {
       toast({
         title: "Something went wrong",
