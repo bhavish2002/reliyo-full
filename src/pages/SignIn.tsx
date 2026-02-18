@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Shield, Phone, Loader2, CheckCircle2, Info } from "lucide-react";
+import { Shield, Phone, Loader2, CheckCircle2, Info, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import CountryCodeSelect from "@/components/CountryCodeSelect";
 import { getCountryByCode } from "@/lib/countries";
@@ -23,6 +23,7 @@ import {
 const SignIn = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
 
   const {
     register,
@@ -59,8 +60,16 @@ const SignIn = () => {
 
   const onSubmit = async (data: SignInFormData) => {
     if (phoneError) return;
+    setAccountError(null);
     setIsSubmitting(true);
     try {
+      // Simulated account existence check
+      const registered: string[] = JSON.parse(localStorage.getItem("registered_phones") || "[]");
+      if (!registered.includes(data.phone)) {
+        setAccountError("No account found for this phone number.");
+        setIsSubmitting(false);
+        return;
+      }
       console.log("SignIn payload:", {
         ...data,
         dialCode: selectedCountry?.dialCode || "+91",
@@ -135,6 +144,17 @@ const SignIn = () => {
               <p className="mt-1 text-xs text-destructive">
                 {errors.phone?.message || phoneError}
               </p>
+            )}
+            {accountError && (
+              <div className="mt-2 flex items-start gap-2 rounded-lg bg-destructive/10 p-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <p className="text-xs text-destructive">
+                  {accountError}{" "}
+                  <Link to="/sign-up" className="font-medium underline">
+                    Create an account
+                  </Link>
+                </p>
+              </div>
             )}
           </div>
 
