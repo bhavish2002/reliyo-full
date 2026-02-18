@@ -144,6 +144,12 @@ const SignUp = () => {
         dialCode: selectedCountry?.dialCode || "+91",
       };
       console.log("SignUp payload:", formatted);
+      // Store phone as "registered" for simulated account check
+      const registered = JSON.parse(localStorage.getItem("registered_phones") || "[]");
+      if (!registered.includes(data.phone)) {
+        registered.push(data.phone);
+        localStorage.setItem("registered_phones", JSON.stringify(registered));
+      }
       await new Promise((r) => setTimeout(r, 1200));
       toast({ title: "OTP Sent!", description: "Verify your phone to complete registration." });
       navigate("/verify-otp", {
