@@ -1,0 +1,280 @@
+import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard,
+  Smartphone, Building2, Wallet, Lock, ShieldCheck,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "@/hooks/use-toast";
+import DashboardLayout from "@/components/DashboardLayout";
+
+type PaymentStatus = "idle" | "processing" | "success" | "failed" | "pending";
+
+interface PaymentMethod {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+}
+
+const PAYMENT_METHODS: PaymentMethod[] = [
+  { id: "upi", label: "UPI", description: "Pay via Google Pay, PhonePe, Paytm, or any UPI app", icon: Smartphone },
+  { id: "card", label: "Credit / Debit Card", description: "Visa, Mastercard, RuPay accepted", icon: CreditCard },
+  { id: "netbanking", label: "Net Banking", description: "All major Indian banks supported", icon: Building2 },
+  { id: "wallet", label: "Wallet", description: "Paytm, Amazon Pay, Mobikwik & more", icon: Wallet },
+];
+
+const PaymentGateway = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // taskData and amount are passed via router state from CreateTask
+  const taskData = location.state?.taskData ?? null;
+  const amount: number = location.state?.amount ?? 0;
+  const platformFee: number = location.state?.platformFee ?? 0;
+
+  const [selectedMethod, setSelectedMethod] = useState<string>("");
+  const [status, setStatus] = useState<PaymentStatus>("idle");
+
+  const handlePay = () => {
+    if (!selectedMethod) return;
+    setStatus("processing");
+
+    // Simulate payment processing delay (2s)
+    setTimeout(() => {
+      // Simulate: UPI → success, card → pending, netbanking → failed, wallet → success
+      const outcomeMap: Record<string, PaymentStatus> = {
+        upi: "success",
+        card: "pending",
+        netbanking: "failed",
+        wallet: "success",
+      };
+      const outcome = outcomeMap[selectedMethod] ?? "success";
+      setStatus(outcome);
+
+      if (outcome === "success") {
+        // Save task to localStorage only on success
+        const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
+        const newTask = {
+          ...taskData,
+          status: "open",
+          paymentStatus: "paid",
+          createdAt: new Date().toISOString(),
+          createdBy: "Arjun Mehta",
+        };
+        tasks.push(newTask);
+        localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
+        toast({ title: "Payment Successful!", description: "Your reward has been locked. Task is now live." });
+      }
+
+      if (outcome === "pending") {
+        toast({ title: "Payment Under Processing", description: "We'll update your task status once confirmed." });
+        // Save with pending payment status
+        const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
+        const newTask = {
+          ...taskData,
+          status: "draft",
+          paymentStatus: "pending",
+          createdAt: new Date().toISOString(),
+          createdBy: "Arjun Mehta",
+        };
+        tasks.push(newTask);
+        localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
+      }
+    }, 2000);
+  };
+
+  const handleRetry = () => {
+    setStatus("idle");
+    setSelectedMethod("");
+  };
+
+  const handleGoToTasks = () => navigate("/my-tasks");
+  const handleBack = () => navigate("/create-task");
+
+  // ── Processing state ──────────────────────────────────────────────────
+  if (status === "processing") {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+          <div className="h-16 w-16 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          <div className="text-center">
+            <p className="text-lg font-semibold text-foreground">Processing Payment…</p>
+            <p className="text-sm text-muted-foreground mt-1">Please do not close this window</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── Success state ─────────────────────────────────────────────────────
+  if (status === "success") {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 max-w-md mx-auto text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
+            <CheckCircle2 className="h-10 w-10 text-success" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Payment Successful!</h2>
+            <p className="text-muted-foreground mt-2">
+              ₹{amount.toLocaleString()} has been locked as a reward deposit. Your task is now live and visible to workers.
+            </p>
+          </div>
+          <div className="w-full rounded-xl bg-muted p-4 text-sm text-left space-y-2">
+            <div className="flex justify-between"><span className="text-muted-foreground">Amount Paid</span><span className="font-semibold">₹{amount.toLocaleString()}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Platform Fee</span><span className="font-semibold text-destructive">-₹{platformFee.toLocaleString()}</span></div>
+            <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
+              <span>Worker Payout</span>
+              <span className="text-success">₹{(amount - platformFee).toLocaleString()}</span>
+            </div>
+          </div>
+          <Button className="w-full" onClick={handleGoToTasks}>
+            View My Tasks
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── Failed state ──────────────────────────────────────────────────────
+  if (status === "failed") {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 max-w-md mx-auto text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
+            <XCircle className="h-10 w-10 text-destructive" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Payment Failed</h2>
+            <p className="text-muted-foreground mt-2">
+              We were unable to process your payment of ₹{amount.toLocaleString()}. No amount has been deducted.
+            </p>
+          </div>
+          <div className="w-full space-y-3">
+            <Button className="w-full" onClick={handleRetry}>
+              Retry Payment
+            </Button>
+            <Button variant="ghost" className="w-full" onClick={handleBack}>
+              <ArrowLeft className="h-4 w-4 mr-2" /> Go Back to Task
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── Pending state ─────────────────────────────────────────────────────
+  if (status === "pending") {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 max-w-md mx-auto text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-secondary">
+            <Clock className="h-10 w-10 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Payment Under Processing</h2>
+            <p className="text-muted-foreground mt-2">
+              Your payment of ₹{amount.toLocaleString()} is being verified. Your task has been saved as a draft and will go live once the payment is confirmed.
+            </p>
+          </div>
+          <div className="w-full rounded-xl border border-secondary bg-secondary/50 p-4 text-sm text-left">
+            <p className="font-medium text-secondary-foreground">What happens next?</p>
+            <ul className="mt-2 space-y-1 text-muted-foreground list-disc list-inside">
+              <li>We'll verify the payment with your bank</li>
+              <li>Your task will be published automatically on confirmation</li>
+              <li>You'll receive a notification once it's live</li>
+            </ul>
+          </div>
+          <Button className="w-full" onClick={handleGoToTasks}>
+            View My Tasks
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // ── Idle / Select payment method ──────────────────────────────────────
+  return (
+    <DashboardLayout>
+      <div className="max-w-2xl mx-auto">
+        <button
+          onClick={handleBack}
+          className="mb-6 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Task Review
+        </button>
+
+        <h1 className="text-2xl font-bold text-foreground mb-1">Complete Payment</h1>
+        <p className="text-sm text-muted-foreground mb-6">
+          Lock ₹{amount.toLocaleString()} as a reward deposit to publish your task.
+        </p>
+
+        {/* Amount summary */}
+        <Card className="rounded-xl mb-6">
+          <CardContent className="p-5 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Reward Amount</span>
+              <span>₹{amount.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Platform Fee (5%)</span>
+              <span className="text-destructive">-₹{platformFee.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between font-semibold border-t border-border pt-2 mt-1 text-base">
+              <span>Total to Pay</span>
+              <span className="text-primary">₹{amount.toLocaleString()}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Payment methods */}
+        <p className="text-sm font-medium text-foreground mb-3">Select Payment Method</p>
+        <div className="space-y-3 mb-6">
+          {PAYMENT_METHODS.map((method) => {
+            const Icon = method.icon;
+            const isSelected = selectedMethod === method.id;
+            return (
+              <button
+                key={method.id}
+                onClick={() => setSelectedMethod(method.id)}
+                className={`w-full flex items-center gap-4 rounded-xl border p-4 text-left transition-all ${
+                  isSelected
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border bg-card hover:border-primary/50"
+                }`}
+              >
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">{method.label}</p>
+                  <p className="text-xs text-muted-foreground">{method.description}</p>
+                </div>
+                <div className={`h-4 w-4 rounded-full border-2 shrink-0 transition-colors ${isSelected ? "border-primary bg-primary" : "border-muted-foreground"}`} />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Security note */}
+        <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-xs text-muted-foreground mb-6">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
+          Your payment is secured with 256-bit SSL encryption. The reward is held in escrow and released only on task completion.
+        </div>
+
+        <Button
+          className="w-full gap-2 h-12 text-base"
+          disabled={!selectedMethod}
+          onClick={handlePay}
+        >
+          <Lock className="h-4 w-4" />
+          Lock & Pay ₹{amount.toLocaleString()}
+        </Button>
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default PaymentGateway;

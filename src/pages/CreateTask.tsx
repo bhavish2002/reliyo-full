@@ -1,27 +1,45 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Lock, CheckCircle2, Info, ChevronDown, CalendarIcon, X } from "lucide-react";
+import {
+  ArrowLeft, ArrowRight, Lock, CheckCircle2, Info, CalendarIcon, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
+import { countriesWithStates, ALL_COUNTRY_NAMES, getStatesByCountry } from "@/lib/countriesStates";
 
+// ── Constants ────────────────────────────────────────────────────────────────
 const WORK_TYPES = ["Virtual", "Physical", "Hybrid"];
 const UPDATE_FREQUENCIES = ["Daily", "Weekly", "Bi-weekly", "Monthly"];
-const DOMAINS = ["Technology", "Design", "Marketing", "Writing", "Translation", "Delivery", "Cleaning", "Other"];
-const COUNTRIES = ["India"];
-const STATES: Record<string, string[]> = {
-  India: ["Maharashtra", "Karnataka", "Delhi", "Tamil Nadu", "Uttar Pradesh", "Gujarat", "Rajasthan", "Other"],
-};
+const DOMAINS = [
+  "Technology", "Design", "Marketing", "Writing", "Translation",
+  "Delivery", "Cleaning", "Other",
+];
 
+const PLATFORM_FEE_PERCENT = 5;
+const MIN_REWARD = 250;
+const TITLE_MIN_WORDS = 3;
+const TITLE_MAX_WORDS = 15;
+const DESC_MIN_WORDS = 10;
+const DESC_MAX_WORDS = 200;
+const DOMAIN_OTHER_MAX_WORDS = 10;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const wordCount = (str: string) =>
+  str.trim() === "" ? 0 : str.trim().split(/\s+/).length;
+
+// ── Types ────────────────────────────────────────────────────────────────────
 interface TaskForm {
   title: string;
   description: string;
@@ -30,6 +48,7 @@ interface TaskForm {
   skills: string[];
   updateFrequency: string;
   domain: string;
+  domainOther: string;
   country: string;
   state: string;
   city: string;
@@ -45,15 +64,15 @@ const initialForm: TaskForm = {
   skills: [],
   updateFrequency: "",
   domain: "",
+  domainOther: "",
   country: "",
   state: "",
   city: "",
-  reward: 500,
+  reward: MIN_REWARD,
   deadline: undefined,
 };
 
-const PLATFORM_FEE_PERCENT = 5;
-
+// ── Step Indicator ───────────────────────────────────────────────────────────
 const StepIndicator = ({ current }: { current: number }) => {
   const steps = [
     { num: 1, label: "Details" },
@@ -67,9 +86,7 @@ const StepIndicator = ({ current }: { current: number }) => {
           <div className="flex flex-col items-center">
             <div
               className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
-                current > step.num
-                  ? "bg-primary text-primary-foreground"
-                  : current === step.num
+                current > step.num || current === step.num
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground"
               }`}
@@ -89,6 +106,21 @@ const StepIndicator = ({ current }: { current: number }) => {
   );
 };
 
+// ── Word count helper component ───────────────────────────────────────────────
+const WordCountHint = ({
+  value, min, max,
+}: { value: string; min: number; max: number }) => {
+  const count = wordCount(value);
+  const tooFew = count < min;
+  const tooMany = count > max;
+  return (
+    <p className={`mt-1 text-xs ${tooMany ? "text-destructive" : tooFew && count > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+      {count} / {max} words {tooFew && count > 0 ? `(min ${min})` : tooMany ? `(max ${max})` : ""}
+    </p>
+  );
+};
+
+// ── Main Component ───────────────────────────────────────────────────────────
 const CreateTask = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -113,57 +145,79 @@ const CreateTask = () => {
   const platformFee = Math.round(form.reward * (PLATFORM_FEE_PERCENT / 100));
   const totalPayout = form.reward;
 
+  const effectiveDomain =
+    form.domain === "Other" ? form.domainOther.trim() : form.domain;
+
+  const titleWords = wordCount(form.title);
+  const descWords = wordCount(form.description);
+  const domainOtherWords = wordCount(form.domainOther);
+
   const canProceedStep1 =
-    form.title.trim() && form.description.trim() && form.workType && form.reward >= 100 && form.deadline;
+    form.title.trim() !== "" &&
+    titleWords >= TITLE_MIN_WORDS &&
+    titleWords <= TITLE_MAX_WORDS &&
+    form.description.trim() !== "" &&
+    descWords >= DESC_MIN_WORDS &&
+    descWords <= DESC_MAX_WORDS &&
+    form.workType !== "" &&
+    form.reward >= MIN_REWARD &&
+    form.deadline !== undefined &&
+    (form.domain !== "Other" || (form.domainOther.trim() !== "" && domainOtherWords <= DOMAIN_OTHER_MAX_WORDS));
 
   const handlePublish = () => {
-    // Save to localStorage for simulated My Tasks
-    const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-    const newTask = {
+    // Navigate to payment page — task is NOT saved yet
+    const taskData = {
       id: Date.now().toString(),
       ...form,
+      domain: effectiveDomain,
       deadline: form.deadline ? form.deadline.toISOString() : "",
-      status: "open",
       location: [form.city, form.state, form.country].filter(Boolean).join(", "),
-      createdAt: new Date().toISOString(),
-      createdBy: "Arjun Mehta",
     };
-    tasks.push(newTask);
-    localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
-
-    toast({ title: "Task Published!", description: "Your task is now live and visible to workers." });
-    navigate("/my-tasks");
+    navigate("/payment", {
+      state: { taskData, amount: totalPayout, platformFee },
+    });
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout>
       <h1 className="text-2xl font-bold text-foreground mb-2">Create a Task</h1>
       <StepIndicator current={step} />
 
-      {/* Step 1: Details */}
+      {/* ── Step 1: Details ──────────────────────────────────────────────── */}
       {step === 1 && (
         <Card className="rounded-xl max-w-3xl mx-auto">
           <CardContent className="p-6 space-y-5">
+
+            {/* Title */}
             <div>
-              <label className="text-sm font-medium text-foreground">Title</label>
+              <label className="text-sm font-medium text-foreground">
+                Title <span className="text-muted-foreground text-xs">(min {TITLE_MIN_WORDS} – max {TITLE_MAX_WORDS} words)</span>
+              </label>
               <Input
                 className="mt-1"
                 placeholder="What needs to be done?"
                 value={form.title}
                 onChange={(e) => updateField("title", e.target.value)}
               />
+              <WordCountHint value={form.title} min={TITLE_MIN_WORDS} max={TITLE_MAX_WORDS} />
             </div>
 
+            {/* Description */}
             <div>
-              <label className="text-sm font-medium text-foreground">Description</label>
+              <label className="text-sm font-medium text-foreground">
+                Description <span className="text-muted-foreground text-xs">(min {DESC_MIN_WORDS} – max {DESC_MAX_WORDS} words)</span>
+              </label>
               <Textarea
-                className="mt-1 min-h-[100px]"
+                className="mt-1 min-h-[110px]"
                 placeholder="Describe the task in detail..."
                 value={form.description}
                 onChange={(e) => updateField("description", e.target.value)}
               />
+              <WordCountHint value={form.description} min={DESC_MIN_WORDS} max={DESC_MAX_WORDS} />
             </div>
 
+            {/* Work Type + Manpower */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-foreground">Work Type</label>
@@ -186,6 +240,7 @@ const CreateTask = () => {
               </div>
             </div>
 
+            {/* Skills */}
             <div>
               <label className="text-sm font-medium text-foreground">Skills</label>
               <div className="mt-1 flex gap-2">
@@ -209,6 +264,7 @@ const CreateTask = () => {
               )}
             </div>
 
+            {/* Update Frequency + Domain */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-foreground">Update Frequency</label>
@@ -221,31 +277,65 @@ const CreateTask = () => {
               </div>
               <div>
                 <label className="text-sm font-medium text-foreground">Domain</label>
-                <Select value={form.domain} onValueChange={(v) => updateField("domain", v)}>
+                <Select
+                  value={form.domain}
+                  onValueChange={(v) => {
+                    updateField("domain", v);
+                    if (v !== "Other") updateField("domainOther", "");
+                  }}
+                >
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     {DOMAINS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {/* Other domain input */}
+                {form.domain === "Other" && (
+                  <div className="mt-2">
+                    <Input
+                      placeholder="Specify domain (max 10 words)"
+                      value={form.domainOther}
+                      onChange={(e) => updateField("domainOther", e.target.value)}
+                    />
+                    <p className={`mt-1 text-xs ${domainOtherWords > DOMAIN_OTHER_MAX_WORDS ? "text-destructive" : "text-muted-foreground"}`}>
+                      {domainOtherWords} / {DOMAIN_OTHER_MAX_WORDS} words
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* Country + State + City */}
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium text-foreground">Country</label>
-                <Select value={form.country} onValueChange={(v) => { updateField("country", v); updateField("state", ""); }}>
+                <Select
+                  value={form.country}
+                  onValueChange={(v) => {
+                    updateField("country", v);
+                    updateField("state", "");
+                  }}
+                >
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  <SelectContent className="max-h-60">
+                    {ALL_COUNTRY_NAMES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-sm font-medium text-foreground">State</label>
-                <Select value={form.state} onValueChange={(v) => updateField("state", v)} disabled={!form.country}>
+                <Select
+                  value={form.state}
+                  onValueChange={(v) => updateField("state", v)}
+                  disabled={!form.country}
+                >
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    {(STATES[form.country] || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  <SelectContent className="max-h-60">
+                    {getStatesByCountry(form.country).map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -260,16 +350,23 @@ const CreateTask = () => {
               </div>
             </div>
 
+            {/* Reward + Deadline */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-foreground">Reward (₹)</label>
                 <Input
                   className="mt-1"
                   type="number"
-                  min={100}
+                  min={MIN_REWARD}
                   value={form.reward}
                   onChange={(e) => updateField("reward", parseInt(e.target.value) || 0)}
                 />
+                {form.reward < MIN_REWARD && (
+                  <p className="mt-1 text-xs text-destructive">Minimum reward is ₹{MIN_REWARD}</p>
+                )}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Enter a reasonable reward amount based on the work request.
+                </p>
               </div>
               <div>
                 <label className="text-sm font-medium text-foreground">Deadline</label>
@@ -301,7 +398,7 @@ const CreateTask = () => {
         </Card>
       )}
 
-      {/* Step 2: Review */}
+      {/* ── Step 2: Review ────────────────────────────────────────────────── */}
       {step === 2 && (
         <div className="max-w-3xl mx-auto space-y-4">
           <Card className="rounded-xl">
@@ -316,7 +413,7 @@ const CreateTask = () => {
                 <div><p className="text-xs text-muted-foreground">Deadline</p><p className="text-sm font-medium">{form.deadline ? format(form.deadline, "MMMM do, yyyy") : "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Update Frequency</p><p className="text-sm font-medium">{form.updateFrequency || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Skills</p><p className="text-sm font-medium">{form.skills.join(", ") || "—"}</p></div>
-                <div><p className="text-xs text-muted-foreground">Domain</p><p className="text-sm font-medium">{form.domain || "—"}</p></div>
+                <div><p className="text-xs text-muted-foreground">Domain</p><p className="text-sm font-medium">{effectiveDomain || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Reward</p><p className="text-sm font-medium text-primary">₹{form.reward.toLocaleString()}</p></div>
               </div>
             </CardContent>
@@ -338,7 +435,7 @@ const CreateTask = () => {
         </div>
       )}
 
-      {/* Step 3: Lock Reward */}
+      {/* ── Step 3: Lock Reward ───────────────────────────────────────────── */}
       {step === 3 && (
         <div className="max-w-3xl mx-auto space-y-4">
           <Card className="rounded-xl">
@@ -367,14 +464,18 @@ const CreateTask = () => {
 
           <Card className="rounded-xl border-primary/30 bg-primary/5">
             <CardContent className="p-4">
-              <p className="text-sm font-semibold text-primary mb-2">Terms & conditions <Info className="inline h-3.5 w-3.5" /></p>
+              <p className="text-sm font-semibold text-primary mb-2">
+                Terms &amp; conditions <Info className="inline h-3.5 w-3.5" />
+              </p>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="terms"
                   checked={agreedTerms}
                   onCheckedChange={(c) => setAgreedTerms(c === true)}
                 />
-                <label htmlFor="terms" className="text-sm">I hereby agree to the terms and conditions above</label>
+                <label htmlFor="terms" className="text-sm">
+                  I hereby agree to the terms and conditions above
+                </label>
               </div>
             </CardContent>
           </Card>
@@ -389,7 +490,7 @@ const CreateTask = () => {
               <ArrowLeft className="h-4 w-4" /> Previous
             </Button>
             <Button disabled={!agreedTerms} onClick={handlePublish} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" /> Confirm & Publish Task
+              <CheckCircle2 className="h-4 w-4" /> Confirm &amp; Publish Task
             </Button>
           </div>
         </div>
