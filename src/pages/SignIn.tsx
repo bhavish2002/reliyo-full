@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 
 const SignIn = () => {
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -66,6 +67,9 @@ const SignIn = () => {
       });
       await new Promise((r) => setTimeout(r, 1200));
       toast({ title: "OTP Sent!", description: "Check your phone for the verification code." });
+      navigate("/verify-otp", {
+        state: { phone: data.phone, dialCode: selectedCountry?.dialCode || "+91", from: "sign-in" },
+      });
     } catch {
       toast({
         title: "Something went wrong",
