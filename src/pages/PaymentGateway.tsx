@@ -33,6 +33,7 @@ const PaymentGateway = () => {
   const taskData = location.state?.taskData ?? null;
   const amount: number = location.state?.amount ?? 0;
   const platformFee: number = location.state?.platformFee ?? 0;
+  const isAcceptFlow: boolean = location.state?.isAcceptFlow ?? false;
 
   const [selectedMethod, setSelectedMethod] = useState<string>("");
   const [status, setStatus] = useState<PaymentStatus>("idle");
@@ -54,18 +55,31 @@ const PaymentGateway = () => {
       setStatus(outcome);
 
       if (outcome === "success") {
-        // Save task to localStorage only on success
-        const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-        const newTask = {
-          ...taskData,
-          status: "open",
-          paymentStatus: "paid",
-          createdAt: new Date().toISOString(),
-          createdBy: "Arjun Mehta",
-        };
-        tasks.push(newTask);
-        localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
-        toast({ title: "Payment Successful!", description: "Your reward has been locked. Task is now live." });
+        if (isAcceptFlow) {
+          // Save to accepted tasks
+          const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
+          accepted.push({
+            ...taskData,
+            status: "committed",
+            acceptedAt: new Date().toISOString(),
+            acceptedBy: "Arjun Mehta",
+          });
+          localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
+          toast({ title: "Task Accepted!", description: "Trust deposit locked. You can now start working on this task." });
+        } else {
+          // Save task to localStorage only on success
+          const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
+          const newTask = {
+            ...taskData,
+            status: "open",
+            paymentStatus: "paid",
+            createdAt: new Date().toISOString(),
+            createdBy: "Arjun Mehta",
+          };
+          tasks.push(newTask);
+          localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
+          toast({ title: "Payment Successful!", description: "Your reward has been locked. Task is now live." });
+        }
       }
 
       if (outcome === "pending") {
@@ -91,7 +105,7 @@ const PaymentGateway = () => {
   };
 
   const handleGoToTasks = () => navigate("/my-tasks");
-  const handleBack = () => navigate("/create-task");
+  const handleBack = () => navigate(isAcceptFlow ? "/browse-tasks" : "/create-task");
 
   // ── Processing state ──────────────────────────────────────────────────
   if (status === "processing") {
@@ -206,9 +220,13 @@ const PaymentGateway = () => {
           <ArrowLeft className="h-4 w-4" /> Back to Task Review
         </button>
 
-        <h1 className="text-2xl font-bold text-foreground mb-1">Complete Payment</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-1">
+          {isAcceptFlow ? "Lock Trust Deposit" : "Complete Payment"}
+        </h1>
         <p className="text-sm text-muted-foreground mb-6">
-          Lock ₹{amount.toLocaleString()} as a reward deposit to publish your task.
+          {isAcceptFlow
+            ? `Lock ₹${amount.toLocaleString()} as a trust deposit to accept this task.`
+            : `Lock ₹${amount.toLocaleString()} as a reward deposit to publish your task.`}
         </p>
 
         {/* Amount summary */}

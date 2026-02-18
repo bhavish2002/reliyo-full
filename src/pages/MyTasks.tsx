@@ -64,7 +64,8 @@ const MyTasks = () => {
   }, []);
 
   const createdTasks = tasks.filter((t) => t.createdBy === "Arjun Mehta");
-  const acceptedTasks = DEMO_ACCEPTED;
+  const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+  const acceptedTasks = [...DEMO_ACCEPTED, ...storedAccepted];
   const disputeTasks: Task[] = [];
 
   const tabs = [

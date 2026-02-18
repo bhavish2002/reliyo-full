@@ -10,6 +10,9 @@ import VerifyOtp from "./pages/VerifyOtp";
 import Dashboard from "./pages/Dashboard";
 import CreateTask from "./pages/CreateTask";
 import MyTasks from "./pages/MyTasks";
+import BrowseTasks from "./pages/BrowseTasks";
+import Notifications from "./pages/Notifications";
+import Profile from "./pages/Profile";
 import TaskDetail from "./pages/TaskDetail";
 import NotFound from "./pages/NotFound";
 import PaymentGateway from "./pages/PaymentGateway";
@@ -30,6 +33,9 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/create-task" element={<CreateTask />} />
           <Route path="/my-tasks" element={<MyTasks />} />
+          <Route path="/browse-tasks" element={<BrowseTasks />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/task/:id" element={<TaskDetail />} />
           <Route path="/payment" element={<PaymentGateway />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
