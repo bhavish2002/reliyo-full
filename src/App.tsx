@@ -12,6 +12,7 @@ import CreateTask from "./pages/CreateTask";
 import MyTasks from "./pages/MyTasks";
 import TaskDetail from "./pages/TaskDetail";
 import NotFound from "./pages/NotFound";
+import PaymentGateway from "./pages/PaymentGateway";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/create-task" element={<CreateTask />} />
           <Route path="/my-tasks" element={<MyTasks />} />
           <Route path="/task/:id" element={<TaskDetail />} />
+          <Route path="/payment" element={<PaymentGateway />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
