@@ -18,6 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { countriesWithStates, ALL_COUNTRY_NAMES, getStatesByCountry } from "@/lib/countriesStates";
+import { generateTaskId } from "@/lib/taskId";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const WORK_TYPES = ["Virtual", "Physical", "Hybrid"];
@@ -166,8 +167,10 @@ const CreateTask = () => {
 
   const handlePublish = () => {
     // Navigate to payment page — task is NOT saved yet
+    const taskId = generateTaskId();
     const taskData = {
-      id: Date.now().toString(),
+      id: taskId,
+      taskId,
       ...form,
       domain: effectiveDomain,
       deadline: form.deadline ? form.deadline.toISOString() : "",

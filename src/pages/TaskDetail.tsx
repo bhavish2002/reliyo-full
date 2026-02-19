@@ -30,6 +30,7 @@ const TRUST_DEPOSIT_PERCENT = 10;
 
 interface Task {
   id: string;
+  taskId?: string;
   title: string;
   description: string;
   status: string;
@@ -48,7 +49,7 @@ interface Task {
 // Demo browse tasks for lookup when not in localStorage
 const DEMO_BROWSE_TASKS: Task[] = [
   {
-    id: "browse1", title: "Deliver documents to Koramangala office",
+    id: "browse1", taskId: "RLY-TSK-2026-D8K3M7", title: "Deliver documents to Koramangala office",
     description: "Pick up documents from HSR Layout and deliver to Koramangala office before 5 PM. Must have own vehicle.",
     status: "open", location: "Bengaluru", reward: 500, deadline: "2026-02-15",
     createdAt: "2026-02-10T10:00:00Z", createdBy: "Ravi Kumar",
@@ -56,7 +57,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
     manpower: 1, updateFrequency: "Daily",
   },
   {
-    id: "browse2", title: "Design a logo for my bakery startup",
+    id: "browse2", taskId: "RLY-TSK-2026-L4P9N2", title: "Design a logo for my bakery startup",
     description: "Need a modern, minimalist logo for an artisan bakery. Must deliver in AI and PNG formats.",
     status: "open", location: "Mumbai", reward: 2000, deadline: "2026-02-21",
     createdAt: "2026-02-08T10:00:00Z", createdBy: "Priya Sharma",
@@ -64,7 +65,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
     manpower: 1, updateFrequency: "Weekly",
   },
   {
-    id: "browse3", title: "Translate product brochure to Tamil",
+    id: "browse3", taskId: "RLY-TSK-2026-T7R2X5", title: "Translate product brochure to Tamil",
     description: "Professional translation of a 10-page product brochure from English to Tamil. Must maintain formatting.",
     status: "open", location: "Chennai", reward: 1500, deadline: "2026-03-02",
     createdAt: "2026-02-05T10:00:00Z", createdBy: "Sanjay Patel",
@@ -72,7 +73,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
     manpower: 1, updateFrequency: "Weekly",
   },
   {
-    id: "browse4", title: "Build a landing page for SaaS product",
+    id: "browse4", taskId: "RLY-TSK-2026-B5W8Q3", title: "Build a landing page for SaaS product",
     description: "Create a responsive landing page using React and Tailwind CSS. Must include hero, features, pricing sections.",
     status: "open", location: "Remote", reward: 5000, deadline: "2026-03-10",
     createdAt: "2026-02-12T10:00:00Z", createdBy: "Meera Joshi",
@@ -80,7 +81,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
     manpower: 1, updateFrequency: "Daily",
   },
   {
-    id: "browse5", title: "Write SEO blog articles on fintech",
+    id: "browse5", taskId: "RLY-TSK-2026-S6J4V8", title: "Write SEO blog articles on fintech",
     description: "Write 5 high-quality blog articles of 1500 words each on fintech topics. Must be SEO-optimized.",
     status: "open", location: "Remote", reward: 3000, deadline: "2026-02-28",
     createdAt: "2026-02-11T10:00:00Z", createdBy: "Ankit Verma",
@@ -90,7 +91,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
 ];
 
 const DEMO_ACCEPTED: Task[] = [
-  { id: "accepted1", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "" },
+  { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "" },
 ];
 
 const TaskDetail = () => {
@@ -191,7 +192,10 @@ const TaskDetail = () => {
           </div>
         </div>
 
-        <h1 className="text-xl font-bold text-foreground mt-2">{task.title}</h1>
+        {task.taskId && (
+          <p className="text-xs font-mono text-muted-foreground mt-2 select-all">{task.taskId}</p>
+        )}
+        <h1 className="text-xl font-bold text-foreground mt-1">{task.title}</h1>
         <p className="text-sm text-muted-foreground mt-1 mb-4">{task.description}</p>
 
         {needsRating && (
@@ -208,6 +212,9 @@ const TaskDetail = () => {
               <CardContent className="p-6">
                 <h2 className="text-base font-bold text-foreground mb-4">Task Details</h2>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                  {task.taskId && (
+                    <div className="col-span-2"><p className="text-xs text-primary">Task ID</p><p className="font-medium font-mono select-all">{task.taskId}</p></div>
+                  )}
                   <div><p className="text-xs text-primary">Title</p><p className="font-medium">{task.title}</p></div>
                   <div><p className="text-xs text-primary">Work Type</p><p className="font-medium">{task.workType || "—"}</p></div>
                   <div><p className="text-xs text-primary">Description</p><p className="font-medium">{task.description}</p></div>

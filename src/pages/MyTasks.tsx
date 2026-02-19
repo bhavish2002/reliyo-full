@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 
 interface Task {
   id: string;
+  taskId?: string;
   title: string;
   status: string;
   location: string;
@@ -42,14 +43,14 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const DEMO_TASKS: Task[] = [
-  { id: "demo1", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta" },
-  { id: "demo2", title: "Design a logo for my bakery startup", status: "in_progress", location: "Mumbai", reward: 2000, deadline: "2026-02-21", createdAt: "2026-02-08T10:00:00Z", createdBy: "Arjun Mehta" },
-  { id: "demo3", title: "Translate product brochure to Hindi", status: "completed", location: "Lucknow", reward: 1500, deadline: "2026-03-02", createdAt: "2026-02-05T10:00:00Z", createdBy: "Arjun Mehta" },
-  { id: "demo4", title: "Paint exterior walls of warehouse", status: "draft", location: "Ahmedabad", reward: 8000, deadline: "2026-02-25", createdAt: "2026-02-01T10:00:00Z", createdBy: "Arjun Mehta" },
+  { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta" },
+  { id: "demo2", taskId: "RLY-TSK-2026-G5N3P7", title: "Design a logo for my bakery startup", status: "in_progress", location: "Mumbai", reward: 2000, deadline: "2026-02-21", createdAt: "2026-02-08T10:00:00Z", createdBy: "Arjun Mehta" },
+  { id: "demo3", taskId: "RLY-TSK-2026-H9Q6R2", title: "Translate product brochure to Hindi", status: "completed", location: "Lucknow", reward: 1500, deadline: "2026-03-02", createdAt: "2026-02-05T10:00:00Z", createdBy: "Arjun Mehta" },
+  { id: "demo4", taskId: "RLY-TSK-2026-J4T8W5", title: "Paint exterior walls of warehouse", status: "draft", location: "Ahmedabad", reward: 8000, deadline: "2026-02-25", createdAt: "2026-02-01T10:00:00Z", createdBy: "Arjun Mehta" },
 ];
 
 const DEMO_ACCEPTED: Task[] = [
-  { id: "accepted1", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya" },
+  { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya" },
 ];
 
 const MyTasks = () => {
@@ -150,6 +151,9 @@ const MyTasks = () => {
                   <Badge className={`${STATUS_COLORS[task.status] || "bg-muted text-muted-foreground"} text-xs`}>
                     {STATUS_LABELS[task.status] || task.status}
                   </Badge>
+                  {task.taskId && (
+                    <p className="text-[10px] font-mono text-muted-foreground">{task.taskId}</p>
+                  )}
                   <p className="text-sm font-semibold text-foreground">{task.title}</p>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     {task.location && (
