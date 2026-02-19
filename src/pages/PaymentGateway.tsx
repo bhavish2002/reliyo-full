@@ -29,7 +29,6 @@ const PaymentGateway = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // taskData and amount are passed via router state from CreateTask
   const taskData = location.state?.taskData ?? null;
   const amount: number = location.state?.amount ?? 0;
   const platformFee: number = location.state?.platformFee ?? 0;
@@ -42,9 +41,7 @@ const PaymentGateway = () => {
     if (!selectedMethod) return;
     setStatus("processing");
 
-    // Simulate payment processing delay (2s)
     setTimeout(() => {
-      // Simulate: UPI → success, card → pending, netbanking → failed, wallet → success
       const outcomeMap: Record<string, PaymentStatus> = {
         upi: "success",
         card: "pending",
@@ -56,7 +53,7 @@ const PaymentGateway = () => {
 
       if (outcome === "success") {
         if (isAcceptFlow) {
-          // Save to accepted tasks
+          // Save to accepted tasks with committed status
           const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
           accepted.push({
             ...taskData,
@@ -67,7 +64,6 @@ const PaymentGateway = () => {
           localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
           toast({ title: "Task Accepted!", description: "Trust deposit locked. You can now start working on this task." });
         } else {
-          // Save task to localStorage only on success
           const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
           const newTask = {
             ...taskData,
@@ -83,18 +79,29 @@ const PaymentGateway = () => {
       }
 
       if (outcome === "pending") {
+        if (isAcceptFlow) {
+          const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
+          accepted.push({
+            ...taskData,
+            status: "committed",
+            acceptedAt: new Date().toISOString(),
+            acceptedBy: "Arjun Mehta",
+            paymentStatus: "pending",
+          });
+          localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
+        } else {
+          const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
+          const newTask = {
+            ...taskData,
+            status: "draft",
+            paymentStatus: "pending",
+            createdAt: new Date().toISOString(),
+            createdBy: "Arjun Mehta",
+          };
+          tasks.push(newTask);
+          localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
+        }
         toast({ title: "Payment Under Processing", description: "We'll update your task status once confirmed." });
-        // Save with pending payment status
-        const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-        const newTask = {
-          ...taskData,
-          status: "draft",
-          paymentStatus: "pending",
-          createdAt: new Date().toISOString(),
-          createdBy: "Arjun Mehta",
-        };
-        tasks.push(newTask);
-        localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
       }
     }, 2000);
   };
@@ -104,10 +111,17 @@ const PaymentGateway = () => {
     setSelectedMethod("");
   };
 
-  const handleGoToTasks = () => navigate("/my-tasks");
+  const handleGoToTasks = () => {
+    if (isAcceptFlow) {
+      navigate("/my-tasks?tab=accepted");
+    } else {
+      navigate("/my-tasks");
+    }
+  };
+
   const handleBack = () => navigate(isAcceptFlow ? "/browse-tasks" : "/create-task");
 
-  // ── Processing state ──────────────────────────────────────────────────
+  // ── Processing state ──
   if (status === "processing") {
     return (
       <DashboardLayout>
@@ -122,7 +136,7 @@ const PaymentGateway = () => {
     );
   }
 
-  // ── Success state ─────────────────────────────────────────────────────
+  // ── Success state ──
   if (status === "success") {
     return (
       <DashboardLayout>
@@ -133,26 +147,32 @@ const PaymentGateway = () => {
           <div>
             <h2 className="text-2xl font-bold text-foreground">Payment Successful!</h2>
             <p className="text-muted-foreground mt-2">
-              ₹{amount.toLocaleString()} has been locked as a reward deposit. Your task is now live and visible to workers.
+              {isAcceptFlow
+                ? `₹${amount.toLocaleString()} has been locked as a trust deposit. The task is now in your accepted list.`
+                : `₹${amount.toLocaleString()} has been locked as a reward deposit. Your task is now live and visible to workers.`}
             </p>
           </div>
           <div className="w-full rounded-xl bg-muted p-4 text-sm text-left space-y-2">
             <div className="flex justify-between"><span className="text-muted-foreground">Amount Paid</span><span className="font-semibold">₹{amount.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Platform Fee</span><span className="font-semibold text-destructive">-₹{platformFee.toLocaleString()}</span></div>
-            <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
-              <span>Worker Payout</span>
-              <span className="text-success">₹{(amount - platformFee).toLocaleString()}</span>
-            </div>
+            {!isAcceptFlow && (
+              <div className="flex justify-between"><span className="text-muted-foreground">Platform Fee</span><span className="font-semibold text-destructive">-₹{platformFee.toLocaleString()}</span></div>
+            )}
+            {!isAcceptFlow && (
+              <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
+                <span>Worker Payout</span>
+                <span className="text-success">₹{(amount - platformFee).toLocaleString()}</span>
+              </div>
+            )}
           </div>
           <Button className="w-full" onClick={handleGoToTasks}>
-            View My Tasks
+            {isAcceptFlow ? "View Accepted Tasks" : "View My Tasks"}
           </Button>
         </div>
       </DashboardLayout>
     );
   }
 
-  // ── Failed state ──────────────────────────────────────────────────────
+  // ── Failed state ──
   if (status === "failed") {
     return (
       <DashboardLayout>
@@ -167,11 +187,9 @@ const PaymentGateway = () => {
             </p>
           </div>
           <div className="w-full space-y-3">
-            <Button className="w-full" onClick={handleRetry}>
-              Retry Payment
-            </Button>
+            <Button className="w-full" onClick={handleRetry}>Retry Payment</Button>
             <Button variant="ghost" className="w-full" onClick={handleBack}>
-              <ArrowLeft className="h-4 w-4 mr-2" /> Go Back to Task
+              <ArrowLeft className="h-4 w-4 mr-2" /> Go Back
             </Button>
           </div>
         </div>
@@ -179,7 +197,7 @@ const PaymentGateway = () => {
     );
   }
 
-  // ── Pending state ─────────────────────────────────────────────────────
+  // ── Pending state ──
   if (status === "pending") {
     return (
       <DashboardLayout>
@@ -190,26 +208,29 @@ const PaymentGateway = () => {
           <div>
             <h2 className="text-2xl font-bold text-foreground">Payment Under Processing</h2>
             <p className="text-muted-foreground mt-2">
-              Your payment of ₹{amount.toLocaleString()} is being verified. Your task has been saved as a draft and will go live once the payment is confirmed.
+              Your payment of ₹{amount.toLocaleString()} is being verified.
+              {isAcceptFlow
+                ? " The task has been added to your accepted list and will be fully confirmed once payment clears."
+                : " Your task has been saved as a draft and will go live once the payment is confirmed."}
             </p>
           </div>
           <div className="w-full rounded-xl border border-secondary bg-secondary/50 p-4 text-sm text-left">
             <p className="font-medium text-secondary-foreground">What happens next?</p>
             <ul className="mt-2 space-y-1 text-muted-foreground list-disc list-inside">
               <li>We'll verify the payment with your bank</li>
-              <li>Your task will be published automatically on confirmation</li>
-              <li>You'll receive a notification once it's live</li>
+              <li>{isAcceptFlow ? "Your task commitment will be fully confirmed" : "Your task will be published automatically on confirmation"}</li>
+              <li>You'll receive a notification once it's processed</li>
             </ul>
           </div>
           <Button className="w-full" onClick={handleGoToTasks}>
-            View My Tasks
+            {isAcceptFlow ? "View Accepted Tasks" : "View My Tasks"}
           </Button>
         </div>
       </DashboardLayout>
     );
   }
 
-  // ── Idle / Select payment method ──────────────────────────────────────
+  // ── Idle / Select payment method ──
   return (
     <DashboardLayout>
       <div className="max-w-2xl mx-auto">
@@ -217,7 +238,7 @@ const PaymentGateway = () => {
           onClick={handleBack}
           className="mb-6 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Task Review
+          <ArrowLeft className="h-4 w-4" /> Back
         </button>
 
         <h1 className="text-2xl font-bold text-foreground mb-1">
@@ -229,17 +250,18 @@ const PaymentGateway = () => {
             : `Lock ₹${amount.toLocaleString()} as a reward deposit to publish your task.`}
         </p>
 
-        {/* Amount summary */}
         <Card className="rounded-xl mb-6">
           <CardContent className="p-5 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Reward Amount</span>
+              <span className="text-muted-foreground">{isAcceptFlow ? "Trust Deposit (10%)" : "Reward Amount"}</span>
               <span>₹{amount.toLocaleString()}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Platform Fee (5%)</span>
-              <span className="text-destructive">-₹{platformFee.toLocaleString()}</span>
-            </div>
+            {!isAcceptFlow && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Platform Fee (5%)</span>
+                <span className="text-destructive">-₹{platformFee.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between font-semibold border-t border-border pt-2 mt-1 text-base">
               <span>Total to Pay</span>
               <span className="text-primary">₹{amount.toLocaleString()}</span>
@@ -247,7 +269,6 @@ const PaymentGateway = () => {
           </CardContent>
         </Card>
 
-        {/* Payment methods */}
         <p className="text-sm font-medium text-foreground mb-3">Select Payment Method</p>
         <div className="space-y-3 mb-6">
           {PAYMENT_METHODS.map((method) => {
@@ -276,10 +297,9 @@ const PaymentGateway = () => {
           })}
         </div>
 
-        {/* Security note */}
         <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-xs text-muted-foreground mb-6">
           <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
-          Your payment is secured with 256-bit SSL encryption. The reward is held in escrow and released only on task completion.
+          Your payment is secured with 256-bit SSL encryption. {isAcceptFlow ? "The trust deposit is held in escrow and refunded on task completion." : "The reward is held in escrow and released only on task completion."}
         </div>
 
         <Button

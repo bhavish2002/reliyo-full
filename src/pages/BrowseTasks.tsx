@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search, MapPin, Calendar, Star, Info, LayoutGrid, List, Filter,
+  Search, MapPin, Calendar, Star, Info, LayoutGrid, List,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ interface Task {
   description: string;
   status: string;
   location: string;
+  country?: string;
   reward: number;
   deadline: string;
   createdAt: string;
@@ -40,7 +41,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
   {
     id: "browse1", title: "Deliver documents to Koramangala office",
     description: "Pick up documents from HSR Layout and deliver to Koramangala office before 5 PM. Must have own vehicle.",
-    status: "open", location: "Bengaluru", reward: 500, deadline: "2026-02-15",
+    status: "open", location: "Bengaluru", country: "India", reward: 500, deadline: "2026-02-15",
     createdAt: "2026-02-10T10:00:00Z", createdBy: "Ravi Kumar",
     skills: ["physical", "delivery", "local-knowledge"], domain: "Delivery", workType: "Physical",
     manpower: 1, updateFrequency: "Daily",
@@ -48,7 +49,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
   {
     id: "browse2", title: "Design a logo for my bakery startup",
     description: "Need a modern, minimalist logo for an artisan bakery. Must deliver in AI and PNG formats.",
-    status: "open", location: "Mumbai", reward: 2000, deadline: "2026-02-21",
+    status: "open", location: "Mumbai", country: "India", reward: 2000, deadline: "2026-02-21",
     createdAt: "2026-02-08T10:00:00Z", createdBy: "Priya Sharma",
     skills: ["design", "creative"], domain: "Design", workType: "Virtual",
     manpower: 1, updateFrequency: "Weekly",
@@ -56,7 +57,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
   {
     id: "browse3", title: "Translate product brochure to Tamil",
     description: "Professional translation of a 10-page product brochure from English to Tamil. Must maintain formatting.",
-    status: "open", location: "Chennai", reward: 1500, deadline: "2026-03-02",
+    status: "open", location: "Chennai", country: "India", reward: 1500, deadline: "2026-03-02",
     createdAt: "2026-02-05T10:00:00Z", createdBy: "Sanjay Patel",
     skills: ["translation", "tamil", "english"], domain: "Translation", workType: "Virtual",
     manpower: 1, updateFrequency: "Weekly",
@@ -64,7 +65,7 @@ const DEMO_BROWSE_TASKS: Task[] = [
   {
     id: "browse4", title: "Build a landing page for SaaS product",
     description: "Create a responsive landing page using React and Tailwind CSS. Must include hero, features, pricing sections.",
-    status: "open", location: "Remote", reward: 5000, deadline: "2026-03-10",
+    status: "open", location: "Remote", country: "United States", reward: 5000, deadline: "2026-03-10",
     createdAt: "2026-02-12T10:00:00Z", createdBy: "Meera Joshi",
     skills: ["react", "tailwind", "frontend"], domain: "Technology", workType: "Virtual",
     manpower: 1, updateFrequency: "Daily",
@@ -72,14 +73,13 @@ const DEMO_BROWSE_TASKS: Task[] = [
   {
     id: "browse5", title: "Write SEO blog articles on fintech",
     description: "Write 5 high-quality blog articles of 1500 words each on fintech topics. Must be SEO-optimized.",
-    status: "open", location: "Remote", reward: 3000, deadline: "2026-02-28",
+    status: "open", location: "Remote", country: "United Kingdom", reward: 3000, deadline: "2026-02-28",
     createdAt: "2026-02-11T10:00:00Z", createdBy: "Ankit Verma",
     skills: ["writing", "seo", "fintech"], domain: "Writing", workType: "Virtual",
     manpower: 1, updateFrequency: "Weekly",
   },
 ];
 
-// Simulated rating per task
 const TASK_RATINGS: Record<string, number> = {
   browse1: 4.7, browse2: 4.2, browse3: 4.5, browse4: 4.8, browse5: 3.9,
 };
@@ -108,9 +108,15 @@ const BrowseTasks = () => {
     // Load user-created tasks from localStorage + demo browse tasks
     const stored = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const openStored = stored.filter((t) => t.status === "open");
-    // Merge with demo tasks, deduplicate by id
+    // Get accepted task IDs to exclude them
+    const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const acceptedIds = new Set(acceptedTasks.map((t) => t.id));
+    // Merge with demo tasks, deduplicate by id, exclude accepted
     const ids = new Set(openStored.map((t) => t.id));
-    const merged = [...openStored, ...DEMO_BROWSE_TASKS.filter((t) => !ids.has(t.id))];
+    const merged = [
+      ...openStored.filter((t) => !acceptedIds.has(t.id)),
+      ...DEMO_BROWSE_TASKS.filter((t) => !ids.has(t.id) && !acceptedIds.has(t.id)),
+    ];
     setAllTasks(merged);
   }, []);
 
@@ -120,7 +126,11 @@ const BrowseTasks = () => {
       if (t.createdBy === "Arjun Mehta") return false;
       if (t.status !== "open") return false;
       if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-      if (countryFilter !== "All" && !t.location?.toLowerCase().includes(countryFilter.toLowerCase())) return false;
+      // Country filter: match on the country field
+      if (countryFilter !== "All") {
+        const taskCountry = t.country?.toLowerCase() || "";
+        if (taskCountry !== countryFilter.toLowerCase()) return false;
+      }
       if (domainFilter !== "All" && t.domain !== domainFilter) return false;
       return true;
     });
