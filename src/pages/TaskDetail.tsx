@@ -132,6 +132,10 @@ const TaskDetail = () => {
   const isOwner = task.createdBy === "Arjun Mehta";
   const needsRating = task.status === "completed";
 
+  // Check if task is already accepted by this user
+  const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
+  const isAlreadyAccepted = acceptedTasks.some((t: any) => t.id === task.id);
+
   const handleAcceptClick = () => {
     // Check for conflicting deadlines in accepted tasks
     const acceptedTasks = [...DEMO_ACCEPTED];
@@ -252,6 +256,11 @@ const TaskDetail = () => {
                   <div className="flex items-center gap-2 rounded-lg bg-primary/10 p-3 text-sm text-primary">
                     <Info className="h-4 w-4 shrink-0" />
                     You cannot accept your own Task.
+                  </div>
+                ) : isAlreadyAccepted ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-success/10 p-3 text-sm text-success">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    You have already accepted this task.
                   </div>
                 ) : needsRating ? (
                   <Button className="w-full">Submit Rating to Close</Button>

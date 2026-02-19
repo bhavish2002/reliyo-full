@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { MapPin, Calendar, ChevronRight, CheckCircle2 } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { MapPin, Calendar, ChevronRight, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import DashboardLayout from "@/components/DashboardLayout";
-import { format } from "date-fns";
+import { format, differenceInHours } from "date-fns";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import { toast } from "@/hooks/use-toast";
 
 interface Task {
   id: string;
@@ -15,6 +20,7 @@ interface Task {
   deadline: string;
   createdAt: string;
   createdBy: string;
+  acceptedAt?: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -35,7 +41,6 @@ const STATUS_LABELS: Record<string, string> = {
   closed: "Closed",
 };
 
-// Seed some demo tasks on first load
 const DEMO_TASKS: Task[] = [
   { id: "demo1", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta" },
   { id: "demo2", title: "Design a logo for my bakery startup", status: "in_progress", location: "Mumbai", reward: 2000, deadline: "2026-02-21", createdAt: "2026-02-08T10:00:00Z", createdBy: "Arjun Mehta" },
@@ -49,24 +54,53 @@ const DEMO_ACCEPTED: Task[] = [
 
 const MyTasks = () => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<"created" | "accepted" | "dispute">("created");
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") === "accepted" ? "accepted" : "created";
+  const [tab, setTab] = useState<"created" | "accepted" | "dispute">(initialTab as any);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [acceptedTasks, setAcceptedTasks] = useState<Task[]>([]);
+  const [quitDialog, setQuitDialog] = useState<Task | null>(null);
 
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
-    // Merge demos if no tasks exist
     if (stored.length === 0) {
       localStorage.setItem("reliyo_tasks", JSON.stringify(DEMO_TASKS));
       setTasks(DEMO_TASKS);
     } else {
       setTasks(stored);
     }
+
+    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    // Merge demo accepted with stored, deduplicate
+    const ids = new Set(storedAccepted.map((t) => t.id));
+    const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
+    setAcceptedTasks(merged);
   }, []);
 
   const createdTasks = tasks.filter((t) => t.createdBy === "Arjun Mehta");
-  const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-  const acceptedTasks = [...DEMO_ACCEPTED, ...storedAccepted];
   const disputeTasks: Task[] = [];
+
+  const canQuitTask = (task: Task) => {
+    if (!task.acceptedAt) return false;
+    const hoursSinceAccepted = differenceInHours(new Date(), new Date(task.acceptedAt));
+    return hoursSinceAccepted <= 2;
+  };
+
+  const handleQuitTask = (task: Task) => {
+    // Remove from accepted tasks
+    const updated = acceptedTasks.filter((t) => t.id !== task.id);
+    setAcceptedTasks(updated);
+    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    localStorage.setItem(
+      "reliyo_accepted_tasks",
+      JSON.stringify(storedAccepted.filter((t: Task) => t.id !== task.id))
+    );
+    setQuitDialog(null);
+    toast({
+      title: "Task Quit Successfully",
+      description: "Your trust deposit will be refunded. The task is back on Browse Tasks.",
+    });
+  };
 
   const tabs = [
     { key: "created" as const, label: "Created", count: createdTasks.length },
@@ -112,7 +146,7 @@ const MyTasks = () => {
               onClick={() => navigate(`/task/${task.id}`)}
             >
               <div className="flex items-center justify-between p-4">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1">
                   <Badge className={`${STATUS_COLORS[task.status] || "bg-muted text-muted-foreground"} text-xs`}>
                     {STATUS_LABELS[task.status] || task.status}
                   </Badge>
@@ -131,12 +165,47 @@ const MyTasks = () => {
                     <span>₹ {task.reward.toLocaleString()}</span>
                   </div>
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                <div className="flex items-center gap-2">
+                  {tab === "accepted" && task.status === "committed" && canQuitTask(task) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuitDialog(task);
+                      }}
+                    >
+                      Quit Task
+                    </Button>
+                  )}
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                </div>
               </div>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Quit task confirmation dialog */}
+      <Dialog open={!!quitDialog} onOpenChange={() => setQuitDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Quit Task?
+            </DialogTitle>
+            <DialogDescription>
+              You are within the 2-hour grace period. Your trust deposit of ₹{quitDialog ? Math.round(quitDialog.reward * 0.1).toLocaleString() : 0} will be fully refunded. The task will be released back to Browse Tasks.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setQuitDialog(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => quitDialog && handleQuitTask(quitDialog)}>
+              Confirm Quit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
