@@ -90,16 +90,8 @@ const PaymentGateway = () => {
           });
           localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
         } else {
-          const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-          const newTask = {
-            ...taskData,
-            status: "draft",
-            paymentStatus: "pending",
-            createdAt: new Date().toISOString(),
-            createdBy: "Arjun Mehta",
-          };
-          tasks.push(newTask);
-          localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
+          // Per Rule Zero: task does not exist until payment succeeds.
+          // Pending payment = task NOT saved. User can retry.
         }
         toast({ title: "Payment Under Processing", description: "We'll update your task status once confirmed." });
       }
@@ -211,7 +203,7 @@ const PaymentGateway = () => {
               Your payment of ₹{amount.toLocaleString()} is being verified.
               {isAcceptFlow
                 ? " The task has been added to your accepted list and will be fully confirmed once payment clears."
-                : " Your task has been saved as a draft and will go live once the payment is confirmed."}
+                : " Your payment is being processed. The task will be created and go live once payment is confirmed."}
             </p>
           </div>
           <div className="w-full rounded-xl border border-secondary bg-secondary/50 p-4 text-sm text-left">
