@@ -7,46 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import DashboardLayout from "@/components/DashboardLayout";
-import { format } from "date-fns";
+import TaskTimeline from "@/components/TaskTimeline";
+import { format, differenceInHours } from "date-fns";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import { toast } from "@/hooks/use-toast";
+import {
+  type Task, type TaskStatus, type TimelineEntry, type AuthorRole,
+  STATUS_COLORS, STATUS_LABELS,
+  PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, QUIT_GRACE_HOURS,
+} from "@/lib/taskTypes";
 
-const STATUS_COLORS: Record<string, string> = {
-  open: "bg-primary text-primary-foreground",
-  draft: "bg-muted-foreground text-primary-foreground",
-  in_progress: "bg-destructive text-destructive-foreground",
-  completed: "bg-success text-success-foreground",
-  committed: "bg-success text-success-foreground",
-  closed: "bg-muted text-muted-foreground",
-};
-const STATUS_LABELS: Record<string, string> = {
-  open: "Open", draft: "Draft", in_progress: "In Progress",
-  completed: "Completed", committed: "Committed", closed: "Closed",
-};
-
-const PLATFORM_FEE_PERCENT = 7;
-const TRUST_DEPOSIT_PERCENT = 10;
-
-interface Task {
-  id: string;
-  taskId?: string;
-  title: string;
-  description: string;
-  status: string;
-  workType: string;
-  manpower: number;
-  location: string;
-  deadline: string;
-  updateFrequency: string;
-  skills: string[];
-  domain: string;
-  reward: number;
-  createdAt: string;
-  createdBy: string;
-}
-
-// Demo browse tasks for lookup when not in localStorage
+// ── Demo browse tasks for lookup ─────────────────────────────────────────────
 const DEMO_BROWSE_TASKS: Task[] = [
   {
     id: "browse1", taskId: "RLY-TSK-2026-D8K3M7", title: "Deliver documents to Koramangala office",
@@ -90,9 +63,57 @@ const DEMO_BROWSE_TASKS: Task[] = [
   },
 ];
 
-const DEMO_ACCEPTED: Task[] = [
-  { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "" },
+// ── Demo tasks with various statuses to test the full lifecycle ──────────────
+const DEMO_CREATED_TASKS: Task[] = [
+  {
+    id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office",
+    description: "Pick up documents from HSR Layout and deliver to Koramangala office before 5 PM.",
+    status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15",
+    createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta",
+    skills: ["delivery"], domain: "Delivery", workType: "Physical", manpower: 1, updateFrequency: "Daily",
+  },
+  {
+    id: "demo2", taskId: "RLY-TSK-2026-G5N3P7", title: "Design a logo for my bakery startup",
+    description: "Need a modern, minimalist logo for an artisan bakery. Must deliver in AI and PNG formats.",
+    status: "in_progress", location: "Mumbai", reward: 2000, deadline: "2026-02-21",
+    createdAt: "2026-02-08T10:00:00Z", createdBy: "Arjun Mehta", acceptedBy: "Priya Sharma",
+    skills: ["design"], domain: "Design", workType: "Virtual", manpower: 1, updateFrequency: "Weekly",
+  },
+  {
+    id: "demo3", taskId: "RLY-TSK-2026-H9Q6R2", title: "Translate product brochure to Hindi",
+    description: "Professional translation of a 10-page product brochure from English to Hindi.",
+    status: "done", location: "Lucknow", reward: 1500, deadline: "2026-03-02",
+    createdAt: "2026-02-05T10:00:00Z", createdBy: "Arjun Mehta", acceptedBy: "Sanjay Patel",
+    skills: ["translation"], domain: "Translation", workType: "Virtual", manpower: 1, updateFrequency: "Weekly",
+  },
 ];
+
+// ── Demo timeline entries ────────────────────────────────────────────────────
+const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
+  demo2: [
+    { id: "tl1", taskId: "demo2", author: "System", authorRole: "system", message: "Task created and reward locked in escrow.", timestamp: "2026-02-08T10:00:00Z", systemGenerated: true, entryType: "escrow" },
+    { id: "tl2", taskId: "demo2", author: "System", authorRole: "system", message: "Task published and visible to acceptors.", timestamp: "2026-02-08T10:01:00Z", systemGenerated: true, entryType: "status_change" },
+    { id: "tl3", taskId: "demo2", author: "System", authorRole: "system", message: "Priya Sharma has accepted the task. Trust deposit locked. Status: Committed.", timestamp: "2026-02-09T14:30:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "open", toStatus: "committed" } },
+    { id: "tl4", taskId: "demo2", author: "Priya Sharma", authorRole: "acceptor", message: "Hi! I've started working on the logo. Will share initial concepts by tomorrow.", timestamp: "2026-02-09T15:00:00Z", systemGenerated: false, entryType: "comment" },
+    { id: "tl5", taskId: "demo2", author: "System", authorRole: "system", message: "Task moved to In Progress. Priya Sharma has started working.", timestamp: "2026-02-09T15:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "committed", toStatus: "in_progress" } },
+    { id: "tl6", taskId: "demo2", author: "Arjun Mehta", authorRole: "requestor", message: "Great! Looking forward to seeing the concepts. The bakery name is 'Golden Crust'.", timestamp: "2026-02-09T16:00:00Z", systemGenerated: false, entryType: "comment" },
+    { id: "tl7", taskId: "demo2", author: "Priya Sharma", authorRole: "acceptor", message: "Here are 3 initial concepts. Let me know which direction you prefer.", timestamp: "2026-02-10T11:00:00Z", systemGenerated: false, entryType: "comment" },
+  ],
+  demo3: [
+    { id: "tl10", taskId: "demo3", author: "System", authorRole: "system", message: "Task created and reward locked in escrow.", timestamp: "2026-02-05T10:00:00Z", systemGenerated: true, entryType: "escrow" },
+    { id: "tl11", taskId: "demo3", author: "System", authorRole: "system", message: "Sanjay Patel has accepted the task. Trust deposit locked.", timestamp: "2026-02-06T09:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "open", toStatus: "committed" } },
+    { id: "tl12", taskId: "demo3", author: "Sanjay Patel", authorRole: "acceptor", message: "Starting translation. Will maintain original formatting.", timestamp: "2026-02-06T10:00:00Z", systemGenerated: false, entryType: "comment" },
+    { id: "tl13", taskId: "demo3", author: "System", authorRole: "system", message: "Task moved to In Progress.", timestamp: "2026-02-06T10:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "committed", toStatus: "in_progress" } },
+    { id: "tl14", taskId: "demo3", author: "Sanjay Patel", authorRole: "acceptor", message: "Translation complete. All 10 pages done with formatting preserved. Marking as done.", timestamp: "2026-02-10T16:00:00Z", systemGenerated: false, entryType: "comment" },
+    { id: "tl15", taskId: "demo3", author: "System", authorRole: "system", message: "Sanjay Patel has marked this task as Done. Awaiting requestor review.", timestamp: "2026-02-10T16:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "in_progress", toStatus: "done" } },
+  ],
+  accepted1: [
+    { id: "tl20", taskId: "accepted1", author: "System", authorRole: "system", message: "Task created and reward locked in escrow.", timestamp: "2026-02-12T10:00:00Z", systemGenerated: true, entryType: "escrow" },
+    { id: "tl21", taskId: "accepted1", author: "System", authorRole: "system", message: "Arjun Mehta has accepted the task. Trust deposit locked.", timestamp: "2026-02-13T09:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "open", toStatus: "committed" } },
+  ],
+};
+
+const CURRENT_USER = "Arjun Mehta";
 
 const TaskDetail = () => {
   const { id } = useParams();
@@ -102,16 +123,52 @@ const TaskDetail = () => {
   const [acceptStep, setAcceptStep] = useState<"none" | "conflict" | "deposit">("none");
   const [conflictTask, setConflictTask] = useState<Task | null>(null);
   const [agreedTerms, setAgreedTerms] = useState(false);
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
 
   const fromBrowse = location.state?.fromBrowse ?? false;
 
+  // Determine user's role for this task
+  const getUserRole = (t: Task): AuthorRole => {
+    if (t.createdBy === CURRENT_USER) return "requestor";
+    // Check if current user accepted this task
+    const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    if (accepted.some((a) => a.id === t.id)) return "acceptor";
+    if (t.acceptedBy === CURRENT_USER) return "acceptor";
+    return "requestor"; // default for viewing
+  };
+
   useEffect(() => {
-    const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
-    let found = tasks.find((t) => t.id === id);
-    if (!found) {
-      found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
-    }
+    // Look up task from multiple sources
+    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    let found = storedTasks.find((t) => t.id === id);
+    if (!found) found = acceptedTasks.find((t) => t.id === id);
+    if (!found) found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
+    if (!found) found = DEMO_CREATED_TASKS.find((t) => t.id === id);
     if (found) setTask(found);
+
+    // Load timeline entries
+    const storedTimeline = JSON.parse(localStorage.getItem(`reliyo_timeline_${id}`) || "null");
+    if (storedTimeline) {
+      setTimelineEntries(storedTimeline);
+    } else if (id && DEMO_TIMELINES[id]) {
+      setTimelineEntries(DEMO_TIMELINES[id]);
+    } else if (found) {
+      // Generate initial system entries for any task
+      const initialEntries: TimelineEntry[] = [
+        {
+          id: `init-1-${id}`, taskId: found.id, author: "System", authorRole: "system",
+          message: "Task created and reward locked in escrow.",
+          timestamp: found.createdAt, systemGenerated: true, entryType: "escrow",
+        },
+        {
+          id: `init-2-${id}`, taskId: found.id, author: "System", authorRole: "system",
+          message: "Task published and visible to acceptors.",
+          timestamp: found.createdAt, systemGenerated: true, entryType: "status_change",
+        },
+      ];
+      setTimelineEntries(initialEntries);
+    }
   }, [id]);
 
   if (!task) {
@@ -130,23 +187,24 @@ const TaskDetail = () => {
   const fee = Math.round(task.reward * (PLATFORM_FEE_PERCENT / 100));
   const acceptorPayout = task.reward - fee;
   const trustDeposit = Math.round(task.reward * (TRUST_DEPOSIT_PERCENT / 100));
-  const isOwner = task.createdBy === "Arjun Mehta";
-  const needsRating = task.status === "completed";
+  const isOwner = task.createdBy === CURRENT_USER;
+  const userRole = getUserRole(task);
+  const status = task.status as TaskStatus;
 
-  // Check if task is already accepted by this user
   const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
   const isAlreadyAccepted = acceptedTasks.some((t: any) => t.id === task.id);
 
-  const handleAcceptClick = () => {
-    // Check for conflicting deadlines in accepted tasks
-    const acceptedTasks = [...DEMO_ACCEPTED];
-    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    const allAccepted = [...acceptedTasks, ...storedAccepted];
+  // ── Accept flow handlers ──────────────────────────────────────────────────
 
+  const handleAcceptClick = () => {
+    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const demoAccepted: Task[] = [
+      { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "" },
+    ];
+    const allAccepted = [...storedAccepted, ...demoAccepted];
     const conflict = allAccepted.find(
       (t) => t.deadline && task.deadline && t.deadline === task.deadline
     );
-
     if (conflict) {
       setConflictTask(conflict);
       setAcceptStep("conflict");
@@ -161,7 +219,6 @@ const TaskDetail = () => {
   };
 
   const confirmAccept = () => {
-    // Redirect to payment gateway for trust deposit
     navigate("/payment", {
       state: {
         taskData: task,
@@ -172,19 +229,89 @@ const TaskDetail = () => {
     });
   };
 
-  const timeline = [
-    { label: "Task created", by: task.createdBy, date: task.createdAt, icon: <Circle className="h-4 w-4 text-primary" />, filled: true },
-    { label: "Reward locked in escrow", by: "System", date: task.createdAt, icon: <Circle className="h-4 w-4 text-muted-foreground" />, filled: false },
-    { label: "Task published", by: "System", date: task.createdAt, icon: <Circle className="h-4 w-4 text-muted-foreground" />, filled: false },
+  // ── Timeline handlers ─────────────────────────────────────────────────────
+
+  const saveTimeline = (entries: TimelineEntry[]) => {
+    localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(entries));
+  };
+
+  const handleAddEntry = (newEntries: TimelineEntry[]) => {
+    const updated = [...timelineEntries, ...newEntries];
+    setTimelineEntries(updated);
+    saveTimeline(updated);
+  };
+
+  const handleStatusChange = (newStatus: TaskStatus, newEntries: TimelineEntry[]) => {
+    const updated = [...timelineEntries, ...newEntries];
+    setTimelineEntries(updated);
+    saveTimeline(updated);
+
+    // Update task status
+    const updatedTask = { ...task, status: newStatus };
+    if (newStatus === "disputed") {
+      updatedTask.disputeCount = (task.disputeCount || 0) + 1;
+    }
+    setTask(updatedTask);
+
+    // Persist to localStorage based on where this task lives
+    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const taskIdx = storedTasks.findIndex((t: Task) => t.id === task.id);
+    if (taskIdx >= 0) {
+      storedTasks[taskIdx] = { ...storedTasks[taskIdx], status: newStatus, disputeCount: updatedTask.disputeCount };
+      localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks));
+    }
+
+    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const accIdx = storedAccepted.findIndex((t: Task) => t.id === task.id);
+    if (accIdx >= 0) {
+      storedAccepted[accIdx] = { ...storedAccepted[accIdx], status: newStatus, disputeCount: updatedTask.disputeCount };
+      localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(storedAccepted));
+    }
+
+    toast({
+      title: `Status updated to ${STATUS_LABELS[newStatus]}`,
+      description: newEntries.find(e => e.systemGenerated)?.message || "",
+    });
+  };
+
+  const handleRatingSubmit = (rating: number, feedback: string) => {
+    const updatedTask = { ...task, rating, ratingFeedback: feedback };
+    setTask(updatedTask);
+  };
+
+  // ── Task lifecycle timeline (visual steps) ────────────────────────────────
+
+  const lifecycleSteps = [
+    { label: "Task created", filled: true },
+    { label: "Reward locked in escrow", filled: true },
+    { label: "Task published", filled: status !== "open" || true },
+    { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status) },
+    { label: "Work in progress", filled: ["in_progress", "done", "disputed", "completed", "closed"].includes(status) },
+    { label: "Work done", filled: ["done", "disputed", "completed", "closed"].includes(status) },
+    { label: "Completed & rated", filled: ["completed", "closed"].includes(status) },
+    { label: "Closed", filled: status === "closed" },
   ];
+
+  // Show timeline component only when task has gone past open (i.e. has been accepted by someone)
+  const showTimeline = isOwner
+    ? ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status)
+    : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status);
 
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto">
+        {/* Back button */}
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+
         {/* Header */}
         <div className="flex items-start justify-between mb-1">
-          <Badge className={`${STATUS_COLORS[task.status] || "bg-muted"} text-xs`}>
-            {STATUS_LABELS[task.status] || task.status}
+          <Badge className={`${STATUS_COLORS[status] || "bg-muted"} text-xs`}>
+            {STATUS_LABELS[status] || task.status}
           </Badge>
           <div className="text-right">
             <p className="text-2xl font-bold text-foreground">₹{task.reward.toLocaleString()}</p>
@@ -197,13 +324,6 @@ const TaskDetail = () => {
         )}
         <h1 className="text-xl font-bold text-foreground mt-1">{task.title}</h1>
         <p className="text-sm text-muted-foreground mt-1 mb-4">{task.description}</p>
-
-        {needsRating && (
-          <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive mb-4">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            Rating required to close this task. Please submit your rating below.
-          </div>
-        )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           {/* Left column */}
@@ -229,29 +349,38 @@ const TaskDetail = () => {
               </CardContent>
             </Card>
 
+            {/* Lifecycle Progress */}
             <Card className="rounded-xl">
               <CardContent className="p-6">
-                <h2 className="text-base font-bold text-foreground mb-4">Task Timeline</h2>
-                <div className="space-y-4">
-                  {timeline.map((event, i) => (
+                <h2 className="text-base font-bold text-foreground mb-4">Task Lifecycle</h2>
+                <div className="space-y-3">
+                  {lifecycleSteps.map((step, i) => (
                     <div key={i} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-full ${event.filled ? "bg-primary/10" : "bg-muted"}`}>
-                          {event.filled ? <CheckCircle2 className="h-4 w-4 text-primary" /> : event.icon}
+                        <div className={`flex h-7 w-7 items-center justify-center rounded-full ${step.filled ? "bg-primary/10" : "bg-muted"}`}>
+                          {step.filled ? <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
                         </div>
-                        {i < timeline.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
+                        {i < lifecycleSteps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1 min-h-[8px]" />}
                       </div>
-                      <div className="pb-4">
-                        <p className="text-sm font-semibold text-foreground">{event.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {event.by} • {format(new Date(event.date), "MMM d, yyyy, h:mm a")}
-                        </p>
-                      </div>
+                      <p className={`text-sm pb-2 ${step.filled ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{step.label}</p>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
+
+            {/* Unified Timeline & Comments */}
+            {showTimeline && (
+              <TaskTimeline
+                task={task}
+                currentUserRole={userRole}
+                currentUserName={CURRENT_USER}
+                entries={timelineEntries}
+                onAddEntry={handleAddEntry}
+                onStatusChange={handleStatusChange}
+                onRatingSubmit={handleRatingSubmit}
+              />
+            )}
           </div>
 
           {/* Right sidebar */}
@@ -259,23 +388,26 @@ const TaskDetail = () => {
             <Card className="rounded-xl">
               <CardContent className="p-4">
                 <h3 className="text-sm font-bold text-foreground mb-2">Actions</h3>
-                {isOwner ? (
+                {isOwner && status === "open" ? (
                   <div className="flex items-center gap-2 rounded-lg bg-primary/10 p-3 text-sm text-primary">
                     <Info className="h-4 w-4 shrink-0" />
                     You cannot accept your own Task.
                   </div>
                 ) : isAlreadyAccepted ? (
-                  <div className="flex items-center gap-2 rounded-lg bg-success/10 p-3 text-sm text-success">
+                  <div className="flex items-center gap-2 rounded-lg bg-[hsl(var(--success))]/10 p-3 text-sm text-[hsl(var(--success))]">
                     <CheckCircle2 className="h-4 w-4 shrink-0" />
-                    You have already accepted this task.
+                    You have accepted this task.
                   </div>
-                ) : needsRating ? (
-                  <Button className="w-full">Submit Rating to Close</Button>
-                ) : task.status === "open" ? (
+                ) : status === "open" && !isOwner ? (
                   <Button className="w-full" onClick={handleAcceptClick}>Accept Task</Button>
+                ) : status === "closed" ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                    <Lock className="h-4 w-4 shrink-0" />
+                    This task is closed.
+                  </div>
                 ) : (
                   <div className="text-sm text-muted-foreground text-center py-2">
-                    Task is no longer available for acceptance.
+                    {isOwner ? "Manage this task via the timeline below." : "Task is no longer available for acceptance."}
                   </div>
                 )}
               </CardContent>
@@ -297,11 +429,34 @@ const TaskDetail = () => {
                       <Star className="h-3 w-3 text-primary" />
                       <span className="ml-1 text-xs text-muted-foreground">4.7 (23)</span>
                     </div>
-                    <p className="text-xs text-success mt-0.5">✓ 67% reliable</p>
+                    <p className="text-xs text-[hsl(var(--success))] mt-0.5">✓ 67% reliable</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
+            {task.acceptedBy && (
+              <Card className="rounded-xl">
+                <CardContent className="p-4">
+                  <h3 className="text-sm font-bold text-foreground mb-3">Acceptor</h3>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback className="bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))] font-semibold">
+                        {task.acceptedBy.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-semibold">{task.acceptedBy}</p>
+                      <div className="flex items-center gap-0.5">
+                        {[1,2,3,4].map(i => <Star key={i} className="h-3 w-3 fill-primary text-primary" />)}
+                        <Star className="h-3 w-3 text-muted-foreground" />
+                        <span className="ml-1 text-xs text-muted-foreground">4.3 (15)</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="rounded-xl">
               <CardContent className="p-4">
@@ -314,7 +469,7 @@ const TaskDetail = () => {
                   <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-₹{fee}</span></div>
                   <div className="flex justify-between font-bold border-t pt-2 mt-2">
                     <span>Acceptor Payout</span>
-                    <span className="text-success">₹{acceptorPayout}</span>
+                    <span className="text-[hsl(var(--success))]">₹{acceptorPayout}</span>
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Trust Deposit Locked (10%)</span>
@@ -349,7 +504,7 @@ const TaskDetail = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Accept / Lock Deposit dialog */}
+      {/* Lock Deposit dialog */}
       <Dialog open={acceptStep === "deposit"} onOpenChange={() => setAcceptStep("none")}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -371,7 +526,6 @@ const TaskDetail = () => {
               <span>Total Payout</span>
               <span className="text-lg">₹{trustDeposit.toLocaleString()}</span>
             </div>
-
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <p className="text-xs font-semibold text-primary mb-2">Terms & conditions ⓘ</p>
               <div className="flex items-start gap-2">
@@ -385,8 +539,7 @@ const TaskDetail = () => {
                 </label>
               </div>
             </div>
-
-            <div className="flex items-start gap-2 rounded-xl bg-success/10 border border-success/20 p-3 text-sm text-success">
+            <div className="flex items-start gap-2 rounded-xl bg-[hsl(var(--success))]/10 border border-[hsl(var(--success))]/20 p-3 text-sm text-[hsl(var(--success))]">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
                 <p>Your full deposit amount will be refunded on successful task completion.</p>

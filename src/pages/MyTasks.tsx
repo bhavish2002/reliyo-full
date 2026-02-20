@@ -10,53 +10,26 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-
-interface Task {
-  id: string;
-  taskId?: string;
-  title: string;
-  status: string;
-  location: string;
-  reward: number;
-  deadline: string;
-  createdAt: string;
-  createdBy: string;
-  acceptedAt?: string;
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  open: "bg-primary text-primary-foreground",
-  draft: "bg-muted-foreground text-primary-foreground",
-  in_progress: "bg-destructive text-destructive-foreground",
-  completed: "bg-success text-success-foreground",
-  committed: "bg-success text-success-foreground",
-  closed: "bg-muted text-muted-foreground",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  open: "Open",
-  draft: "Draft",
-  in_progress: "In Progress",
-  completed: "Completed",
-  committed: "Committed",
-  closed: "Closed",
-};
+import {
+  type Task, type TaskStatus,
+  STATUS_COLORS, STATUS_LABELS,
+  QUIT_GRACE_HOURS,
+} from "@/lib/taskTypes";
 
 const DEMO_TASKS: Task[] = [
-  { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta" },
-  { id: "demo2", taskId: "RLY-TSK-2026-G5N3P7", title: "Design a logo for my bakery startup", status: "in_progress", location: "Mumbai", reward: 2000, deadline: "2026-02-21", createdAt: "2026-02-08T10:00:00Z", createdBy: "Arjun Mehta" },
-  { id: "demo3", taskId: "RLY-TSK-2026-H9Q6R2", title: "Translate product brochure to Hindi", status: "completed", location: "Lucknow", reward: 1500, deadline: "2026-03-02", createdAt: "2026-02-05T10:00:00Z", createdBy: "Arjun Mehta" },
-  { id: "demo4", taskId: "RLY-TSK-2026-J4T8W5", title: "Paint exterior walls of warehouse", status: "draft", location: "Ahmedabad", reward: 8000, deadline: "2026-02-25", createdAt: "2026-02-01T10:00:00Z", createdBy: "Arjun Mehta" },
+  { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta", description: "", workType: "Physical", manpower: 1, skills: [], domain: "Delivery", updateFrequency: "Daily" },
+  { id: "demo2", taskId: "RLY-TSK-2026-G5N3P7", title: "Design a logo for my bakery startup", status: "in_progress", location: "Mumbai", reward: 2000, deadline: "2026-02-21", createdAt: "2026-02-08T10:00:00Z", createdBy: "Arjun Mehta", acceptedBy: "Priya Sharma", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "Design", updateFrequency: "Weekly" },
+  { id: "demo3", taskId: "RLY-TSK-2026-H9Q6R2", title: "Translate product brochure to Hindi", status: "done", location: "Lucknow", reward: 1500, deadline: "2026-03-02", createdAt: "2026-02-05T10:00:00Z", createdBy: "Arjun Mehta", acceptedBy: "Sanjay Patel", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "Translation", updateFrequency: "Weekly" },
 ];
 
 const DEMO_ACCEPTED: Task[] = [
-  { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya" },
+  { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "", acceptedAt: new Date().toISOString() },
 ];
 
 const MyTasks = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get("tab") === "accepted" ? "accepted" : "created";
+  const initialTab = searchParams.get("tab") === "accepted" ? "accepted" : searchParams.get("tab") === "dispute" ? "dispute" : "created";
   const [tab, setTab] = useState<"created" | "accepted" | "dispute">(initialTab as any);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [acceptedTasks, setAcceptedTasks] = useState<Task[]>([]);
@@ -72,23 +45,27 @@ const MyTasks = () => {
     }
 
     const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    // Merge demo accepted with stored, deduplicate
     const ids = new Set(storedAccepted.map((t) => t.id));
     const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
     setAcceptedTasks(merged);
   }, []);
 
   const createdTasks = tasks.filter((t) => t.createdBy === "Arjun Mehta");
-  const disputeTasks: Task[] = [];
+  
+  // Disputed tasks: from both created and accepted that are in "disputed" status
+  const disputeTasks = [
+    ...createdTasks.filter((t) => t.status === "disputed"),
+    ...acceptedTasks.filter((t) => t.status === "disputed"),
+  ];
 
   const canQuitTask = (task: Task) => {
     if (!task.acceptedAt) return false;
+    if (task.status !== "committed") return false;
     const hoursSinceAccepted = differenceInHours(new Date(), new Date(task.acceptedAt));
-    return hoursSinceAccepted <= 2;
+    return hoursSinceAccepted <= QUIT_GRACE_HOURS;
   };
 
   const handleQuitTask = (task: Task) => {
-    // Remove from accepted tasks
     const updated = acceptedTasks.filter((t) => t.id !== task.id);
     setAcceptedTasks(updated);
     const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
@@ -96,6 +73,8 @@ const MyTasks = () => {
       "reliyo_accepted_tasks",
       JSON.stringify(storedAccepted.filter((t: Task) => t.id !== task.id))
     );
+    // Clean up timeline
+    localStorage.removeItem(`reliyo_timeline_${task.id}`);
     setQuitDialog(null);
     toast({
       title: "Task Quit Successfully",
@@ -132,62 +111,73 @@ const MyTasks = () => {
       </div>
 
       {currentList.length === 0 ? (
-        <div className="flex items-center gap-2 rounded-lg bg-success/10 p-4 text-sm text-success">
+        <div className="flex items-center gap-2 rounded-lg bg-[hsl(var(--success))]/10 p-4 text-sm text-[hsl(var(--success))]">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           {tab === "dispute"
-            ? "No disputes yet — keep up the good work"
-            : "No tasks here yet"}
+            ? "No disputes — keep up the good work!"
+            : tab === "accepted"
+            ? "No accepted tasks yet. Browse tasks to find work!"
+            : "No tasks created yet."}
         </div>
       ) : (
         <div className="space-y-3">
-          {currentList.map((task) => (
-            <Card
-              key={task.id}
-              className="rounded-xl cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => navigate(`/task/${task.id}`)}
-            >
-              <div className="flex items-center justify-between p-4">
-                <div className="space-y-1.5 flex-1">
-                  <Badge className={`${STATUS_COLORS[task.status] || "bg-muted text-muted-foreground"} text-xs`}>
-                    {STATUS_LABELS[task.status] || task.status}
-                  </Badge>
-                  {task.taskId && (
-                    <p className="text-[10px] font-mono text-muted-foreground">{task.taskId}</p>
-                  )}
-                  <p className="text-sm font-semibold text-foreground">{task.title}</p>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    {task.location && (
-                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{task.location}</span>
+          {currentList.map((task) => {
+            const statusKey = task.status as TaskStatus;
+            return (
+              <Card
+                key={task.id}
+                className="rounded-xl cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => navigate(`/task/${task.id}`)}
+              >
+                <div className="flex items-center justify-between p-4">
+                  <div className="space-y-1.5 flex-1">
+                    <Badge className={`${STATUS_COLORS[statusKey] || "bg-muted text-muted-foreground"} text-xs`}>
+                      {STATUS_LABELS[statusKey] || task.status}
+                    </Badge>
+                    {task.taskId && (
+                      <p className="text-[10px] font-mono text-muted-foreground">{task.taskId}</p>
                     )}
-                    {tab === "accepted" && task.createdBy && (
-                      <span className="flex items-center gap-1">👤 {task.createdBy}</span>
+                    <p className="text-sm font-semibold text-foreground">{task.title}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {task.location && (
+                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{task.location}</span>
+                      )}
+                      {tab === "accepted" && task.createdBy && (
+                        <span className="flex items-center gap-1">👤 {task.createdBy}</span>
+                      )}
+                      {tab === "created" && task.acceptedBy && (
+                        <span className="flex items-center gap-1">👷 {task.acceptedBy}</span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {task.deadline ? format(new Date(task.deadline), "MMM d") : "—"}
+                      </span>
+                      <span>₹ {task.reward.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {tab === "accepted" && task.status === "committed" && canQuitTask(task) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuitDialog(task);
+                        }}
+                      >
+                        Quit Task
+                      </Button>
                     )}
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {task.deadline ? format(new Date(task.deadline), "MMM d") : "—"}
-                    </span>
-                    <span>₹ {task.reward.toLocaleString()}</span>
+                    {task.status === "disputed" && (
+                      <AlertTriangle className="h-4 w-4 text-[hsl(35,90%,50%)]" />
+                    )}
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {tab === "accepted" && task.status === "committed" && canQuitTask(task) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setQuitDialog(task);
-                      }}
-                    >
-                      Quit Task
-                    </Button>
-                  )}
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -199,7 +189,7 @@ const MyTasks = () => {
               <AlertTriangle className="h-5 w-5 text-destructive" /> Quit Task?
             </DialogTitle>
             <DialogDescription>
-              You are within the 2-hour grace period. Your trust deposit of ₹{quitDialog ? Math.round(quitDialog.reward * 0.1).toLocaleString() : 0} will be fully refunded. The task will be released back to Browse Tasks.
+              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of ₹{quitDialog ? Math.round(quitDialog.reward * 0.1).toLocaleString() : 0} will be fully refunded. The task will be released back to Browse Tasks.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
