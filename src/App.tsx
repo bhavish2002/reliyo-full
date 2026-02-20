@@ -16,6 +16,13 @@ import Profile from "./pages/Profile";
 import TaskDetail from "./pages/TaskDetail";
 import NotFound from "./pages/NotFound";
 import PaymentGateway from "./pages/PaymentGateway";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminAllTasks from "./pages/admin/AdminAllTasks";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminDisputes from "./pages/admin/AdminDisputes";
+import AdminRevenue from "./pages/admin/AdminRevenue";
+import AdminAnalytics from "./pages/admin/AdminAnalytics";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +45,14 @@ const App = () => (
           <Route path="/profile" element={<Profile />} />
           <Route path="/task/:id" element={<TaskDetail />} />
           <Route path="/payment" element={<PaymentGateway />} />
+          {/* Admin routes */}
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/tasks" element={<AdminAllTasks />} />
+          <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/admin/disputes" element={<AdminDisputes />} />
+          <Route path="/admin/revenue" element={<AdminRevenue />} />
+          <Route path="/admin/analytics" element={<AdminAnalytics />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
