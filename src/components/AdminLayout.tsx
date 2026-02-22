@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Users, AlertTriangle, DollarSign,
-  BarChart3, Settings, LogOut, Menu, Clock,
+  BarChart3, Settings, LogOut, Menu, Clock, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
+import { getUnreadCount } from "@/lib/notifications";
 
 const overviewItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
@@ -17,6 +18,7 @@ const overviewItems = [
   { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", badge: 14 },
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
+  { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
 ];
 
 const systemItems = [
@@ -27,10 +29,12 @@ const SidebarContent = ({
   current,
   onNavigate,
   onLogout,
+  adminNotifCount,
 }: {
   current: string;
   onNavigate: (p: string) => void;
   onLogout: () => void;
+  adminNotifCount: number;
 }) => {
   const user = getCurrentUser();
 
@@ -71,6 +75,11 @@ const SidebarContent = ({
               {item.badge && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {item.badge}
+                </Badge>
+              )}
+              {(item as any).dynamicBadge && adminNotifCount > 0 && (
+                <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
+                  {adminNotifCount}
                 </Badge>
               )}
             </button>
@@ -136,6 +145,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [adminNotifCount, setAdminNotifCount] = useState(0);
+
+  useEffect(() => {
+    setAdminNotifCount(getUnreadCount("admin"));
+    const interval = setInterval(() => setAdminNotifCount(getUnreadCount("admin")), 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     clearCurrentUser();
@@ -149,12 +165,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-60 shrink-0 border-r bg-background lg:block">
-        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} />
+        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-60 p-0">
-          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} />
+          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} />
         </SheetContent>
       </Sheet>
 

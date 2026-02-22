@@ -15,6 +15,10 @@ import {
   canComment, canTransition, getCommentPlaceholder, getStatusBanner,
   STATUS_LABELS, ROLE_LABELS,
 } from "@/lib/taskTypes";
+import {
+  notifyAlertRaised, notifyForceCloseRequested, notifyTaskMarkedDone,
+  notifyDisputeRaised, notifyFixResubmitted, notifyRatingRequired,
+} from "@/lib/notifications";
 import { format } from "date-fns";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -162,6 +166,7 @@ const TaskTimeline = ({
       "status_change",
       { fromStatus: status as TaskStatus, toStatus: "done" }
     );
+    notifyTaskMarkedDone(task);
     onStatusChange("done", [sysEntry]);
   };
 
@@ -175,6 +180,7 @@ const TaskTimeline = ({
       "status_change",
       { fromStatus: "done", toStatus: "completed" }
     );
+    notifyRatingRequired(task);
     onStatusChange("completed", [sysEntry]);
   };
 
@@ -189,6 +195,7 @@ const TaskTimeline = ({
       { fromStatus: "done", toStatus: "disputed", disputeCount: (task.disputeCount || 0) + 1 }
     );
     setShowDisputeDialog(false);
+    notifyDisputeRaised(task);
     onStatusChange("disputed", [sysEntry]);
   };
 
@@ -213,6 +220,7 @@ const TaskTimeline = ({
       { fromStatus: "disputed", toStatus: "done" }
     );
     setCommentText("");
+    notifyFixResubmitted(task);
     onStatusChange("done", [fixEntry, sysEntry]);
   };
 
@@ -226,6 +234,7 @@ const TaskTimeline = ({
       { alertType: "progress_reminder" }
     );
     setShowAlertDialog(false);
+    notifyAlertRaised(task);
     onAddEntry([alertEntry]);
   };
 
@@ -238,6 +247,7 @@ const TaskTimeline = ({
       "admin_action"
     );
     setShowForceCloseDialog(false);
+    notifyForceCloseRequested(task);
     onAddEntry([entry]);
   };
 
