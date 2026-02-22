@@ -16,6 +16,7 @@ import {
   QUIT_GRACE_HOURS,
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
+import { notifyAcceptorQuit } from "@/lib/notifications";
 
 const DEMO_TASKS: Task[] = [
   { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta", description: "", workType: "Physical", manpower: 1, skills: [], domain: "Delivery", updateFrequency: "Daily" },
@@ -99,6 +100,10 @@ const MyTasks = () => {
 
     // Clean up timeline
     localStorage.removeItem(`reliyo_timeline_${task.id}`);
+
+    // Notify requestor that acceptor quit
+    notifyAcceptorQuit(task);
+
     setQuitDialog(null);
     toast({
       title: "Task Quit Successfully",

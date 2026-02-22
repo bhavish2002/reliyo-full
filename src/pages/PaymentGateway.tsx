@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { getCurrentUser } from "@/lib/auth";
+import { notifyTaskAccepted } from "@/lib/notifications";
 
 type PaymentStatus = "idle" | "processing" | "success" | "failed" | "pending";
 
@@ -75,6 +76,9 @@ const PaymentGateway = () => {
             tasks[idx] = { ...tasks[idx], status: "committed", acceptedAt, acceptedBy: userName };
             localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
           }
+
+          // Notify requestor that their task has been accepted
+          notifyTaskAccepted(taskData);
 
           toast({ title: "Task Accepted!", description: "Trust deposit locked. You can now start working on this task." });
         } else {

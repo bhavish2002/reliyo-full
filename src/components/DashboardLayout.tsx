@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Search, Bell, UserRound, LogOut, Plus, Menu,
@@ -8,20 +8,24 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
+import { getUnreadCount, type NotificationTarget } from "@/lib/notifications";
 
-const navItems = [
+const getNavItems = (notifCount: number) => [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "My Tasks", icon: FileText, path: "/my-tasks" },
   { label: "Browse Tasks", icon: Search, path: "/browse-tasks" },
-  { label: "Notifications", icon: Bell, path: "/notifications", badge: 3 },
+  { label: "Notifications", icon: Bell, path: "/notifications", badge: notifCount > 0 ? notifCount : undefined },
   { label: "Profile", icon: UserRound, path: "/profile" },
 ];
 
-const SidebarContent = ({ current, onNavigate, onLogout }: {
+const SidebarContent = ({ current, onNavigate, onLogout, notifCount }: {
   current: string;
   onNavigate: (p: string) => void;
   onLogout: () => void;
-}) => (
+  notifCount: number;
+}) => {
+  const navItems = getNavItems(notifCount);
+  return (
   <div className="flex h-full flex-col">
     <div className="flex items-center gap-2 px-4 py-5">
       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
@@ -69,7 +73,8 @@ const SidebarContent = ({ current, onNavigate, onLogout }: {
       </button>
     </div>
   </div>
-);
+  );
+};
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -81,6 +86,14 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const currentUser = getCurrentUser();
   const userName = currentUser?.name?.split(" ")[0] || "User";
+
+  const target: NotificationTarget = currentUser?.role === "acceptor" ? "acceptor" : "requestor";
+  const [notifCount, setNotifCount] = useState(0);
+  useEffect(() => {
+    setNotifCount(getUnreadCount(target));
+    const interval = setInterval(() => setNotifCount(getUnreadCount(target)), 3000);
+    return () => clearInterval(interval);
+  }, [target]);
 
   const handleLogout = () => {
     clearCurrentUser();
@@ -94,12 +107,12 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-56 shrink-0 border-r bg-background lg:block">
-        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} />
+        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} notifCount={notifCount} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-56 p-0">
-          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} />
+          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} notifCount={notifCount} />
         </SheetContent>
       </Sheet>
 
