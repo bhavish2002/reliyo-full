@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -78,9 +79,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const userName = "Arjun";
+  const currentUser = getCurrentUser();
+  const userName = currentUser?.name?.split(" ")[0] || "User";
 
-  const handleLogout = () => navigate("/sign-in", { replace: true });
+  const handleLogout = () => {
+    clearCurrentUser();
+    navigate("/sign-in", { replace: true });
+  };
   const handleNav = (path: string) => {
     setMobileOpen(false);
     navigate(path);
@@ -105,9 +110,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
           </Button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-foreground">{userName} Mehta</span>
+            <span className="text-sm font-medium text-foreground">{currentUser?.name || "User"}</span>
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">A</AvatarFallback>
+              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">{currentUser?.name?.charAt(0) || "U"}</AvatarFallback>
             </Avatar>
           </div>
         </header>

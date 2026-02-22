@@ -15,6 +15,7 @@ import {
   STATUS_COLORS, STATUS_LABELS,
   QUIT_GRACE_HOURS,
 } from "@/lib/taskTypes";
+import { getCurrentUser } from "@/lib/auth";
 
 const DEMO_TASKS: Task[] = [
   { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta", description: "", workType: "Physical", manpower: 1, skills: [], domain: "Delivery", updateFrequency: "Daily" },
@@ -50,7 +51,9 @@ const MyTasks = () => {
     setAcceptedTasks(merged);
   }, []);
 
-  const createdTasks = tasks.filter((t) => t.createdBy === "Arjun Mehta");
+  const currentUser = getCurrentUser();
+  const currentUserName = currentUser?.name || "";
+  const createdTasks = tasks.filter((t) => t.createdBy === currentUserName);
   
   // Disputed tasks: from both created and accepted that are in "disputed" status
   const disputeTasks = [

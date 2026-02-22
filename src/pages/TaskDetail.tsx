@@ -18,6 +18,7 @@ import {
   STATUS_COLORS, STATUS_LABELS,
   PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, QUIT_GRACE_HOURS,
 } from "@/lib/taskTypes";
+import { getCurrentUser } from "@/lib/auth";
 
 // ── Demo browse tasks for lookup ─────────────────────────────────────────────
 const DEMO_BROWSE_TASKS: Task[] = [
@@ -113,9 +114,8 @@ const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
   ],
 };
 
-const CURRENT_USER = "Arjun Mehta";
-
 const TaskDetail = () => {
+  const currentUser = getCurrentUser();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -128,6 +128,8 @@ const TaskDetail = () => {
   const fromBrowse = location.state?.fromBrowse ?? false;
 
   // Determine user's role for this task
+  const CURRENT_USER = currentUser?.name || "Guest";
+
   const getUserRole = (t: Task): AuthorRole => {
     if (t.createdBy === CURRENT_USER) return "requestor";
     // Check if current user accepted this task

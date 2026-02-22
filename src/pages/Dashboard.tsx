@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/DashboardLayout";
 import { List, TrendingUp } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth";
 
 const barData = [
   { month: "Sep", tasks: 1 }, { month: "Oct", tasks: 2 }, { month: "Nov", tasks: 3 },
@@ -25,7 +26,8 @@ const stats = [
 ];
 
 const Dashboard = () => {
-  const userName = "Arjun";
+  const currentUser = getCurrentUser();
+  const userName = currentUser?.name?.split(" ")[0] || "User";
 
   return (
     <DashboardLayout>
