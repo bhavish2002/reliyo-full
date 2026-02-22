@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
+import { getCurrentUser } from "@/lib/auth";
 
 type PaymentStatus = "idle" | "processing" | "success" | "failed" | "pending";
 
@@ -51,6 +52,9 @@ const PaymentGateway = () => {
       const outcome = outcomeMap[selectedMethod] ?? "success";
       setStatus(outcome);
 
+      const user = getCurrentUser();
+      const userName = user?.name || "Unknown User";
+
       if (outcome === "success") {
         if (isAcceptFlow) {
           // Save to accepted tasks with committed status
@@ -59,7 +63,7 @@ const PaymentGateway = () => {
             ...taskData,
             status: "committed",
             acceptedAt: new Date().toISOString(),
-            acceptedBy: "Arjun Mehta",
+            acceptedBy: userName,
           });
           localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
           toast({ title: "Task Accepted!", description: "Trust deposit locked. You can now start working on this task." });
@@ -70,7 +74,7 @@ const PaymentGateway = () => {
             status: "open",
             paymentStatus: "paid",
             createdAt: new Date().toISOString(),
-            createdBy: "Arjun Mehta",
+            createdBy: userName,
           };
           tasks.push(newTask);
           localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
@@ -85,7 +89,7 @@ const PaymentGateway = () => {
             ...taskData,
             status: "committed",
             acceptedAt: new Date().toISOString(),
-            acceptedBy: "Arjun Mehta",
+            acceptedBy: userName,
             paymentStatus: "pending",
           });
           localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));

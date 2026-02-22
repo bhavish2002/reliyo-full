@@ -13,6 +13,7 @@ import {
 import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { ALL_COUNTRY_NAMES } from "@/lib/countriesStates";
+import { getCurrentUser } from "@/lib/auth";
 
 interface Task {
   id: string;
@@ -124,7 +125,8 @@ const BrowseTasks = () => {
   const filtered = useMemo(() => {
     return allTasks.filter((t) => {
       // Exclude own tasks
-      if (t.createdBy === "Arjun Mehta") return false;
+      const currentUser = getCurrentUser();
+      if (currentUser && t.createdBy === currentUser.name) return false;
       if (t.status !== "open") return false;
       if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       // Country filter: match on the country field
