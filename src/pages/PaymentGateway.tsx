@@ -57,15 +57,25 @@ const PaymentGateway = () => {
 
       if (outcome === "success") {
         if (isAcceptFlow) {
+          const acceptedAt = new Date().toISOString();
           // Save to accepted tasks with committed status
           const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
           accepted.push({
             ...taskData,
             status: "committed",
-            acceptedAt: new Date().toISOString(),
+            acceptedAt,
             acceptedBy: userName,
           });
           localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
+
+          // *** CRITICAL: Also update reliyo_tasks so requestor sees committed status ***
+          const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
+          const idx = tasks.findIndex((t: any) => t.id === taskData.id);
+          if (idx >= 0) {
+            tasks[idx] = { ...tasks[idx], status: "committed", acceptedAt, acceptedBy: userName };
+            localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
+          }
+
           toast({ title: "Task Accepted!", description: "Trust deposit locked. You can now start working on this task." });
         } else {
           const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
@@ -93,9 +103,6 @@ const PaymentGateway = () => {
             paymentStatus: "pending",
           });
           localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
-        } else {
-          // Per Rule Zero: task does not exist until payment succeeds.
-          // Pending payment = task NOT saved. User can retry.
         }
         toast({ title: "Payment Under Processing", description: "We'll update your task status once confirmed." });
       }
