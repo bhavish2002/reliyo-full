@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock } from "lucide-react";
+import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -124,30 +124,47 @@ const TaskDetail = () => {
   const [conflictTask, setConflictTask] = useState<Task | null>(null);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const fromBrowse = location.state?.fromBrowse ?? false;
 
-  // Determine user's role for this task
   const CURRENT_USER = currentUser?.name || "Guest";
 
+  // Determine user's role for this task
   const getUserRole = (t: Task): AuthorRole => {
     if (t.createdBy === CURRENT_USER) return "requestor";
-    // Check if current user accepted this task
-    const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    if (accepted.some((a) => a.id === t.id)) return "acceptor";
     if (t.acceptedBy === CURRENT_USER) return "acceptor";
+    // Check if current user accepted this task in localStorage
+    const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    if (accepted.some((a) => a.id === t.id && (a.acceptedBy === CURRENT_USER || !a.acceptedBy))) return "acceptor";
     return "requestor"; // default for viewing
   };
 
   useEffect(() => {
-    // Look up task from multiple sources
+    // Look up task from multiple sources - prefer reliyo_tasks as canonical source
     const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    
     let found = storedTasks.find((t) => t.id === id);
     if (!found) found = acceptedTasks.find((t) => t.id === id);
     if (!found) found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
     if (!found) found = DEMO_CREATED_TASKS.find((t) => t.id === id);
-    if (found) setTask(found);
+    
+    // If found in both reliyo_tasks and reliyo_accepted_tasks, merge to get latest status
+    if (found) {
+      const fromTasks = storedTasks.find((t) => t.id === id);
+      const fromAccepted = acceptedTasks.find((t) => t.id === id);
+      if (fromTasks && fromAccepted) {
+        // Use the one with more advanced status, or the one that has acceptedBy
+        found = { ...fromTasks, ...fromAccepted, status: fromTasks.status === fromAccepted.status ? fromTasks.status : fromAccepted.status };
+        // Prefer the status that's further along
+        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed"];
+        const tasksIdx = statusOrder.indexOf(fromTasks.status as TaskStatus);
+        const acceptedIdx = statusOrder.indexOf(fromAccepted.status as TaskStatus);
+        found.status = acceptedIdx >= tasksIdx ? fromAccepted.status : fromTasks.status;
+      }
+      setTask(found);
+    }
 
     // Load timeline entries
     const storedTimeline = JSON.parse(localStorage.getItem(`reliyo_timeline_${id}`) || "null");
@@ -156,7 +173,6 @@ const TaskDetail = () => {
     } else if (id && DEMO_TIMELINES[id]) {
       setTimelineEntries(DEMO_TIMELINES[id]);
     } else if (found) {
-      // Generate initial system entries for any task
       const initialEntries: TimelineEntry[] = [
         {
           id: `init-1-${id}`, taskId: found.id, author: "System", authorRole: "system",
@@ -195,6 +211,23 @@ const TaskDetail = () => {
 
   const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
   const isAlreadyAccepted = acceptedTasks.some((t: any) => t.id === task.id);
+
+  // Can delete: only requestor, only open status, no acceptor yet
+  const canDelete = isOwner && status === "open" && !task.acceptedBy;
+
+  // ── Delete task handler ─────────────────────────────────────────────────────
+  const handleDeleteTask = () => {
+    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const updated = storedTasks.filter((t: Task) => t.id !== task.id);
+    localStorage.setItem("reliyo_tasks", JSON.stringify(updated));
+    localStorage.removeItem(`reliyo_timeline_${task.id}`);
+    setShowDeleteDialog(false);
+    toast({
+      title: "Task Deleted",
+      description: "The task has been removed and your reward deposit will be refunded.",
+    });
+    navigate("/my-tasks");
+  };
 
   // ── Accept flow handlers ──────────────────────────────────────────────────
 
@@ -255,7 +288,7 @@ const TaskDetail = () => {
     }
     setTask(updatedTask);
 
-    // Persist to localStorage based on where this task lives
+    // *** CRITICAL: Persist to BOTH localStorage stores so both users see the change ***
     const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const taskIdx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (taskIdx >= 0) {
@@ -294,7 +327,7 @@ const TaskDetail = () => {
     { label: "Closed", filled: status === "closed" },
   ];
 
-  // Show timeline component only when task has gone past open (i.e. has been accepted by someone)
+  // Show timeline component when task has gone past open
   const showTimeline = isOwner
     ? ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status)
     : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status);
@@ -391,9 +424,20 @@ const TaskDetail = () => {
               <CardContent className="p-4">
                 <h3 className="text-sm font-bold text-foreground mb-2">Actions</h3>
                 {isOwner && status === "open" ? (
-                  <div className="flex items-center gap-2 rounded-lg bg-primary/10 p-3 text-sm text-primary">
-                    <Info className="h-4 w-4 shrink-0" />
-                    You cannot accept your own Task.
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 rounded-lg bg-primary/10 p-3 text-sm text-primary">
+                      <Info className="h-4 w-4 shrink-0" />
+                      You cannot accept your own Task.
+                    </div>
+                    {canDelete && (
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={() => setShowDeleteDialog(true)}
+                      >
+                        <Trash2 className="h-4 w-4" /> Delete Task
+                      </Button>
+                    )}
                   </div>
                 ) : isAlreadyAccepted ? (
                   <div className="flex items-center gap-2 rounded-lg bg-[hsl(var(--success))]/10 p-3 text-sm text-[hsl(var(--success))]">
@@ -487,6 +531,24 @@ const TaskDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Delete task dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" /> Delete Task?
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete "{task.title}". Your reward deposit of ₹{task.reward.toLocaleString()} will be fully refunded. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteTask}>Confirm Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Conflict dialog */}
       <Dialog open={acceptStep === "conflict"} onOpenChange={() => setAcceptStep("none")}>

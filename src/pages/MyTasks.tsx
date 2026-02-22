@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { MapPin, Calendar, ChevronRight, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { MapPin, Calendar, ChevronRight, CheckCircle2, Clock, AlertTriangle, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,10 @@ const MyTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [acceptedTasks, setAcceptedTasks] = useState<Task[]>([]);
   const [quitDialog, setQuitDialog] = useState<Task | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<Task | null>(null);
+
+  const currentUser = getCurrentUser();
+  const currentUserName = currentUser?.name || "";
 
   useEffect(() => {
     const stored = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
@@ -46,19 +50,29 @@ const MyTasks = () => {
     }
 
     const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    const ids = new Set(storedAccepted.map((t) => t.id));
-    const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
-    setAcceptedTasks(merged);
+    // Only merge demo accepted for the acceptor user
+    if (currentUser?.role === "acceptor" || currentUserName === "Priya Sharma") {
+      const ids = new Set(storedAccepted.map((t) => t.id));
+      const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
+      setAcceptedTasks(merged);
+    } else {
+      setAcceptedTasks(storedAccepted);
+    }
   }, []);
 
-  const currentUser = getCurrentUser();
-  const currentUserName = currentUser?.name || "";
   const createdTasks = tasks.filter((t) => t.createdBy === currentUserName);
   
+  // For accepted tasks, filter to only those accepted by current user
+  const myAcceptedTasks = acceptedTasks.filter((t) => 
+    t.acceptedBy === currentUserName || 
+    // fallback for demo data
+    (currentUser?.role === "acceptor" && !t.acceptedBy)
+  );
+
   // Disputed tasks: from both created and accepted that are in "disputed" status
   const disputeTasks = [
     ...createdTasks.filter((t) => t.status === "disputed"),
-    ...acceptedTasks.filter((t) => t.status === "disputed"),
+    ...myAcceptedTasks.filter((t) => t.status === "disputed"),
   ];
 
   const canQuitTask = (task: Task) => {
@@ -69,13 +83,20 @@ const MyTasks = () => {
   };
 
   const handleQuitTask = (task: Task) => {
-    const updated = acceptedTasks.filter((t) => t.id !== task.id);
-    setAcceptedTasks(updated);
-    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    localStorage.setItem(
-      "reliyo_accepted_tasks",
-      JSON.stringify(storedAccepted.filter((t: Task) => t.id !== task.id))
-    );
+    // Remove from accepted tasks
+    const updatedAccepted = acceptedTasks.filter((t) => t.id !== task.id);
+    setAcceptedTasks(updatedAccepted);
+    localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(updatedAccepted.filter((t) => t.id !== task.id)));
+
+    // Move task back to "open" in reliyo_tasks
+    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const idx = storedTasks.findIndex((t: Task) => t.id === task.id);
+    if (idx >= 0) {
+      storedTasks[idx] = { ...storedTasks[idx], status: "open", acceptedBy: undefined, acceptedAt: undefined };
+      localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks));
+      setTasks(storedTasks);
+    }
+
     // Clean up timeline
     localStorage.removeItem(`reliyo_timeline_${task.id}`);
     setQuitDialog(null);
@@ -85,13 +106,29 @@ const MyTasks = () => {
     });
   };
 
+  const handleDeleteTask = (task: Task) => {
+    // Remove from reliyo_tasks
+    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const updated = storedTasks.filter((t: Task) => t.id !== task.id);
+    localStorage.setItem("reliyo_tasks", JSON.stringify(updated));
+    setTasks(updated);
+
+    // Clean up timeline
+    localStorage.removeItem(`reliyo_timeline_${task.id}`);
+    setDeleteDialog(null);
+    toast({
+      title: "Task Deleted",
+      description: "The task has been removed and your reward deposit will be refunded.",
+    });
+  };
+
   const tabs = [
     { key: "created" as const, label: "Created", count: createdTasks.length },
-    { key: "accepted" as const, label: "Accepted", count: acceptedTasks.length },
+    { key: "accepted" as const, label: "Accepted", count: myAcceptedTasks.length },
     { key: "dispute" as const, label: "In Dispute", count: disputeTasks.length },
   ];
 
-  const currentList = tab === "created" ? createdTasks : tab === "accepted" ? acceptedTasks : disputeTasks;
+  const currentList = tab === "created" ? createdTasks : tab === "accepted" ? myAcceptedTasks : disputeTasks;
 
   return (
     <DashboardLayout>
@@ -126,6 +163,8 @@ const MyTasks = () => {
         <div className="space-y-3">
           {currentList.map((task) => {
             const statusKey = task.status as TaskStatus;
+            const isCommitted = task.status === "committed";
+            const canQuit = canQuitTask(task);
             return (
               <Card
                 key={task.id}
@@ -159,17 +198,36 @@ const MyTasks = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {tab === "accepted" && task.status === "committed" && canQuitTask(task) && (
+                    {/* Delete button for requestor's open tasks */}
+                    {tab === "created" && task.status === "open" && !task.acceptedBy && (
                       <Button
                         variant="outline"
                         size="sm"
                         className="text-destructive border-destructive/30 hover:bg-destructive/10"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setQuitDialog(task);
+                          setDeleteDialog(task);
                         }}
                       >
-                        Quit Task
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                      </Button>
+                    )}
+                    {/* Quit task button: always visible for committed tasks, disabled after 2hrs */}
+                    {tab === "accepted" && isCommitted && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!canQuit}
+                        className={`${canQuit 
+                          ? "text-destructive border-destructive/30 hover:bg-destructive/10" 
+                          : "text-muted-foreground border-border opacity-50 cursor-not-allowed"}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (canQuit) setQuitDialog(task);
+                        }}
+                      >
+                        <Clock className="h-3.5 w-3.5 mr-1" />
+                        {canQuit ? "Quit Task" : "Quit Expired"}
                       </Button>
                     )}
                     {task.status === "disputed" && (
@@ -199,6 +257,26 @@ const MyTasks = () => {
             <Button variant="outline" onClick={() => setQuitDialog(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => quitDialog && handleQuitTask(quitDialog)}>
               Confirm Quit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete task confirmation dialog */}
+      <Dialog open={!!deleteDialog} onOpenChange={() => setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" /> Delete Task?
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete the task "{deleteDialog?.title}". Your reward deposit of ₹{deleteDialog?.reward.toLocaleString() || 0} will be fully refunded. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteDialog && handleDeleteTask(deleteDialog)}>
+              Confirm Delete
             </Button>
           </DialogFooter>
         </DialogContent>
