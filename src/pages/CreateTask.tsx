@@ -30,7 +30,26 @@ const DOMAINS = [
 
 const PLATFORM_FEE_PERCENT = 5;
 const MIN_REWARD = 250;
-const TITLE_MIN_WORDS = 3;
+const TITLE_MIN_WORDS = 2;
+
+// Country → currency mapping
+const COUNTRY_CURRENCY: Record<string, { symbol: string; code: string }> = {
+  "India": { symbol: "₹", code: "INR" },
+  "United States": { symbol: "$", code: "USD" },
+  "United Kingdom": { symbol: "£", code: "GBP" },
+  "Canada": { symbol: "C$", code: "CAD" },
+  "Australia": { symbol: "A$", code: "AUD" },
+  "Germany": { symbol: "€", code: "EUR" },
+  "France": { symbol: "€", code: "EUR" },
+  "Japan": { symbol: "¥", code: "JPY" },
+  "Brazil": { symbol: "R$", code: "BRL" },
+  "South Africa": { symbol: "R", code: "ZAR" },
+  "United Arab Emirates": { symbol: "د.إ", code: "AED" },
+  "Singapore": { symbol: "S$", code: "SGD" },
+  "Nigeria": { symbol: "₦", code: "NGN" },
+  "Mexico": { symbol: "MX$", code: "MXN" },
+  "China": { symbol: "¥", code: "CNY" },
+};
 const TITLE_MAX_WORDS = 15;
 const DESC_MIN_WORDS = 10;
 const DESC_MAX_WORDS = 200;
@@ -53,7 +72,7 @@ interface TaskForm {
   country: string;
   state: string;
   city: string;
-  reward: number;
+  reward: number | "";
   deadline: Date | undefined;
 }
 
@@ -143,8 +162,11 @@ const CreateTask = () => {
   const removeSkill = (skill: string) =>
     updateField("skills", form.skills.filter((s) => s !== skill));
 
-  const platformFee = Math.round(form.reward * (PLATFORM_FEE_PERCENT / 100));
-  const totalPayout = form.reward;
+  const rewardNum = typeof form.reward === "number" ? form.reward : 0;
+  const currency = COUNTRY_CURRENCY[form.country] || { symbol: "₹", code: "INR" };
+  const cs = currency.symbol;
+  const platformFee = Math.round(rewardNum * (PLATFORM_FEE_PERCENT / 100));
+  const totalPayout = rewardNum;
 
   const effectiveDomain =
     form.domain === "Other" ? form.domainOther.trim() : form.domain;
@@ -161,7 +183,7 @@ const CreateTask = () => {
     descWords >= DESC_MIN_WORDS &&
     descWords <= DESC_MAX_WORDS &&
     form.workType !== "" &&
-    form.reward >= MIN_REWARD &&
+    rewardNum >= MIN_REWARD &&
     form.deadline !== undefined &&
     (form.domain !== "Other" || (form.domainOther.trim() !== "" && domainOtherWords <= DOMAIN_OTHER_MAX_WORDS));
 
@@ -172,12 +194,15 @@ const CreateTask = () => {
       id: taskId,
       taskId,
       ...form,
+      reward: rewardNum,
+      currency: currency.code,
+      currencySymbol: cs,
       domain: effectiveDomain,
       deadline: form.deadline ? form.deadline.toISOString() : "",
       location: [form.city, form.state, form.country].filter(Boolean).join(", "),
     };
     navigate("/payment", {
-      state: { taskData, amount: totalPayout, platformFee },
+      state: { taskData, amount: rewardNum, platformFee },
     });
   };
 
@@ -356,16 +381,42 @@ const CreateTask = () => {
             {/* Reward + Deadline */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium text-foreground">Reward (₹)</label>
-                <Input
-                  className="mt-1"
-                  type="number"
-                  min={MIN_REWARD}
-                  value={form.reward}
-                  onChange={(e) => updateField("reward", parseInt(e.target.value) || 0)}
-                />
-                {form.reward < MIN_REWARD && (
-                  <p className="mt-1 text-xs text-destructive">Minimum reward is ₹{MIN_REWARD}</p>
+              <label className="text-sm font-medium text-foreground">Reward ({cs})</label>
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 h-10 w-10"
+                    onClick={() => updateField("reward", Math.max(0, rewardNum - 10))}
+                  >−</Button>
+                  <Input
+                    className="flex-1"
+                    type="text"
+                    inputMode="numeric"
+                    value={form.reward === "" ? "" : String(form.reward)}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") { updateField("reward", ""); return; }
+                      const parsed = parseInt(raw, 10);
+                      if (!isNaN(parsed)) updateField("reward", parsed);
+                    }}
+                    onBlur={() => {
+                      if (form.reward === "" || (typeof form.reward === "number" && form.reward < 0)) {
+                        updateField("reward", 0 as any);
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 h-10 w-10"
+                    onClick={() => updateField("reward", rewardNum + 10)}
+                  >+</Button>
+                </div>
+                {rewardNum < MIN_REWARD && (
+                  <p className="mt-1 text-xs text-destructive">Minimum reward is {cs}{MIN_REWARD}</p>
                 )}
                 <p className="mt-1 text-xs text-muted-foreground">
                   Enter a reasonable reward amount based on the work request.
@@ -417,7 +468,7 @@ const CreateTask = () => {
                 <div><p className="text-xs text-muted-foreground">Update Frequency</p><p className="text-sm font-medium">{form.updateFrequency || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Skills</p><p className="text-sm font-medium">{form.skills.join(", ") || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Domain</p><p className="text-sm font-medium">{effectiveDomain || "—"}</p></div>
-                <div><p className="text-xs text-muted-foreground">Reward</p><p className="text-sm font-medium text-primary">₹{form.reward.toLocaleString()}</p></div>
+                <div><p className="text-xs text-muted-foreground">Reward</p><p className="text-sm font-medium text-primary">{cs}{rewardNum.toLocaleString()}</p></div>
               </div>
             </CardContent>
           </Card>
@@ -454,13 +505,13 @@ const CreateTask = () => {
               </div>
 
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span>Total Reward</span><span>₹{form.reward.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-₹{platformFee}</span></div>
+                <div className="flex justify-between"><span>Total Reward</span><span>{cs}{rewardNum.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{cs}{platformFee}</span></div>
               </div>
 
               <div className="mt-4 flex justify-between rounded-lg bg-muted p-3 font-semibold">
                 <span>Total Payout</span>
-                <span className="text-lg">₹{totalPayout.toLocaleString()}</span>
+                <span className="text-lg">{cs}{totalPayout.toLocaleString()}</span>
               </div>
             </CardContent>
           </Card>

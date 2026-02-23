@@ -328,6 +328,18 @@ const TaskTimeline = ({
   const renderActions = () => {
     const actions: React.ReactNode[] = [];
 
+    // Committed: requestor can alert acceptor or request force-close
+    if (status === "committed" && currentUserRole === "requestor") {
+      actions.push(
+        <Button key="alert" variant="outline" size="sm" onClick={() => setShowAlertDialog(true)} className="gap-1.5">
+          <Bell className="h-3.5 w-3.5" /> Send Alert
+        </Button>,
+        <Button key="force-close" variant="outline" size="sm" onClick={() => setShowForceCloseDialog(true)} className="gap-1.5 text-destructive border-destructive/30">
+          <XCircle className="h-3.5 w-3.5" /> Request Force-Close
+        </Button>
+      );
+    }
+
     // In Progress: acceptor can mark done; requestor can alert or request force-close
     if (status === "in_progress") {
       if (currentUserRole === "acceptor") {
