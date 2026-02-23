@@ -98,6 +98,8 @@ export interface Task {
   skills: string[];
   domain: string;
   reward: number;
+  currency?: string;
+  currencySymbol?: string;
   createdAt: string;
   createdBy: string;
   acceptedAt?: string;

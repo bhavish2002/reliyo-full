@@ -83,6 +83,10 @@ function generateId(): string {
 // ── Smart suppression ───────────────────────────────────────────────────────
 
 function isDuplicate(existing: AppNotification[], taskId: string, type: NotificationType): boolean {
+  // Alerts and disputes must always generate a new notification every time
+  if (type === "alert_raised" || type === "dispute_raised" || type === "admin_dispute_escalation" || type === "force_close_requested" || type === "admin_force_close_request") {
+    return false;
+  }
   // For rating_required, allow multiple (reminders) but not same-day
   if (type === "rating_required") {
     const today = new Date().toISOString().slice(0, 10);

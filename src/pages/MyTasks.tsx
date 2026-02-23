@@ -199,7 +199,7 @@ const MyTasks = () => {
                         <Calendar className="h-3 w-3" />
                         {task.deadline ? format(new Date(task.deadline), "MMM d") : "—"}
                       </span>
-                      <span>₹ {task.reward.toLocaleString()}</span>
+                      <span>{task.currencySymbol || "₹"} {task.reward.toLocaleString()}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -255,7 +255,7 @@ const MyTasks = () => {
               <AlertTriangle className="h-5 w-5 text-destructive" /> Quit Task?
             </DialogTitle>
             <DialogDescription>
-              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of ₹{quitDialog ? Math.round(quitDialog.reward * 0.1).toLocaleString() : 0} will be fully refunded. The task will be released back to Browse Tasks.
+              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of {quitDialog ? (quitDialog.currencySymbol || "₹") : "₹"}{quitDialog ? Math.round(quitDialog.reward * 0.1).toLocaleString() : 0} will be fully refunded. The task will be released back to Browse Tasks.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -275,7 +275,7 @@ const MyTasks = () => {
               <Trash2 className="h-5 w-5 text-destructive" /> Delete Task?
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete the task "{deleteDialog?.title}". Your reward deposit of ₹{deleteDialog?.reward.toLocaleString() || 0} will be fully refunded. This action cannot be undone.
+              This will permanently delete the task "{deleteDialog?.title}". Your reward deposit of {deleteDialog?.currencySymbol || "₹"}{deleteDialog?.reward.toLocaleString() || 0} will be fully refunded. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">

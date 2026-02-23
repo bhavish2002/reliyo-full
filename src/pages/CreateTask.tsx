@@ -29,27 +29,29 @@ const DOMAINS = [
 ];
 
 const PLATFORM_FEE_PERCENT = 5;
-const MIN_REWARD = 250;
+const BASE_MIN_REWARD_INR = 250;
 const TITLE_MIN_WORDS = 2;
 
-// Country → currency mapping
-const COUNTRY_CURRENCY: Record<string, { symbol: string; code: string }> = {
-  "India": { symbol: "₹", code: "INR" },
-  "United States": { symbol: "$", code: "USD" },
-  "United Kingdom": { symbol: "£", code: "GBP" },
-  "Canada": { symbol: "C$", code: "CAD" },
-  "Australia": { symbol: "A$", code: "AUD" },
-  "Germany": { symbol: "€", code: "EUR" },
-  "France": { symbol: "€", code: "EUR" },
-  "Japan": { symbol: "¥", code: "JPY" },
-  "Brazil": { symbol: "R$", code: "BRL" },
-  "South Africa": { symbol: "R", code: "ZAR" },
-  "United Arab Emirates": { symbol: "د.إ", code: "AED" },
-  "Singapore": { symbol: "S$", code: "SGD" },
-  "Nigeria": { symbol: "₦", code: "NGN" },
-  "Mexico": { symbol: "MX$", code: "MXN" },
-  "China": { symbol: "¥", code: "CNY" },
+// Country → currency mapping with exchange rates (relative to INR)
+const COUNTRY_CURRENCY: Record<string, { symbol: string; code: string; rateFromINR: number }> = {
+  "India": { symbol: "₹", code: "INR", rateFromINR: 1 },
+  "United States": { symbol: "$", code: "USD", rateFromINR: 0.012 },
+  "United Kingdom": { symbol: "£", code: "GBP", rateFromINR: 0.0095 },
+  "Canada": { symbol: "C$", code: "CAD", rateFromINR: 0.016 },
+  "Australia": { symbol: "A$", code: "AUD", rateFromINR: 0.018 },
+  "Germany": { symbol: "€", code: "EUR", rateFromINR: 0.011 },
+  "France": { symbol: "€", code: "EUR", rateFromINR: 0.011 },
+  "Japan": { symbol: "¥", code: "JPY", rateFromINR: 1.78 },
+  "Brazil": { symbol: "R$", code: "BRL", rateFromINR: 0.059 },
+  "South Africa": { symbol: "R", code: "ZAR", rateFromINR: 0.22 },
+  "United Arab Emirates": { symbol: "د.إ", code: "AED", rateFromINR: 0.044 },
+  "Singapore": { symbol: "S$", code: "SGD", rateFromINR: 0.016 },
+  "Nigeria": { symbol: "₦", code: "NGN", rateFromINR: 18.5 },
+  "Mexico": { symbol: "MX$", code: "MXN", rateFromINR: 0.21 },
+  "China": { symbol: "¥", code: "CNY", rateFromINR: 0.086 },
 };
+
+export { COUNTRY_CURRENCY };
 const TITLE_MAX_WORDS = 15;
 const DESC_MIN_WORDS = 10;
 const DESC_MAX_WORDS = 200;
@@ -88,7 +90,7 @@ const initialForm: TaskForm = {
   country: "",
   state: "",
   city: "",
-  reward: MIN_REWARD,
+  reward: BASE_MIN_REWARD_INR,
   deadline: undefined,
 };
 
@@ -163,8 +165,9 @@ const CreateTask = () => {
     updateField("skills", form.skills.filter((s) => s !== skill));
 
   const rewardNum = typeof form.reward === "number" ? form.reward : 0;
-  const currency = COUNTRY_CURRENCY[form.country] || { symbol: "₹", code: "INR" };
+  const currency = COUNTRY_CURRENCY[form.country] || COUNTRY_CURRENCY["India"];
   const cs = currency.symbol;
+  const minReward = Math.ceil(BASE_MIN_REWARD_INR * currency.rateFromINR);
   const platformFee = Math.round(rewardNum * (PLATFORM_FEE_PERCENT / 100));
   const totalPayout = rewardNum;
 
@@ -183,7 +186,7 @@ const CreateTask = () => {
     descWords >= DESC_MIN_WORDS &&
     descWords <= DESC_MAX_WORDS &&
     form.workType !== "" &&
-    rewardNum >= MIN_REWARD &&
+    rewardNum >= minReward &&
     form.deadline !== undefined &&
     (form.domain !== "Other" || (form.domainOther.trim() !== "" && domainOtherWords <= DOMAIN_OTHER_MAX_WORDS));
 
@@ -342,6 +345,12 @@ const CreateTask = () => {
                   onValueChange={(v) => {
                     updateField("country", v);
                     updateField("state", "");
+                    const newCurrency = COUNTRY_CURRENCY[v] || COUNTRY_CURRENCY["India"];
+                    const newMin = Math.ceil(BASE_MIN_REWARD_INR * newCurrency.rateFromINR);
+                    const currentReward = typeof form.reward === "number" ? form.reward : 0;
+                    if (currentReward < newMin) {
+                      updateField("reward", newMin);
+                    }
                   }}
                 >
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Select" /></SelectTrigger>
@@ -390,6 +399,7 @@ const CreateTask = () => {
                     className="shrink-0 h-10 w-10"
                     onClick={() => updateField("reward", Math.max(0, rewardNum - 10))}
                   >−</Button>
+
                   <Input
                     className="flex-1"
                     type="text"
@@ -415,8 +425,8 @@ const CreateTask = () => {
                     onClick={() => updateField("reward", rewardNum + 10)}
                   >+</Button>
                 </div>
-                {rewardNum < MIN_REWARD && (
-                  <p className="mt-1 text-xs text-destructive">Minimum reward is {cs}{MIN_REWARD}</p>
+                {rewardNum < minReward && (
+                  <p className="mt-1 text-xs text-destructive">Minimum reward is {cs}{minReward.toLocaleString()}</p>
                 )}
                 <p className="mt-1 text-xs text-muted-foreground">
                   Enter a reasonable reward amount based on the work request.
