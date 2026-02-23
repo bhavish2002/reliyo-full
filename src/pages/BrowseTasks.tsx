@@ -251,7 +251,7 @@ const BrowseTasks = () => {
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-primary">₹{task.reward.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-primary">{(task as any).currencySymbol || "₹"}{task.reward.toLocaleString()}</span>
                     <StarRating rating={rating} />
                   </div>
                 </div>

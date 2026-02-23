@@ -35,6 +35,7 @@ const PaymentGateway = () => {
   const amount: number = location.state?.amount ?? 0;
   const platformFee: number = location.state?.platformFee ?? 0;
   const isAcceptFlow: boolean = location.state?.isAcceptFlow ?? false;
+  const currencySymbol: string = taskData?.currencySymbol || "₹";
 
   const [selectedMethod, setSelectedMethod] = useState<string>("");
   const [status, setStatus] = useState<PaymentStatus>("idle");
@@ -155,19 +156,19 @@ const PaymentGateway = () => {
             <h2 className="text-2xl font-bold text-foreground">Payment Successful!</h2>
             <p className="text-muted-foreground mt-2">
               {isAcceptFlow
-                ? `₹${amount.toLocaleString()} has been locked as a trust deposit. The task is now in your accepted list.`
-                : `₹${amount.toLocaleString()} has been locked as a reward deposit. Your task is now live and visible to workers.`}
+                ? `${currencySymbol}${amount.toLocaleString()} has been locked as a trust deposit. The task is now in your accepted list.`
+                : `${currencySymbol}${amount.toLocaleString()} has been locked as a reward deposit. Your task is now live and visible to workers.`}
             </p>
           </div>
           <div className="w-full rounded-xl bg-muted p-4 text-sm text-left space-y-2">
-            <div className="flex justify-between"><span className="text-muted-foreground">Amount Paid</span><span className="font-semibold">₹{amount.toLocaleString()}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Amount Paid</span><span className="font-semibold">{currencySymbol}{amount.toLocaleString()}</span></div>
             {!isAcceptFlow && (
-              <div className="flex justify-between"><span className="text-muted-foreground">Platform Fee</span><span className="font-semibold text-destructive">-₹{platformFee.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Platform Fee</span><span className="font-semibold text-destructive">-{currencySymbol}{platformFee.toLocaleString()}</span></div>
             )}
             {!isAcceptFlow && (
               <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
                 <span>Worker Payout</span>
-                <span className="text-success">₹{(amount - platformFee).toLocaleString()}</span>
+                <span className="text-success">{currencySymbol}{(amount - platformFee).toLocaleString()}</span>
               </div>
             )}
           </div>
@@ -190,7 +191,7 @@ const PaymentGateway = () => {
           <div>
             <h2 className="text-2xl font-bold text-foreground">Payment Failed</h2>
             <p className="text-muted-foreground mt-2">
-              We were unable to process your payment of ₹{amount.toLocaleString()}. No amount has been deducted.
+              We were unable to process your payment of {currencySymbol}{amount.toLocaleString()}. No amount has been deducted.
             </p>
           </div>
           <div className="w-full space-y-3">
@@ -215,7 +216,7 @@ const PaymentGateway = () => {
           <div>
             <h2 className="text-2xl font-bold text-foreground">Payment Under Processing</h2>
             <p className="text-muted-foreground mt-2">
-              Your payment of ₹{amount.toLocaleString()} is being verified.
+              Your payment of {currencySymbol}{amount.toLocaleString()} is being verified.
               {isAcceptFlow
                 ? " The task has been added to your accepted list and will be fully confirmed once payment clears."
                 : " Your payment is being processed. The task will be created and go live once payment is confirmed."}
@@ -253,25 +254,25 @@ const PaymentGateway = () => {
         </h1>
         <p className="text-sm text-muted-foreground mb-6">
           {isAcceptFlow
-            ? `Lock ₹${amount.toLocaleString()} as a trust deposit to accept this task.`
-            : `Lock ₹${amount.toLocaleString()} as a reward deposit to publish your task.`}
+            ? `Lock ${currencySymbol}${amount.toLocaleString()} as a trust deposit to accept this task.`
+            : `Lock ${currencySymbol}${amount.toLocaleString()} as a reward deposit to publish your task.`}
         </p>
 
         <Card className="rounded-xl mb-6">
           <CardContent className="p-5 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">{isAcceptFlow ? "Trust Deposit (10%)" : "Reward Amount"}</span>
-              <span>₹{amount.toLocaleString()}</span>
+              <span>{currencySymbol}{amount.toLocaleString()}</span>
             </div>
             {!isAcceptFlow && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Platform Fee (5%)</span>
-                <span className="text-destructive">-₹{platformFee.toLocaleString()}</span>
+                <span className="text-destructive">-{currencySymbol}{platformFee.toLocaleString()}</span>
               </div>
             )}
             <div className="flex justify-between font-semibold border-t border-border pt-2 mt-1 text-base">
               <span>Total to Pay</span>
-              <span className="text-primary">₹{amount.toLocaleString()}</span>
+              <span className="text-primary">{currencySymbol}{amount.toLocaleString()}</span>
             </div>
           </CardContent>
         </Card>
@@ -315,7 +316,7 @@ const PaymentGateway = () => {
           onClick={handlePay}
         >
           <Lock className="h-4 w-4" />
-          Lock & Pay ₹{amount.toLocaleString()}
+          Lock & Pay {currencySymbol}{amount.toLocaleString()}
         </Button>
       </div>
     </DashboardLayout>

@@ -349,7 +349,7 @@ const TaskDetail = () => {
             {STATUS_LABELS[status] || task.status}
           </Badge>
           <div className="text-right">
-            <p className="text-2xl font-bold text-foreground">₹{task.reward.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-foreground">{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</p>
             <p className="text-xs text-muted-foreground">Reward</p>
           </div>
         </div>
@@ -379,7 +379,7 @@ const TaskDetail = () => {
                   <div><p className="text-xs text-primary">Update Frequency</p><p className="font-medium">{task.updateFrequency || "—"}</p></div>
                   <div><p className="text-xs text-primary">Skills</p><p className="font-medium">{task.skills?.join(", ") || "—"}</p></div>
                   <div><p className="text-xs text-primary">Domain</p><p className="font-medium">{task.domain || "—"}</p></div>
-                  <div><p className="text-xs text-primary">Reward</p><p className="font-medium text-primary">₹{task.reward.toLocaleString()}</p></div>
+                  <div><p className="text-xs text-primary">Reward</p><p className="font-medium text-primary">{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</p></div>
                 </div>
               </CardContent>
             </Card>
@@ -511,20 +511,16 @@ const TaskDetail = () => {
                   <h3 className="text-sm font-bold text-foreground">Pay Breakdown</h3>
                 </div>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span>Total Reward</span><span>₹{task.reward.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-₹{fee}</span></div>
+                  <div className="flex justify-between"><span>Total Reward</span><span>{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{task.currencySymbol || "₹"}{fee}</span></div>
                   <div className="flex justify-between font-bold border-t pt-2 mt-2">
                     <span>Acceptor Payout</span>
-                    <span className="text-[hsl(var(--success))]">₹{acceptorPayout}</span>
+                    <span className="text-[hsl(var(--success))]">{task.currencySymbol || "₹"}{acceptorPayout}</span>
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Trust Deposit Locked (10%)</span>
-                    <span>₹{trustDeposit}</span>
+                    <span>{task.currencySymbol || "₹"}{trustDeposit}</span>
                   </div>
-                </div>
-                <div className="mt-3 space-y-1 text-xs text-primary">
-                  <p>Requestor: Reward is refunded if the task is cancelled or not completed.</p>
-                  <p>Acceptor: Deposit is refunded upon successful completion; forfeited if the task fails.</p>
                 </div>
               </CardContent>
             </Card>
@@ -540,7 +536,7 @@ const TaskDetail = () => {
               <Trash2 className="h-5 w-5 text-destructive" /> Delete Task?
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete "{task.title}". Your reward deposit of ₹{task.reward.toLocaleString()} will be fully refunded. This action cannot be undone.
+              This will permanently delete "{task.title}". Your reward deposit of {task.currencySymbol || "₹"}{task.reward.toLocaleString()} will be fully refunded. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -583,12 +579,12 @@ const TaskDetail = () => {
               </div>
               <div className="flex justify-between text-sm py-2">
                 <span>Total Deposit</span>
-                <span className="font-semibold">₹{trustDeposit.toLocaleString()}</span>
+                <span className="font-semibold">{task.currencySymbol || "₹"}{trustDeposit.toLocaleString()}</span>
               </div>
             </div>
             <div className="flex justify-between text-sm font-bold border-t pt-3">
               <span>Total Payout</span>
-              <span className="text-lg">₹{trustDeposit.toLocaleString()}</span>
+              <span className="text-lg">{task.currencySymbol || "₹"}{trustDeposit.toLocaleString()}</span>
             </div>
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <p className="text-xs font-semibold text-primary mb-2">Terms & conditions ⓘ</p>
