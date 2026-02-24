@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Phone, Mail, MapPin, Star, Edit2, Camera, Save, X, Shield, Settings, User,
+  Bell, Lock, Eye, Briefcase, Globe, Palette, MessageSquare, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DashboardLayout from "@/components/DashboardLayout";
+import { getCurrentUser } from "@/lib/auth";
+import { getUserSettings, updateUserSetting, type UserSettings } from "@/lib/userSettings";
+import { toast } from "@/hooks/use-toast";
 
 interface ProfileData {
   name: string;
@@ -50,26 +56,58 @@ const StarRating = ({ rating }: { rating: number }) => (
   </div>
 );
 
+// ── Setting toggle row ──────────────────────────────────────────────────────
+const SettingRow = ({
+  icon: Icon, label, description, checked, onToggle, disabled,
+}: {
+  icon: React.ElementType;
+  label: string;
+  description: string;
+  checked: boolean;
+  onToggle: (v: boolean) => void;
+  disabled?: boolean;
+}) => (
+  <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
+    <div className="flex items-start gap-3">
+      <Icon className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+      <div>
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </div>
+    <Switch checked={checked} onCheckedChange={onToggle} disabled={disabled} />
+  </div>
+);
+
 const Profile = () => {
+  const currentUser = getCurrentUser();
+  const userId = currentUser?.id || "guest";
+
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(DEFAULT_PROFILE);
+  const [settings, setSettings] = useState<UserSettings>(() => getUserSettings(userId));
 
-  const startEdit = () => {
-    setDraft({ ...profile });
-    setEditing(true);
+  // Reload settings if user changes
+  useEffect(() => {
+    setSettings(getUserSettings(userId));
+  }, [userId]);
+
+  const toggleSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
+    const updated = updateUserSetting(userId, key, value);
+    setSettings(updated);
+    toast({
+      title: "Setting updated",
+      description: `${key.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())} has been ${typeof value === "boolean" ? (value ? "enabled" : "disabled") : "updated"}.`,
+    });
   };
 
+  const startEdit = () => { setDraft({ ...profile }); setEditing(true); };
   const cancelEdit = () => setEditing(false);
-
   const saveEdit = () => {
-    // Name and phone can't be changed
-    setProfile({
-      ...draft,
-      name: profile.name,
-      phone: profile.phone,
-    });
+    setProfile({ ...draft, name: profile.name, phone: profile.phone });
     setEditing(false);
+    toast({ title: "Profile saved", description: "Your profile has been updated." });
   };
 
   return (
@@ -96,7 +134,6 @@ const Profile = () => {
       <Card className="rounded-xl mb-6">
         <CardContent className="p-6">
           <div className="flex flex-col sm:flex-row items-start gap-5">
-            {/* Avatar */}
             <div className="relative group">
               <Avatar className="h-20 w-20">
                 <AvatarFallback className="bg-primary/10 text-2xl font-bold text-primary">
@@ -109,23 +146,16 @@ const Profile = () => {
                 </button>
               )}
             </div>
-
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-foreground">{profile.name}</h2>
-              <div className="mt-1">
-                <StarRating rating={profile.rating} />
-              </div>
-
-              {/* Contact details */}
+              <div className="mt-1"><StarRating rating={profile.rating} /></div>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="flex items-start gap-2">
                   <Phone className="h-4 w-4 text-muted-foreground mt-0.5" />
                   <div>
                     <p className="text-xs text-muted-foreground">Phone</p>
                     <p className="text-sm font-medium text-foreground">{profile.phone}</p>
-                    {editing && (
-                      <p className="text-xs text-muted-foreground italic mt-0.5">Cannot be changed</p>
-                    )}
+                    {editing && <p className="text-xs text-muted-foreground italic mt-0.5">Cannot be changed</p>}
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
@@ -133,11 +163,7 @@ const Profile = () => {
                   <div>
                     <p className="text-xs text-muted-foreground">Email</p>
                     {editing ? (
-                      <Input
-                        className="h-8 text-sm mt-0.5"
-                        value={draft.email}
-                        onChange={(e) => setDraft({ ...draft, email: e.target.value })}
-                      />
+                      <Input className="h-8 text-sm mt-0.5" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
                     ) : (
                       <p className="text-sm font-medium text-foreground">{profile.email}</p>
                     )}
@@ -148,11 +174,7 @@ const Profile = () => {
                   <div>
                     <p className="text-xs text-muted-foreground">Location</p>
                     {editing ? (
-                      <Input
-                        className="h-8 text-sm mt-0.5"
-                        value={draft.location}
-                        onChange={(e) => setDraft({ ...draft, location: e.target.value })}
-                      />
+                      <Input className="h-8 text-sm mt-0.5" value={draft.location} onChange={(e) => setDraft({ ...draft, location: e.target.value })} />
                     ) : (
                       <p className="text-sm font-medium text-foreground">{profile.location}</p>
                     )}
@@ -172,11 +194,7 @@ const Profile = () => {
               <User className="h-4 w-4" /> About
             </h3>
             {editing ? (
-              <Textarea
-                className="min-h-[100px]"
-                value={draft.bio}
-                onChange={(e) => setDraft({ ...draft, bio: e.target.value })}
-              />
+              <Textarea className="min-h-[100px]" value={draft.bio} onChange={(e) => setDraft({ ...draft, bio: e.target.value })} />
             ) : (
               <p className="text-sm text-muted-foreground leading-relaxed">{profile.bio}</p>
             )}
@@ -190,8 +208,8 @@ const Profile = () => {
               <Shield className="h-4 w-4" /> Reliability & Stats
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg bg-success/10 p-3 text-center">
-                <p className="text-2xl font-bold text-success">{profile.reliability}%</p>
+              <div className="rounded-lg bg-[hsl(var(--success))]/10 p-3 text-center">
+                <p className="text-2xl font-bold text-[hsl(var(--success))]">{profile.reliability}%</p>
                 <p className="text-xs text-muted-foreground">Reliability Score</p>
               </div>
               <div className="rounded-lg bg-primary/10 p-3 text-center">
@@ -211,34 +229,104 @@ const Profile = () => {
           </CardContent>
         </Card>
 
-        {/* Settings */}
+        {/* ── Settings ────────────────────────────────────────────────────── */}
         <Card className="rounded-xl lg:col-span-2">
           <CardContent className="p-6">
-            <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
               <Settings className="h-4 w-4" /> Settings
             </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between py-2 border-b border-border">
+            <p className="text-xs text-muted-foreground mb-4">Manage your notifications, security, and visibility preferences.</p>
+
+            {/* Notifications group */}
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-2">Notifications</p>
+            <SettingRow
+              icon={Mail}
+              label="Email Notifications"
+              description="Receive email alerts for task updates, status changes, and deadlines"
+              checked={settings.emailNotifications}
+              onToggle={(v) => toggleSetting("emailNotifications", v)}
+            />
+            <SettingRow
+              icon={MessageSquare}
+              label="Task Update Alerts"
+              description="Receive alerts when tasks you created or accepted change status"
+              checked={settings.taskUpdateAlerts}
+              onToggle={(v) => toggleSetting("taskUpdateAlerts", v)}
+            />
+            <SettingRow
+              icon={TrendingUp}
+              label="Marketing Emails"
+              description="Receive tips, promotions, and platform announcements"
+              checked={settings.marketingEmails}
+              onToggle={(v) => toggleSetting("marketingEmails", v)}
+            />
+
+            {/* Security group */}
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-6">Security</p>
+            <SettingRow
+              icon={Lock}
+              label="Two-Factor Authentication"
+              description="Add an extra layer of security with OTP verification on login"
+              checked={settings.twoFactorAuth}
+              onToggle={(v) => toggleSetting("twoFactorAuth", v)}
+            />
+
+            {/* Visibility group */}
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-6">Visibility & Availability</p>
+            <SettingRow
+              icon={Eye}
+              label="Public Profile"
+              description="Make your profile visible to other users on the platform"
+              checked={settings.publicProfile}
+              onToggle={(v) => toggleSetting("publicProfile", v)}
+            />
+            <SettingRow
+              icon={Briefcase}
+              label="Available for Work"
+              description="Show yourself as available to accept new tasks in Browse Tasks"
+              checked={settings.availableForWork}
+              onToggle={(v) => toggleSetting("availableForWork", v)}
+            />
+
+            {/* Preferences group */}
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-6">Preferences</p>
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div className="flex items-start gap-3">
+                <Palette className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-foreground">Email Notifications</p>
-                  <p className="text-xs text-muted-foreground">Receive email alerts for task updates</p>
+                  <p className="text-sm font-medium text-foreground">Theme</p>
+                  <p className="text-xs text-muted-foreground">Choose your preferred appearance</p>
                 </div>
-                <Badge variant="secondary">Enabled</Badge>
               </div>
-              <div className="flex items-center justify-between py-2 border-b border-border">
+              <Select value={settings.darkMode} onValueChange={(v) => toggleSetting("darkMode", v as any)}>
+                <SelectTrigger className="w-28 h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">System</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="dark">Dark</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <div className="flex items-start gap-3">
+                <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-foreground">Two-Factor Authentication</p>
-                  <p className="text-xs text-muted-foreground">Add an extra layer of security</p>
+                  <p className="text-sm font-medium text-foreground">Default Currency</p>
+                  <p className="text-xs text-muted-foreground">Used as default when creating tasks</p>
                 </div>
-                <Badge variant="outline">Disabled</Badge>
               </div>
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Public Profile</p>
-                  <p className="text-xs text-muted-foreground">Make your profile visible to other users</p>
-                </div>
-                <Badge variant="secondary">Enabled</Badge>
-              </div>
+              <Select value={settings.preferredCurrency} onValueChange={(v) => toggleSetting("preferredCurrency", v)}>
+                <SelectTrigger className="w-28 h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INR">₹ INR</SelectItem>
+                  <SelectItem value="USD">$ USD</SelectItem>
+                  <SelectItem value="GBP">£ GBP</SelectItem>
+                  <SelectItem value="EUR">€ EUR</SelectItem>
+                  <SelectItem value="AUD">A$ AUD</SelectItem>
+                  <SelectItem value="CAD">C$ CAD</SelectItem>
+                  <SelectItem value="JPY">¥ JPY</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
