@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Search, Bell, UserRound, LogOut, Plus, Menu,
+  Settings, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -76,6 +77,67 @@ const SidebarContent = ({ current, onNavigate, onLogout, notifCount }: {
   );
 };
 
+// ── Header user dropdown ─────────────────────────────────────────────────────
+const HeaderUserDropdown = ({ userName, initial, onNavigate, onLogout }: {
+  userName: string;
+  initial: string;
+  onNavigate: (p: string) => void;
+  onLogout: () => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const items = [
+    { label: "Profile", icon: UserRound, path: "/profile" },
+    { label: "Settings", icon: Settings, path: "/profile" },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted"
+      >
+        <span className="text-sm font-medium text-foreground">{userName}</span>
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">{initial}</AvatarFallback>
+        </Avatar>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-48 rounded-xl border bg-popover p-1 shadow-lg z-50">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => { setOpen(false); onNavigate(item.path); }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-popover-foreground transition-colors hover:bg-muted"
+            >
+              <item.icon className="h-4 w-4 text-muted-foreground" />
+              {item.label}
+            </button>
+          ))}
+          <div className="my-1 border-t" />
+          <button
+            onClick={() => { setOpen(false); onLogout(); }}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
@@ -122,12 +184,12 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="hidden lg:block" />
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-foreground">{currentUser?.name || "User"}</span>
-            <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">{currentUser?.name?.charAt(0) || "U"}</AvatarFallback>
-            </Avatar>
-          </div>
+          <HeaderUserDropdown
+            userName={currentUser?.name || "User"}
+            initial={currentUser?.name?.charAt(0) || "U"}
+            onNavigate={handleNav}
+            onLogout={handleLogout}
+          />
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
