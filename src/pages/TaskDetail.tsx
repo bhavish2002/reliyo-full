@@ -439,7 +439,7 @@ const TaskDetail = () => {
                       </Button>
                     )}
                   </div>
-                ) : isAlreadyAccepted ? (
+                ) : isAlreadyAccepted && !isOwner ? (
                   <div className="flex items-center gap-2 rounded-lg bg-[hsl(var(--success))]/10 p-3 text-sm text-[hsl(var(--success))]">
                     <CheckCircle2 className="h-4 w-4 shrink-0" />
                     You have accepted this task.

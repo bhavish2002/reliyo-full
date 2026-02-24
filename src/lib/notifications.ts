@@ -19,6 +19,7 @@ export type NotificationType =
   | "fix_resubmitted"
   | "rating_required"
   | "task_force_closed"
+  | "task_closed"
   | "admin_force_close_request"
   | "admin_dispute_escalation"
   | "admin_abuse_flag";
@@ -118,8 +119,8 @@ export function pushNotification(params: {
   title: string;
   message: string;
 }): void {
-  // Suppress if task is already closed
-  if (isTaskClosed(params.taskId)) return;
+  // Suppress if task is already closed (except for the closure notification itself)
+  if (params.type !== "task_closed" && params.type !== "task_force_closed" && isTaskClosed(params.taskId)) return;
 
   const existing = getNotifications(params.target);
 
@@ -220,8 +221,8 @@ export function notifyTaskMarkedDone(task: { id: string; taskId?: string; title:
     type: "task_marked_done",
     priority: "high",
     target: "requestor",
-    title: "Task Marked Complete",
-    message: `"${task.title}" marked complete. Please review.`,
+    title: "Task Marked Done",
+    message: `"${task.title}" marked done. Please review.`,
   });
 }
 
@@ -296,6 +297,29 @@ export function notifyTaskForceClosed(task: { id: string; taskId?: string; title
     target: "acceptor",
     title: "Task Closed by Admin",
     message: `"${task.title}" closed by admin. See details.`,
+  });
+}
+
+export function notifyTaskClosed(task: { id: string; taskId?: string; title: string; }) {
+  pushNotification({
+    taskId: task.id,
+    taskDisplayId: task.taskId || task.id,
+    taskTitle: task.title,
+    type: "task_closed",
+    priority: "high",
+    target: "requestor",
+    title: "Task Closed",
+    message: `"${task.title}" has been closed. Escrow funds released.`,
+  });
+  pushNotification({
+    taskId: task.id,
+    taskDisplayId: task.taskId || task.id,
+    taskTitle: task.title,
+    type: "task_closed",
+    priority: "high",
+    target: "acceptor",
+    title: "Task Closed",
+    message: `"${task.title}" has been closed. Payment released.`,
   });
 }
 
