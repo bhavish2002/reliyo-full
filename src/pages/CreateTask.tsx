@@ -29,26 +29,25 @@ const DOMAINS = [
 ];
 
 const PLATFORM_FEE_PERCENT = 5;
-const BASE_MIN_REWARD_INR = 250;
 const TITLE_MIN_WORDS = 2;
 
-// Country → currency mapping with exchange rates (relative to INR)
-const COUNTRY_CURRENCY: Record<string, { symbol: string; code: string; rateFromINR: number }> = {
-  "India": { symbol: "₹", code: "INR", rateFromINR: 1 },
-  "United States": { symbol: "$", code: "USD", rateFromINR: 0.012 },
-  "United Kingdom": { symbol: "£", code: "GBP", rateFromINR: 0.0095 },
-  "Canada": { symbol: "C$", code: "CAD", rateFromINR: 0.016 },
-  "Australia": { symbol: "A$", code: "AUD", rateFromINR: 0.018 },
-  "Germany": { symbol: "€", code: "EUR", rateFromINR: 0.011 },
-  "France": { symbol: "€", code: "EUR", rateFromINR: 0.011 },
-  "Japan": { symbol: "¥", code: "JPY", rateFromINR: 1.78 },
-  "Brazil": { symbol: "R$", code: "BRL", rateFromINR: 0.059 },
-  "South Africa": { symbol: "R", code: "ZAR", rateFromINR: 0.22 },
-  "United Arab Emirates": { symbol: "د.إ", code: "AED", rateFromINR: 0.044 },
-  "Singapore": { symbol: "S$", code: "SGD", rateFromINR: 0.016 },
-  "Nigeria": { symbol: "₦", code: "NGN", rateFromINR: 18.5 },
-  "Mexico": { symbol: "MX$", code: "MXN", rateFromINR: 0.21 },
-  "China": { symbol: "¥", code: "CNY", rateFromINR: 0.086 },
+// Country → currency mapping with independent minimum rewards (not derived from INR)
+const COUNTRY_CURRENCY: Record<string, { symbol: string; code: string; minReward: number }> = {
+  "India": { symbol: "₹", code: "INR", minReward: 250 },
+  "United States": { symbol: "$", code: "USD", minReward: 5 },
+  "United Kingdom": { symbol: "£", code: "GBP", minReward: 4 },
+  "Canada": { symbol: "C$", code: "CAD", minReward: 7 },
+  "Australia": { symbol: "A$", code: "AUD", minReward: 8 },
+  "Germany": { symbol: "€", code: "EUR", minReward: 5 },
+  "France": { symbol: "€", code: "EUR", minReward: 5 },
+  "Japan": { symbol: "¥", code: "JPY", minReward: 500 },
+  "Brazil": { symbol: "R$", code: "BRL", minReward: 25 },
+  "South Africa": { symbol: "R", code: "ZAR", minReward: 50 },
+  "United Arab Emirates": { symbol: "د.إ", code: "AED", minReward: 15 },
+  "Singapore": { symbol: "S$", code: "SGD", minReward: 7 },
+  "Nigeria": { symbol: "₦", code: "NGN", minReward: 5000 },
+  "Mexico": { symbol: "MX$", code: "MXN", minReward: 50 },
+  "China": { symbol: "¥", code: "CNY", minReward: 25 },
 };
 
 export { COUNTRY_CURRENCY };
@@ -90,7 +89,7 @@ const initialForm: TaskForm = {
   country: "",
   state: "",
   city: "",
-  reward: BASE_MIN_REWARD_INR,
+  reward: "",
   deadline: undefined,
 };
 
@@ -167,7 +166,7 @@ const CreateTask = () => {
   const rewardNum = typeof form.reward === "number" ? form.reward : 0;
   const currency = COUNTRY_CURRENCY[form.country] || COUNTRY_CURRENCY["India"];
   const cs = currency.symbol;
-  const minReward = Math.ceil(BASE_MIN_REWARD_INR * currency.rateFromINR);
+  const minReward = currency.minReward;
   const platformFee = Math.round(rewardNum * (PLATFORM_FEE_PERCENT / 100));
   const totalPayout = rewardNum;
 
@@ -346,10 +345,9 @@ const CreateTask = () => {
                     updateField("country", v);
                     updateField("state", "");
                     const newCurrency = COUNTRY_CURRENCY[v] || COUNTRY_CURRENCY["India"];
-                    const newMin = Math.ceil(BASE_MIN_REWARD_INR * newCurrency.rateFromINR);
                     const currentReward = typeof form.reward === "number" ? form.reward : 0;
-                    if (currentReward < newMin) {
-                      updateField("reward", newMin);
+                    if (currentReward < newCurrency.minReward) {
+                      updateField("reward", newCurrency.minReward);
                     }
                   }}
                 >

@@ -18,6 +18,7 @@ import {
 import {
   notifyAlertRaised, notifyForceCloseRequested, notifyTaskMarkedDone,
   notifyDisputeRaised, notifyFixResubmitted, notifyRatingRequired,
+  notifyTaskClosed,
 } from "@/lib/notifications";
 import { format } from "date-fns";
 
@@ -269,6 +270,8 @@ const TaskTimeline = ({
     );
     setShowRatingDialog(false);
     onRatingSubmit?.(ratingValue, ratingFeedback);
+    // Notify both requestor and acceptor about task closure
+    notifyTaskClosed(task);
     onStatusChange("closed", [ratingEntry, closeEntry]);
   };
 

@@ -26,6 +26,7 @@ const TYPE_STYLE: Record<NotificationType, { icon: React.ElementType; className:
   fix_resubmitted:           { icon: CheckCircle2,  className: "text-primary bg-primary/10" },
   rating_required:           { icon: Star,           className: "text-primary bg-primary/10" },
   task_force_closed:         { icon: ShieldAlert,    className: "text-muted-foreground bg-muted" },
+  task_closed:               { icon: CheckCircle2,   className: "text-[hsl(var(--success))] bg-[hsl(var(--success))]/10" },
   admin_force_close_request: { icon: ShieldAlert,    className: "text-destructive bg-destructive/10" },
   admin_dispute_escalation:  { icon: AlertTriangle,  className: "text-destructive bg-destructive/10" },
   admin_abuse_flag:          { icon: ShieldAlert,    className: "text-destructive bg-destructive/10" },
