@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
 import { getUnreadCount, type NotificationTarget } from "@/lib/notifications";
+import { getUserSettings, applyTheme } from "@/lib/userSettings";
 
 const getNavItems = (notifCount: number) => [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -151,6 +152,14 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   const target: NotificationTarget = currentUser?.role === "acceptor" ? "acceptor" : "requestor";
   const [notifCount, setNotifCount] = useState(0);
+
+  // Apply theme on every dashboard render (ensures correct user context)
+  useEffect(() => {
+    const userId = currentUser?.id || "guest";
+    const settings = getUserSettings(userId);
+    applyTheme(settings.darkMode);
+  }, [currentUser?.id]);
+
   useEffect(() => {
     setNotifCount(getUnreadCount(target));
     const interval = setInterval(() => setNotifCount(getUnreadCount(target)), 3000);
