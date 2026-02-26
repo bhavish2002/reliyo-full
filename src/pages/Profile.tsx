@@ -1,19 +1,18 @@
 import { useState, useEffect } from "react";
 import {
   Phone, Mail, MapPin, Star, Edit2, Camera, Save, X, Shield, Settings, User,
-  Bell, Lock, Eye, Briefcase, Globe, Palette, MessageSquare, TrendingUp,
+  Bell, MessageSquare, TrendingUp, Palette, Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DashboardLayout from "@/components/DashboardLayout";
 import { getCurrentUser } from "@/lib/auth";
-import { getUserSettings, updateUserSetting, type UserSettings } from "@/lib/userSettings";
+import { getUserSettings, updateUserSetting, applyTheme, type UserSettings } from "@/lib/userSettings";
 import { toast } from "@/hooks/use-toast";
 
 interface ProfileData {
@@ -44,7 +43,7 @@ const DEFAULT_PROFILE: ProfileData = {
   memberSince: "Jan 2025",
 };
 
-const StarRating = ({ rating }: { rating: number }) => (
+const StarRating = ({ rating, reviewCount }: { rating: number; reviewCount: number }) => (
   <div className="flex items-center gap-0.5">
     {[1, 2, 3, 4, 5].map((i) => (
       <Star
@@ -52,20 +51,18 @@ const StarRating = ({ rating }: { rating: number }) => (
         className={`h-4 w-4 ${i <= Math.round(rating) ? "fill-primary text-primary" : "text-muted-foreground/30"}`}
       />
     ))}
-    <span className="ml-1.5 text-sm text-muted-foreground">{rating} ({DEFAULT_PROFILE.reviewCount})</span>
+    <span className="ml-1.5 text-sm text-muted-foreground">{rating} ({reviewCount})</span>
   </div>
 );
 
-// ── Setting toggle row ──────────────────────────────────────────────────────
 const SettingRow = ({
-  icon: Icon, label, description, checked, onToggle, disabled,
+  icon: Icon, label, description, checked, onToggle,
 }: {
   icon: React.ElementType;
   label: string;
   description: string;
   checked: boolean;
   onToggle: (v: boolean) => void;
-  disabled?: boolean;
 }) => (
   <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
     <div className="flex items-start gap-3">
@@ -75,7 +72,7 @@ const SettingRow = ({
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
     </div>
-    <Switch checked={checked} onCheckedChange={onToggle} disabled={disabled} />
+    <Switch checked={checked} onCheckedChange={onToggle} />
   </div>
 );
 
@@ -88,7 +85,20 @@ const Profile = () => {
   const [draft, setDraft] = useState(DEFAULT_PROFILE);
   const [settings, setSettings] = useState<UserSettings>(() => getUserSettings(userId));
 
-  // Reload settings if user changes
+  // Apply theme on mount and when it changes
+  useEffect(() => {
+    applyTheme(settings.darkMode);
+  }, [settings.darkMode]);
+
+  // Listen for system theme changes when mode is "system"
+  useEffect(() => {
+    if (settings.darkMode !== "system") return;
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => applyTheme("system");
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [settings.darkMode]);
+
   useEffect(() => {
     setSettings(getUserSettings(userId));
   }, [userId]);
@@ -96,9 +106,18 @@ const Profile = () => {
   const toggleSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     const updated = updateUserSetting(userId, key, value);
     setSettings(updated);
+
+    const friendlyName: Record<string, string> = {
+      emailNotifications: "Email Notifications",
+      taskUpdateAlerts: "Task Update Alerts",
+      marketingEmails: "Marketing Emails",
+      darkMode: "Theme",
+      preferredCurrency: "Default Currency",
+    };
+
     toast({
       title: "Setting updated",
-      description: `${key.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())} has been ${typeof value === "boolean" ? (value ? "enabled" : "disabled") : "updated"}.`,
+      description: `${friendlyName[key] || key} has been ${typeof value === "boolean" ? (value ? "enabled" : "disabled") : "updated"}.`,
     });
   };
 
@@ -148,7 +167,7 @@ const Profile = () => {
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-foreground">{profile.name}</h2>
-              <div className="mt-1"><StarRating rating={profile.rating} /></div>
+              <div className="mt-1"><StarRating rating={profile.rating} reviewCount={profile.reviewCount} /></div>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="flex items-start gap-2">
                   <Phone className="h-4 w-4 text-muted-foreground mt-0.5" />
@@ -235,7 +254,7 @@ const Profile = () => {
             <h3 className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
               <Settings className="h-4 w-4" /> Settings
             </h3>
-            <p className="text-xs text-muted-foreground mb-4">Manage your notifications, security, and visibility preferences.</p>
+            <p className="text-xs text-muted-foreground mb-4">Manage your notifications, appearance, and preferences.</p>
 
             {/* Notifications group */}
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-2">Notifications</p>
@@ -249,43 +268,16 @@ const Profile = () => {
             <SettingRow
               icon={MessageSquare}
               label="Task Update Alerts"
-              description="Receive alerts when tasks you created or accepted change status"
+              description="Receive in-app alerts when tasks you created or accepted change status"
               checked={settings.taskUpdateAlerts}
               onToggle={(v) => toggleSetting("taskUpdateAlerts", v)}
             />
             <SettingRow
               icon={TrendingUp}
               label="Marketing Emails"
-              description="Receive tips, promotions, and platform announcements"
+              description="Receive tips, promotions, and platform announcements (not critical system emails)"
               checked={settings.marketingEmails}
               onToggle={(v) => toggleSetting("marketingEmails", v)}
-            />
-
-            {/* Security group */}
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-6">Security</p>
-            <SettingRow
-              icon={Lock}
-              label="Two-Factor Authentication"
-              description="Add an extra layer of security with OTP verification on login"
-              checked={settings.twoFactorAuth}
-              onToggle={(v) => toggleSetting("twoFactorAuth", v)}
-            />
-
-            {/* Visibility group */}
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-6">Visibility & Availability</p>
-            <SettingRow
-              icon={Eye}
-              label="Public Profile"
-              description="Make your profile visible to other users on the platform"
-              checked={settings.publicProfile}
-              onToggle={(v) => toggleSetting("publicProfile", v)}
-            />
-            <SettingRow
-              icon={Briefcase}
-              label="Available for Work"
-              description="Show yourself as available to accept new tasks in Browse Tasks"
-              checked={settings.availableForWork}
-              onToggle={(v) => toggleSetting("availableForWork", v)}
             />
 
             {/* Preferences group */}
@@ -295,10 +287,10 @@ const Profile = () => {
                 <Palette className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Theme</p>
-                  <p className="text-xs text-muted-foreground">Choose your preferred appearance</p>
+                  <p className="text-xs text-muted-foreground">Choose your preferred appearance — applies instantly</p>
                 </div>
               </div>
-              <Select value={settings.darkMode} onValueChange={(v) => toggleSetting("darkMode", v as any)}>
+              <Select value={settings.darkMode} onValueChange={(v) => toggleSetting("darkMode", v as UserSettings["darkMode"])}>
                 <SelectTrigger className="w-28 h-8 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="system">System</SelectItem>
@@ -312,7 +304,7 @@ const Profile = () => {
                 <Globe className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Default Currency</p>
-                  <p className="text-xs text-muted-foreground">Used as default when creating tasks</p>
+                  <p className="text-xs text-muted-foreground">Pre-selected when creating new tasks</p>
                 </div>
               </div>
               <Select value={settings.preferredCurrency} onValueChange={(v) => toggleSetting("preferredCurrency", v)}>

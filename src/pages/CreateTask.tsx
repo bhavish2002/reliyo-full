@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ArrowRight, Lock, CheckCircle2, Info, CalendarIcon, X,
@@ -19,6 +19,8 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { countriesWithStates, ALL_COUNTRY_NAMES, getStatesByCountry } from "@/lib/countriesStates";
 import { generateTaskId } from "@/lib/taskId";
+import { getCurrentUser } from "@/lib/auth";
+import { getUserSettings } from "@/lib/userSettings";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const WORK_TYPES = ["Virtual", "Physical", "Hybrid"];
@@ -145,7 +147,21 @@ const WordCountHint = ({
 const CreateTask = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState<TaskForm>(initialForm);
+
+  // Pre-select country based on user's preferred currency
+  const defaultCountry = useMemo(() => {
+    const user = getCurrentUser();
+    const userId = user?.id || "guest";
+    const settings = getUserSettings(userId);
+    const currency = settings.preferredCurrency;
+    const entry = Object.entries(COUNTRY_CURRENCY).find(([, v]) => v.code === currency);
+    return entry ? entry[0] : "";
+  }, []);
+
+  const [form, setForm] = useState<TaskForm>(() => ({
+    ...initialForm,
+    country: defaultCountry,
+  }));
   const [skillInput, setSkillInput] = useState("");
   const [agreedTerms, setAgreedTerms] = useState(false);
 

@@ -5,24 +5,16 @@
 
 export interface UserSettings {
   emailNotifications: boolean;
-  twoFactorAuth: boolean;
-  publicProfile: boolean;
-  taskUpdateAlerts: boolean;     // SMS/push for task status changes
-  marketingEmails: boolean;      // promotional content
-  availableForWork: boolean;     // show in "available acceptors" pool
-  autoAcceptRating: number;      // auto-accept tasks from users above this rating (0 = disabled)
-  preferredCurrency: string;     // default currency code
+  taskUpdateAlerts: boolean;
+  marketingEmails: boolean;
+  preferredCurrency: string;
   darkMode: "system" | "light" | "dark";
 }
 
 const DEFAULTS: UserSettings = {
   emailNotifications: true,
-  twoFactorAuth: false,
-  publicProfile: true,
   taskUpdateAlerts: true,
   marketingEmails: false,
-  availableForWork: true,
-  autoAcceptRating: 0,
   preferredCurrency: "INR",
   darkMode: "system",
 };
@@ -35,7 +27,11 @@ export function getUserSettings(userId: string): UserSettings {
   try {
     const raw = localStorage.getItem(storageKey(userId));
     if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    // Strip removed keys, merge with defaults
+    return { ...DEFAULTS, ...Object.fromEntries(
+      Object.entries(parsed).filter(([k]) => k in DEFAULTS)
+    )};
   } catch {
     return { ...DEFAULTS };
   }
@@ -54,4 +50,18 @@ export function updateUserSetting<K extends keyof UserSettings>(
   const updated = { ...current, [key]: value };
   saveUserSettings(userId, updated);
   return updated;
+}
+
+/** Apply theme to the document based on user setting */
+export function applyTheme(mode: "system" | "light" | "dark"): void {
+  const root = document.documentElement;
+  if (mode === "dark") {
+    root.classList.add("dark");
+  } else if (mode === "light") {
+    root.classList.remove("dark");
+  } else {
+    // system
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.classList.toggle("dark", prefersDark);
+  }
 }
