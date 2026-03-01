@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2 } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,9 @@ import {
   PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, QUIT_GRACE_HOURS,
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
+import { checkInactivity } from "@/lib/inactivity";
+import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
+import { notifyTaskClosed } from "@/lib/notifications";
 
 // ── Demo browse tasks for lookup ─────────────────────────────────────────────
 const DEMO_BROWSE_TASKS: Task[] = [
@@ -189,6 +192,56 @@ const TaskDetail = () => {
     }
   }, [id]);
 
+  // 3-strike inactivity check
+  const inactivityChecked = useRef(false);
+  useEffect(() => {
+    if (!task || inactivityChecked.current) return;
+    if (task.status !== "done" && task.status !== "completed") return;
+    inactivityChecked.current = true;
+
+    const inactivity = checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries);
+
+    if (inactivity.pendingEntries.length > 0) {
+      const updated = [...timelineEntries, ...inactivity.pendingEntries];
+      setTimelineEntries(updated);
+      localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(updated));
+    }
+
+    if (inactivity.shouldAutoClose) {
+      const closeEntry: TimelineEntry = {
+        id: `auto-close-${Date.now()}`,
+        taskId: task.id,
+        author: "System",
+        authorRole: "system",
+        message: "Task closed automatically. Escrow funds released.",
+        timestamp: new Date().toISOString(),
+        systemGenerated: true,
+        entryType: "escrow",
+        metadata: { fromStatus: task.status as TaskStatus, toStatus: "closed" },
+      };
+      const allEntries = [...timelineEntries, ...inactivity.pendingEntries, closeEntry];
+      setTimelineEntries(allEntries);
+      localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(allEntries));
+
+      const closedTask: Task = { ...task, status: "closed" };
+      setTask(closedTask);
+
+      // Persist to both stores
+      const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+      const idx = storedTasks.findIndex((t) => t.id === task.id);
+      if (idx >= 0) { storedTasks[idx] = { ...storedTasks[idx], status: "closed" }; localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks)); }
+      const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+      const accIdx = storedAccepted.findIndex((t) => t.id === task.id);
+      if (accIdx >= 0) { storedAccepted[accIdx] = { ...storedAccepted[accIdx], status: "closed" }; localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(storedAccepted)); }
+
+      notifyTaskClosed(task);
+      toast({ title: "Task Auto-Closed", description: "This task was closed due to requestor inactivity (3 strikes)." });
+    }
+  }, [task?.id, task?.status]);
+
+  // Compute inactivity state for banner display
+  const inactivityState = task ? checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries) : null;
+
   if (!task) {
     return (
       <DashboardLayout>
@@ -282,24 +335,30 @@ const TaskDetail = () => {
     saveTimeline(updated);
 
     // Update task status
-    const updatedTask = { ...task, status: newStatus };
+    const updatedTask: Task = { ...task, status: newStatus, statusEnteredAt: new Date().toISOString() };
     if (newStatus === "disputed") {
       updatedTask.disputeCount = (task.disputeCount || 0) + 1;
+      const disputeId = generateDisputeId(task.taskId, updatedTask.disputeCount);
+      updatedTask.disputes = [
+        ...(task.disputes || []),
+        { id: disputeId, number: updatedTask.disputeCount, escalated: isEscalated(updatedTask.disputeCount), createdAt: new Date().toISOString() },
+      ];
     }
     setTask(updatedTask);
 
     // *** CRITICAL: Persist to BOTH localStorage stores so both users see the change ***
+    const persistData = { status: newStatus, statusEnteredAt: updatedTask.statusEnteredAt, disputeCount: updatedTask.disputeCount, disputes: updatedTask.disputes };
     const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const taskIdx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (taskIdx >= 0) {
-      storedTasks[taskIdx] = { ...storedTasks[taskIdx], status: newStatus, disputeCount: updatedTask.disputeCount };
+      storedTasks[taskIdx] = { ...storedTasks[taskIdx], ...persistData };
       localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks));
     }
 
     const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
     const accIdx = storedAccepted.findIndex((t: Task) => t.id === task.id);
     if (accIdx >= 0) {
-      storedAccepted[accIdx] = { ...storedAccepted[accIdx], status: newStatus, disputeCount: updatedTask.disputeCount };
+      storedAccepted[accIdx] = { ...storedAccepted[accIdx], ...persistData };
       localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(storedAccepted));
     }
 
@@ -358,7 +417,31 @@ const TaskDetail = () => {
           <p className="text-xs font-mono text-muted-foreground mt-2 select-all">{task.taskId}</p>
         )}
         <h1 className="text-xl font-bold text-foreground mt-1">{task.title}</h1>
-        <p className="text-sm text-muted-foreground mt-1 mb-4">{task.description}</p>
+        <p className="text-sm text-muted-foreground mt-1 mb-2">{task.description}</p>
+
+        {/* Dispute ID banner */}
+        {status === "disputed" && task.disputeCount && task.disputeCount > 0 && (
+          <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm mb-3 ${
+            isEscalated(task.disputeCount)
+              ? "bg-destructive/10 border-destructive/20 text-destructive"
+              : "bg-[hsl(35,90%,50%)]/10 border-[hsl(35,90%,50%)]/20 text-[hsl(35,90%,50%)]"
+          }`}>
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <div>
+              <span className="font-mono font-semibold">{generateDisputeId(task.taskId, task.disputeCount)}</span>
+              <span className="ml-2">Dispute #{task.disputeCount}/{MAX_DISPUTES}</span>
+              {isEscalated(task.disputeCount) && <span className="ml-2 font-bold">⚠️ ESCALATED — Admin Review Required</span>}
+            </div>
+          </div>
+        )}
+
+        {/* Inactivity banner */}
+        {inactivityState && inactivityState.bannerMessage && !inactivityState.shouldAutoClose && (
+          <div className="flex items-center gap-2 rounded-lg border bg-[hsl(35,90%,50%)]/10 border-[hsl(35,90%,50%)]/20 text-[hsl(35,90%,50%)] p-3 text-sm mb-3">
+            <Clock className="h-4 w-4 shrink-0" />
+            {inactivityState.bannerMessage}
+          </div>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
           {/* Left column */}
