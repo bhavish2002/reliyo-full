@@ -21,6 +21,7 @@ import {
   notifyTaskClosed,
 } from "@/lib/notifications";
 import { format } from "date-fns";
+import { generateDisputeId, MAX_DISPUTES, isEscalated } from "@/lib/disputeId";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,23 @@ const TaskTimeline = ({
     }
   }, [entries.length]);
 
+  // Mandatory rating: auto-open non-dismissable dialog when completed + requestor
+  const isMandatoryRating = status === "completed" && currentUserRole === "requestor";
+
+  useEffect(() => {
+    if (isMandatoryRating) {
+      setShowRatingDialog(true);
+    }
+  }, [isMandatoryRating]);
+
+  useEffect(() => {
+    if (isMandatoryRating) {
+      const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+      window.addEventListener("beforeunload", handler);
+      return () => window.removeEventListener("beforeunload", handler);
+    }
+  }, [isMandatoryRating]);
+
   // ── Submit comment ──────────────────────────────────────────────────────
 
   const handleSubmit = () => {
@@ -189,11 +207,16 @@ const TaskTimeline = ({
 
   const handleRaiseDispute = () => {
     if (!canTransition(status, "disputed")) return;
+    const disputeNumber = (task.disputeCount || 0) + 1;
+    if (disputeNumber > MAX_DISPUTES) return;
+    const disputeId = generateDisputeId(task.taskId, disputeNumber);
+    const escalated = isEscalated(disputeNumber);
+    const escalationNote = escalated ? " ⚠️ ESCALATED — Admin review required." : "";
     const sysEntry = createSystemEntry(
       task.id,
-      `Task moved to Disputed by Requestor (${currentUserName}). Dispute #${(task.disputeCount || 0) + 1}.`,
+      `Dispute raised by Requestor (${currentUserName}). ${disputeId} (Dispute #${disputeNumber}/${MAX_DISPUTES}).${escalationNote}`,
       "status_change",
-      { fromStatus: "done", toStatus: "disputed", disputeCount: (task.disputeCount || 0) + 1 }
+      { fromStatus: "done", toStatus: "disputed", disputeCount: disputeNumber }
     );
     setShowDisputeDialog(false);
     notifyDisputeRaised(task);
@@ -370,8 +393,16 @@ const TaskTimeline = ({
         <Button key="accept-work" size="sm" onClick={handleAcceptWork} className="gap-1.5">
           <CheckCircle2 className="h-3.5 w-3.5" /> Accept Work
         </Button>,
-        <Button key="dispute" variant="outline" size="sm" onClick={() => setShowDisputeDialog(true)} className="gap-1.5 text-destructive border-destructive/30">
-          <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
+        <Button
+          key="dispute"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowDisputeDialog(true)}
+          disabled={(task.disputeCount || 0) >= MAX_DISPUTES}
+          className="gap-1.5 text-destructive border-destructive/30"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {(task.disputeCount || 0) >= MAX_DISPUTES ? "Max Disputes Reached" : "Raise Dispute"}
         </Button>
       );
     }
@@ -515,12 +546,21 @@ const TaskTimeline = ({
               <AlertTriangle className="h-5 w-5 text-destructive" /> Raise Dispute
             </DialogTitle>
             <DialogDescription>
-              This will move the task to Disputed status. The acceptor will be notified and can submit fixes. Admin may escalate if needed.
+              {(task.disputeCount || 0) + 1 >= MAX_DISPUTES
+                ? `This will be Dispute #${(task.disputeCount || 0) + 1} (ESCALATED). Admin review will be required.`
+                : `This will create Dispute #${(task.disputeCount || 0) + 1}/${MAX_DISPUTES}. The acceptor will be notified and can submit fixes.`}
+              {(task.disputeCount || 0) >= MAX_DISPUTES && " Maximum disputes reached for this task."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowDisputeDialog(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleRaiseDispute}>Confirm Dispute</Button>
+            <Button
+              variant="destructive"
+              onClick={handleRaiseDispute}
+              disabled={(task.disputeCount || 0) >= MAX_DISPUTES}
+            >
+              Confirm Dispute
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -561,9 +601,22 @@ const TaskTimeline = ({
         </DialogContent>
       </Dialog>
 
-      {/* Rating dialog */}
-      <Dialog open={showRatingDialog} onOpenChange={setShowRatingDialog}>
-        <DialogContent className="sm:max-w-md">
+      {/* Rating dialog — mandatory & non-dismissable when completed+requestor */}
+      <Dialog
+        open={showRatingDialog}
+        onOpenChange={(open) => { if (!isMandatoryRating) setShowRatingDialog(open); }}
+      >
+        <DialogContent
+          className={`sm:max-w-md ${isMandatoryRating ? "[&>.absolute]:hidden" : ""}`}
+          onInteractOutside={(e) => { if (isMandatoryRating) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (isMandatoryRating) e.preventDefault(); }}
+        >
+          {isMandatoryRating && (
+            <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-2 text-xs text-destructive">
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+              Rating is mandatory. You must submit a rating to close this task.
+            </div>
+          )}
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Star className="h-5 w-5 text-primary" /> Rate the Acceptor
@@ -574,7 +627,7 @@ const TaskTimeline = ({
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <p className="text-sm font-medium text-foreground mb-2">Rating</p>
+              <p className="text-sm font-medium text-foreground mb-2">Rating <span className="text-destructive">*</span></p>
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map((v) => (
                   <button
@@ -600,7 +653,9 @@ const TaskTimeline = ({
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowRatingDialog(false)}>Cancel</Button>
+            {!isMandatoryRating && (
+              <Button variant="outline" onClick={() => setShowRatingDialog(false)}>Cancel</Button>
+            )}
             <Button disabled={ratingValue === 0} onClick={handleSubmitRating} className="gap-1.5">
               <CheckCircle2 className="h-4 w-4" /> Submit Rating & Close Task
             </Button>

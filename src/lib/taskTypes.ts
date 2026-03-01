@@ -108,6 +108,8 @@ export interface Task {
   disputeCount?: number;
   rating?: number;
   ratingFeedback?: string;
+  statusEnteredAt?: string;
+  disputes?: Array<{ id: string; number: number; escalated: boolean; createdAt: string }>;
 }
 
 // ── Permission Helpers ──────────────────────────────────────────────────────

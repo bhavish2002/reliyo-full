@@ -17,6 +17,7 @@ import {
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
 import { notifyAcceptorQuit } from "@/lib/notifications";
+import { generateDisputeId, isEscalated } from "@/lib/disputeId";
 
 const DEMO_TASKS: Task[] = [
   { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta", description: "", workType: "Physical", manpower: 1, skills: [], domain: "Delivery", updateFrequency: "Daily" },
@@ -183,6 +184,12 @@ const MyTasks = () => {
                     </Badge>
                     {task.taskId && (
                       <p className="text-[10px] font-mono text-muted-foreground">{task.taskId}</p>
+                    )}
+                    {task.status === "disputed" && task.disputeCount && task.disputeCount > 0 && (
+                      <p className="text-[10px] font-mono text-destructive font-semibold">
+                        {generateDisputeId(task.taskId, task.disputeCount)}
+                        {isEscalated(task.disputeCount) && " ⚠️ ESCALATED"}
+                      </p>
                     )}
                     <p className="text-sm font-semibold text-foreground">{task.title}</p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
