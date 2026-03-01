@@ -1,6 +1,8 @@
 /**
- * 3-Strike inactivity engine for requestor deadlocks.
- * Applies to tasks in "done" or "completed" status.
+ * 3-Strike inactivity engine for REQUESTOR deadlocks only.
+ * Applies to tasks in "done" or "completed" status where the
+ * requestor is the party who must act (review work or submit rating).
+ * This rule does NOT apply to acceptor inactivity.
  *
  * Strike 1: After 3 days (72h) of inactivity
  * Strike 2: After 3 more days (144h total)

@@ -185,7 +185,7 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
       };
     case "disputed":
       return {
-        message: "This task is currently under dispute. The acceptor can submit fixes to move it back to Done.",
+        message: "This task is currently under dispute.",
         variant: "warning",
       };
     case "completed":

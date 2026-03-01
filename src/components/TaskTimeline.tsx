@@ -275,6 +275,31 @@ const TaskTimeline = ({
     onAddEntry([entry]);
   };
 
+  // ── Admin: warn acceptor in escalated dispute ─────────────────────────
+
+  const handleAdminWarnAcceptor = () => {
+    const warnEntry = createSystemEntry(
+      task.id,
+      `⚠️ Admin Warning: Acceptor must complete the pending work immediately or a penalty will be applied.`,
+      "admin_action"
+    );
+    onAddEntry([warnEntry]);
+  };
+
+  // ── Admin: force-close escalated dispute ──────────────────────────────
+
+  const handleAdminForceClose = () => {
+    const closeEntry = createSystemEntry(
+      task.id,
+      `Task force-closed by Admin (${currentUserName}). Escalated dispute resolved. Escrow funds released.`,
+      "admin_action",
+      { fromStatus: "disputed" as TaskStatus, toStatus: "closed" }
+    );
+    setShowForceCloseDialog(false);
+    notifyTaskClosed(task);
+    onStatusChange("closed", [closeEntry]);
+  };
+
   // ── Rating submission ──────────────────────────────────────────────────
 
   const handleSubmitRating = () => {
@@ -407,8 +432,10 @@ const TaskTimeline = ({
       );
     }
 
-    // Disputed: acceptor can resubmit fix
-    if (status === "disputed" && currentUserRole === "acceptor") {
+    // Disputed: acceptor can resubmit fix (only if NOT escalated / DSP4)
+    const disputeIsEscalated = isEscalated(task.disputeCount || 0);
+
+    if (status === "disputed" && currentUserRole === "acceptor" && !disputeIsEscalated) {
       actions.push(
         <Button
           key="resubmit"
@@ -418,6 +445,30 @@ const TaskTimeline = ({
           className="gap-1.5"
         >
           <CheckCircle2 className="h-3.5 w-3.5" /> Submit Fix & Move to Done
+        </Button>
+      );
+    }
+
+    // Escalated dispute (DSP4): admin-only controls
+    if (status === "disputed" && disputeIsEscalated && currentUserRole === "admin") {
+      actions.push(
+        <Button
+          key="admin-warn"
+          variant="outline"
+          size="sm"
+          onClick={handleAdminWarnAcceptor}
+          className="gap-1.5"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> Warn Acceptor
+        </Button>,
+        <Button
+          key="admin-force-close"
+          variant="destructive"
+          size="sm"
+          onClick={() => setShowForceCloseDialog(true)}
+          className="gap-1.5"
+        >
+          <XCircle className="h-3.5 w-3.5" /> Force-Close Task
         </Button>
       );
     }
@@ -463,6 +514,22 @@ const TaskTimeline = ({
             <Info className="h-4 w-4 shrink-0 mt-0.5" />
           )}
           {banner.message}
+        </div>
+      )}
+
+      {/* Escalated dispute banner */}
+      {status === "disputed" && isEscalated(task.disputeCount || 0) && (
+        <div className="flex items-start gap-2 mx-4 mt-3 rounded-lg border p-3 text-sm bg-destructive/10 border-destructive/20 text-destructive">
+          <Shield className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold">Escalated dispute — admin review in progress.</span>
+            {currentUserRole === "acceptor" && (
+              <span className="block mt-1 text-xs">You may add comments only. Status changes are restricted to admin.</span>
+            )}
+            {currentUserRole === "requestor" && (
+              <span className="block mt-1 text-xs">Awaiting admin resolution. You may add comments.</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -588,15 +655,22 @@ const TaskTimeline = ({
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <XCircle className="h-5 w-5 text-destructive" /> Request Force-Close
+              <XCircle className="h-5 w-5 text-destructive" /> {isEscalated(task.disputeCount || 0) && currentUserRole === "admin" ? "Force-Close Escalated Task" : "Request Force-Close"}
             </DialogTitle>
             <DialogDescription>
-              This will send a force-close request to the admin for review. The task will not be closed until an admin approves it.
+              {isEscalated(task.disputeCount || 0) && currentUserRole === "admin"
+                ? "This will immediately close the escalated task and release escrow funds. This action is irreversible."
+                : "This will send a force-close request to the admin for review. The task will not be closed until an admin approves it."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowForceCloseDialog(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleForceCloseRequest}>Submit Request</Button>
+            <Button
+              variant="destructive"
+              onClick={isEscalated(task.disputeCount || 0) && currentUserRole === "admin" ? handleAdminForceClose : handleForceCloseRequest}
+            >
+              {isEscalated(task.disputeCount || 0) && currentUserRole === "admin" ? "Force-Close Now" : "Submit Request"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
