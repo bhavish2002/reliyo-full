@@ -111,9 +111,6 @@ export function sendStrikeNotifications(
   pendingEntries: TimelineEntry[],
   requestorEmail: string | undefined
 ): void {
-  // Lazy import to avoid circular deps
-  const { pushNotification } = require("./notifications");
-
   pendingEntries.forEach((entry) => {
     // Determine strike number from message
     let strikeLabel = "Inactivity Warning";
