@@ -563,7 +563,7 @@ const TaskTimeline = ({
             disabled={!allowed}
             className="min-h-[60px] resize-none"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && allowed && status !== "disputed") {
+              if (e.key === "Enter" && !e.shiftKey && allowed) {
                 e.preventDefault();
                 handleSubmit();
               }
@@ -575,7 +575,7 @@ const TaskTimeline = ({
                 ? `You cannot comment in ${STATUS_LABELS[status]} status as ${ROLE_LABELS[currentUserRole]}.`
                 : "Shift+Enter for new line"}
             </p>
-            {allowed && status !== "disputed" && (
+            {allowed && (
               <Button
                 size="sm"
                 disabled={!commentText.trim() || submitting}

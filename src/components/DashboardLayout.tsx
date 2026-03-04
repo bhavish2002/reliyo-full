@@ -98,7 +98,6 @@ const HeaderUserDropdown = ({ userName, initial, onNavigate, onLogout }: {
 
   const items = [
     { label: "Profile", icon: UserRound, path: "/profile" },
-    { label: "Settings", icon: Settings, path: "/profile" },
   ];
 
   return (

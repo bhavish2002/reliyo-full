@@ -100,3 +100,47 @@ export function checkInactivity(
 
   return { currentStrike, shouldAutoClose, nextStrikeAt, pendingEntries, bannerMessage };
 }
+
+/**
+ * Push high-priority notifications and simulated email alerts for each new strike.
+ * Called after checkInactivity returns pendingEntries.
+ */
+export function sendStrikeNotifications(
+  task: { id: string; taskId?: string; title: string; },
+  pendingEntries: TimelineEntry[],
+  requestorEmail: string | undefined
+): void {
+  // Lazy import to avoid circular deps
+  const { pushNotification } = require("./notifications");
+
+  pendingEntries.forEach((entry) => {
+    // Determine strike number from message
+    let strikeLabel = "Inactivity Warning";
+    if (entry.message.includes("1/3")) strikeLabel = "Strike 1/3: Inactivity Warning";
+    else if (entry.message.includes("2/3")) strikeLabel = "Strike 2/3: Inactivity Warning";
+    else if (entry.message.includes("3/3")) strikeLabel = "Strike 3/3: Task Auto-Closed";
+
+    // Push notification to requestor
+    pushNotification({
+      taskId: task.id,
+      taskDisplayId: task.taskId || task.id,
+      taskTitle: task.title,
+      type: "rating_required" as const, // re-use high-priority type for strike reminders
+      priority: "critical" as const,
+      target: "requestor" as const,
+      title: strikeLabel,
+      message: entry.message,
+    });
+
+    // Simulate email alert (frontend-only — log to console)
+    if (requestorEmail) {
+      console.info(
+        `[EMAIL ALERT] To: ${requestorEmail} | Subject: ${strikeLabel} — "${task.title}" | Body: ${entry.message}`
+      );
+    } else {
+      console.warn(
+        `[EMAIL ALERT SKIPPED] No email on file for requestor. Strike: ${strikeLabel} — "${task.title}"`
+      );
+    }
+  });
+}

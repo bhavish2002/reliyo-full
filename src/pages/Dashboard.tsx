@@ -6,19 +6,25 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, Legend,
 } from "recharts";
 import DashboardLayout from "@/components/DashboardLayout";
 import {
-  RefreshCw, Clock, FileText, UserCheck, AlertTriangle, DollarSign,
+  RefreshCw, Clock, FileText, UserCheck, AlertTriangle, DollarSign, CalendarIcon,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS } from "@/lib/taskTypes";
 import { getUserSettings } from "@/lib/userSettings";
-import { format, parseISO, subMonths, startOfMonth } from "date-fns";
+import { format, parseISO, subMonths, startOfMonth, isAfter, isBefore, startOfDay, endOfDay } from "date-fns";
+import { cn } from "@/lib/utils";
+import type { DateRange } from "react-day-picker";
 
-// ── Currency lookup (mirrors CreateTask) ────────────────────────────────────
+// ── Currency lookup ────────────────────────────────────────────────────────
 const CURRENCY_SYMBOLS: Record<string, string> = {
   INR: "₹", USD: "$", GBP: "£", CAD: "C$", AUD: "A$", EUR: "€",
   JPY: "¥", BRL: "R$", ZAR: "R", AED: "د.إ", SGD: "S$", NGN: "₦",
@@ -50,22 +56,30 @@ function getUserTasks(allTasks: Task[], fullName: string) {
   };
 }
 
-function computeMonthlyData(tasks: Task[], months: number, fullName: string) {
-  const now = new Date();
-  const buckets: { month: string; date: Date; created: number; earnings: number }[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const d = subMonths(now, i);
-    buckets.push({ month: format(d, "MMM yyyy"), date: startOfMonth(d), created: 0, earnings: 0 });
+function computeMonthlyData(
+  tasks: Task[],
+  fullName: string,
+  rangeStart: Date,
+  rangeEnd: Date
+) {
+  // Build monthly buckets from rangeStart to rangeEnd
+  const buckets: { month: string; date: Date; created: number; accepted: number; earnings: number }[] = [];
+  let cursor = startOfMonth(rangeStart);
+  const end = startOfMonth(rangeEnd);
+  while (!isAfter(cursor, end)) {
+    buckets.push({ month: format(cursor, "MMM yyyy"), date: new Date(cursor), created: 0, accepted: 0, earnings: 0 });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
   }
 
   tasks.forEach((t) => {
     const createdDate = t.createdAt ? parseISO(t.createdAt) : null;
-    if (!createdDate) return;
+    if (!createdDate || isBefore(createdDate, rangeStart) || isAfter(createdDate, rangeEnd)) return;
     const key = format(createdDate, "MMM yyyy");
     const bucket = buckets.find((b) => b.month === key);
     if (!bucket) return;
 
     if (t.createdBy === fullName) bucket.created += 1;
+    if (t.acceptedBy === fullName) bucket.accepted += 1;
     if (t.status === "closed" && t.acceptedBy === fullName) {
       bucket.earnings += t.reward || 0;
     }
@@ -105,6 +119,39 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+// ── Pie tooltip (shows name + count on hover) ───────────────────────────────
+const PieTooltip = ({ active, payload }: any) => {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  return (
+    <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-lg">
+      <p className="font-medium text-popover-foreground">
+        {item.name} ({item.value})
+      </p>
+    </div>
+  );
+};
+
+// ── Pie legend (color + label only, no count) ───────────────────────────────
+const PieLegendContent = ({ payload }: any) => {
+  if (!payload?.length) return null;
+  return (
+    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-3">
+      {payload.map((entry: any) => (
+        <div key={entry.value} className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
+            style={{ backgroundColor: entry.color }}
+          />
+          <span className="text-xs text-muted-foreground">{entry.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+type FilterMode = "6" | "3" | "custom";
+
 // ── Dashboard ───────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
@@ -117,7 +164,9 @@ const Dashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [monthRange, setMonthRange] = useState("6");
+  const [filterMode, setFilterMode] = useState<FilterMode>("6");
+  const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const [userTasks, setUserTasks] = useState<{ all: Task[]; created: Task[]; accepted: Task[] }>({
     all: [], created: [], accepted: [],
@@ -125,7 +174,6 @@ const Dashboard = () => {
 
   const loadData = useCallback(() => {
     setLoading(true);
-    // Simulate async feel
     setTimeout(() => {
       const all = getAllTasks();
       setUserTasks(getUserTasks(all, fullName));
@@ -136,6 +184,22 @@ const Dashboard = () => {
   useEffect(() => { loadData(); }, [loadData, refreshKey]);
 
   const handleRefresh = () => setRefreshKey((k) => k + 1);
+
+  // ── Compute date range based on filter ──────────────────────────────────
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    const now = new Date();
+    if (filterMode === "custom" && customRange?.from) {
+      return {
+        rangeStart: startOfDay(customRange.from),
+        rangeEnd: customRange.to ? endOfDay(customRange.to) : endOfDay(now),
+      };
+    }
+    const months = filterMode === "3" ? 3 : 6;
+    return {
+      rangeStart: startOfMonth(subMonths(now, months - 1)),
+      rangeEnd: endOfDay(now),
+    };
+  }, [filterMode, customRange]);
 
   // ── Stat cards ──────────────────────────────────────────────────────────
   const cards = useMemo(() => {
@@ -155,11 +219,10 @@ const Dashboard = () => {
     ];
   }, [userTasks, currencySymbol]);
 
-  // ── Chart data (affected by monthRange) ─────────────────────────────────
-  const months = parseInt(monthRange);
+  // ── Chart data ─────────────────────────────────────────────────────────
   const monthlyData = useMemo(
-    () => computeMonthlyData(userTasks.all, months, fullName),
-    [userTasks.all, months, fullName],
+    () => computeMonthlyData(userTasks.all, fullName, rangeStart, rangeEnd),
+    [userTasks.all, fullName, rangeStart, rangeEnd],
   );
 
   const hasEarnings = monthlyData.some((d) => d.cumulativeEarnings > 0);
@@ -172,6 +235,12 @@ const Dashboard = () => {
     })).filter((d) => d.value > 0);
   }, [userTasks.all]);
 
+  // Max 6 months for custom range
+  const maxCustomFrom = subMonths(new Date(), 6);
+
+  // ── Filter label for display ──────────────────────────────────────────
+  const filterLabel = filterMode === "6" ? "Last 6 Months" : filterMode === "3" ? "Last 3 Months" : "Custom";
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <DashboardLayout>
@@ -182,22 +251,54 @@ const Dashboard = () => {
           <p className="text-sm text-muted-foreground">Here's what's happening with your tasks</p>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={monthRange} onValueChange={setMonthRange}>
-            <SelectTrigger className="h-9 w-[140px] text-xs">
-              <SelectValue />
+          <Select value={filterMode} onValueChange={(v) => {
+            setFilterMode(v as FilterMode);
+            if (v === "custom") setCalendarOpen(true);
+          }}>
+            <SelectTrigger className="h-9 w-[150px] text-xs">
+              <SelectValue>{filterLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {["1", "2", "3", "4", "5", "6"].map((v) => (
-                <SelectItem key={v} value={v}>{v === "1" ? "Last month" : `Last ${v} months`}</SelectItem>
-              ))}
+              <SelectItem value="6">Last 6 Months</SelectItem>
+              <SelectItem value="3">Last 3 Months</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
             </SelectContent>
           </Select>
+
+          {filterMode === "custom" && (
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs h-9">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  {customRange?.from ? (
+                    customRange.to
+                      ? `${format(customRange.from, "MMM d")} – ${format(customRange.to, "MMM d")}`
+                      : format(customRange.from, "MMM d, yyyy")
+                  ) : "Pick dates"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="range"
+                  selected={customRange}
+                  onSelect={(range) => {
+                    setCustomRange(range);
+                    if (range?.from && range?.to) setCalendarOpen(false);
+                  }}
+                  disabled={(date) => isAfter(date, new Date()) || isBefore(date, maxCustomFrom)}
+                  numberOfMonths={2}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+
           <Button
             variant="outline"
             size="sm"
             onClick={handleRefresh}
             disabled={loading}
-            className="gap-2"
+            className="gap-2 h-9"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -231,14 +332,12 @@ const Dashboard = () => {
             ))}
       </div>
 
-      {/* Charts row 1: Bar + Area */}
+      {/* Charts row 1: Tasks Created + Tasks Accepted */}
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         {/* Tasks Created */}
         <Card className="rounded-xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground">
-              Tasks Created
-            </CardTitle>
+            <CardTitle className="text-sm font-semibold text-foreground">Tasks Created</CardTitle>
           </CardHeader>
           <CardContent className="h-72">
             {loading ? (
@@ -261,12 +360,39 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Tasks Accepted */}
+        <Card className="rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-foreground">Tasks Accepted</CardTitle>
+          </CardHeader>
+          <CardContent className="h-72">
+            {loading ? (
+              <Skeleton className="h-full w-full rounded-lg" />
+            ) : monthlyData.every((d) => d.accepted === 0) ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-sm text-muted-foreground">No tasks accepted yet</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} barSize={28}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.6} />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--muted))", radius: 4 }} />
+                  <Bar dataKey="accepted" name="Accepted" fill="hsl(var(--success))" radius={[6, 6, 0, 0]} animationDuration={600} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts row 2: Cumulative Earnings + Task Status Distribution */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
         {/* Cumulative Earnings */}
         <Card className="rounded-xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground">
-              Cumulative Earnings
-            </CardTitle>
+            <CardTitle className="text-sm font-semibold text-foreground">Cumulative Earnings</CardTitle>
           </CardHeader>
           <CardContent className="h-72">
             {loading ? (
@@ -303,15 +429,13 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Charts row 2: Donut (full width) */}
-      <div className="grid gap-4">
+        {/* Task Status Distribution - Donut */}
         <Card className="rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-foreground">Task Status Distribution</CardTitle>
           </CardHeader>
-          <CardContent className="h-80">
+          <CardContent className="h-72">
             {loading ? (
               <Skeleton className="h-full w-full rounded-lg" />
             ) : pieData.length === 0 ? (
@@ -325,28 +449,19 @@ const Dashboard = () => {
                     data={pieData}
                     cx="50%"
                     cy="45%"
-                    innerRadius={65}
-                    outerRadius={100}
+                    innerRadius={55}
+                    outerRadius={85}
                     dataKey="value"
                     paddingAngle={3}
                     cornerRadius={4}
                     animationDuration={700}
-                    label={({ name, value }) => `${name} (${value})`}
-                    labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
                   >
                     {pieData.map((d) => (
                       <Cell key={d.status} fill={STATUS_PIE_COLORS[d.status as TaskStatus]} />
                     ))}
                   </Pie>
-                  <RechartsTooltip content={<CustomTooltip />} />
-                  <Legend
-                    verticalAlign="bottom"
-                    iconType="circle"
-                    iconSize={8}
-                    formatter={(value: string) => (
-                      <span className="text-xs text-muted-foreground">{value}</span>
-                    )}
-                  />
+                  <RechartsTooltip content={<PieTooltip />} />
+                  <Legend content={<PieLegendContent />} />
                 </PieChart>
               </ResponsiveContainer>
             )}
