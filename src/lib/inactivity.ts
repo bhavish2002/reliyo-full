@@ -11,6 +11,7 @@
 
 import { differenceInHours, addHours, formatDistanceToNow } from "date-fns";
 import type { TimelineEntry } from "./taskTypes";
+import { pushNotification } from "./notifications";
 
 const STRIKE_HOURS = [72, 144, 192]; // cumulative hours for each strike
 
