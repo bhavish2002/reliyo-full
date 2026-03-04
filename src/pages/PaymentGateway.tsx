@@ -13,6 +13,8 @@ import { notifyTaskAccepted } from "@/lib/notifications";
 
 type PaymentStatus = "idle" | "processing" | "success" | "failed" | "pending";
 
+const fmtMoney = (v: number) => v.toFixed(2);
+
 interface PaymentMethod {
   id: string;
   label: string;
