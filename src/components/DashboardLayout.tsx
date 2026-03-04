@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Search, Bell, UserRound, LogOut, Plus, Menu,
-  Settings, ChevronDown,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -98,7 +98,6 @@ const HeaderUserDropdown = ({ userName, initial, onNavigate, onLogout }: {
 
   const items = [
     { label: "Profile", icon: UserRound, path: "/profile" },
-    { label: "Settings", icon: Settings, path: "/profile" },
   ];
 
   return (
