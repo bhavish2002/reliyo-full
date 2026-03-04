@@ -183,7 +183,7 @@ const CreateTask = () => {
   const currency = COUNTRY_CURRENCY[form.country] || COUNTRY_CURRENCY["India"];
   const cs = currency.symbol;
   const minReward = currency.minReward;
-  const platformFee = Math.round(rewardNum * (PLATFORM_FEE_PERCENT / 100));
+  const platformFee = parseFloat((rewardNum * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
   const totalPayout = rewardNum;
 
   const effectiveDomain =
@@ -422,7 +422,7 @@ const CreateTask = () => {
                     onChange={(e) => {
                       const raw = e.target.value;
                       if (raw === "") { updateField("reward", ""); return; }
-                      const parsed = parseInt(raw, 10);
+                      const parsed = parseFloat(raw);
                       if (!isNaN(parsed)) updateField("reward", parsed);
                     }}
                     onBlur={() => {
@@ -530,7 +530,7 @@ const CreateTask = () => {
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span>Total Reward</span><span>{cs}{rewardNum.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{cs}{platformFee}</span></div>
+                <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{cs}{platformFee.toFixed(2)}</span></div>
               </div>
 
               <div className="mt-4 flex justify-between rounded-lg bg-muted p-3 font-semibold">

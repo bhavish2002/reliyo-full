@@ -258,9 +258,9 @@ const TaskDetail = () => {
     );
   }
 
-  const fee = Math.round(task.reward * (PLATFORM_FEE_PERCENT / 100));
-  const acceptorPayout = task.reward - fee;
-  const trustDeposit = Math.round(task.reward * (TRUST_DEPOSIT_PERCENT / 100));
+  const fee = parseFloat((task.reward * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
+  const acceptorPayout = parseFloat((task.reward - fee).toFixed(2));
+  const trustDeposit = parseFloat((task.reward * (TRUST_DEPOSIT_PERCENT / 100)).toFixed(2));
   const isOwner = task.createdBy === CURRENT_USER;
   const userRole = getUserRole(task);
   const status = task.status as TaskStatus;
