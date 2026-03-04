@@ -19,7 +19,7 @@ import {
   PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, QUIT_GRACE_HOURS,
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
-import { checkInactivity } from "@/lib/inactivity";
+import { checkInactivity, sendStrikeNotifications } from "@/lib/inactivity";
 import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
 import { notifyTaskClosed } from "@/lib/notifications";
 
@@ -205,6 +205,9 @@ const TaskDetail = () => {
       const updated = [...timelineEntries, ...inactivity.pendingEntries];
       setTimelineEntries(updated);
       localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(updated));
+
+      // Send notifications + email for each new strike
+      sendStrikeNotifications(task, inactivity.pendingEntries, currentUser?.email);
     }
 
     if (inactivity.shouldAutoClose) {
