@@ -262,7 +262,7 @@ const MyTasks = () => {
               <AlertTriangle className="h-5 w-5 text-destructive" /> Quit Task?
             </DialogTitle>
             <DialogDescription>
-              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of {quitDialog ? (quitDialog.currencySymbol || "₹") : "₹"}{quitDialog ? Math.round(quitDialog.reward * 0.1).toLocaleString() : 0} will be fully refunded. The task will be released back to Browse Tasks.
+              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of {quitDialog ? (quitDialog.currencySymbol || "₹") : "₹"}{quitDialog ? (quitDialog.reward * 0.1).toFixed(2) : "0.00"} will be fully refunded. The task will be released back to Browse Tasks.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">

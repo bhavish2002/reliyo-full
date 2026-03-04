@@ -258,9 +258,9 @@ const TaskDetail = () => {
     );
   }
 
-  const fee = Math.round(task.reward * (PLATFORM_FEE_PERCENT / 100));
-  const acceptorPayout = task.reward - fee;
-  const trustDeposit = Math.round(task.reward * (TRUST_DEPOSIT_PERCENT / 100));
+  const fee = parseFloat((task.reward * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
+  const acceptorPayout = parseFloat((task.reward - fee).toFixed(2));
+  const trustDeposit = parseFloat((task.reward * (TRUST_DEPOSIT_PERCENT / 100)).toFixed(2));
   const isOwner = task.createdBy === CURRENT_USER;
   const userRole = getUserRole(task);
   const status = task.status as TaskStatus;
@@ -598,7 +598,7 @@ const TaskDetail = () => {
                 </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between"><span>Total Reward</span><span>{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{task.currencySymbol || "₹"}{fee}</span></div>
+                  <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{task.currencySymbol || "₹"}{fee.toFixed(2)}</span></div>
                   <div className="flex justify-between font-bold border-t pt-2 mt-2">
                     <span>Acceptor Payout</span>
                     <span className="text-[hsl(var(--success))]">{task.currencySymbol || "₹"}{acceptorPayout}</span>
@@ -665,12 +665,12 @@ const TaskDetail = () => {
               </div>
               <div className="flex justify-between text-sm py-2">
                 <span>Total Deposit</span>
-                <span className="font-semibold">{task.currencySymbol || "₹"}{trustDeposit.toLocaleString()}</span>
+                <span className="font-semibold">{task.currencySymbol || "₹"}{trustDeposit.toFixed(2)}</span>
               </div>
             </div>
             <div className="flex justify-between text-sm font-bold border-t pt-3">
               <span>Total Payout</span>
-              <span className="text-lg">{task.currencySymbol || "₹"}{trustDeposit.toLocaleString()}</span>
+              <span className="text-lg">{task.currencySymbol || "₹"}{trustDeposit.toFixed(2)}</span>
             </div>
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <p className="text-xs font-semibold text-primary mb-2">Terms & conditions ⓘ</p>
