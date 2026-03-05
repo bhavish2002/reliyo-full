@@ -10,12 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
 import { getUnreadCount } from "@/lib/notifications";
+import { getAllDisputes } from "@/lib/adminData";
 
 const overviewItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
   { label: "All Tasks", icon: FileText, path: "/admin/tasks" },
   { label: "Users", icon: Users, path: "/admin/users" },
-  { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", badge: 14 },
+  { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", dynamicBadge: true, badgeKey: "disputes" },
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
   { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
@@ -30,11 +31,13 @@ const SidebarContent = ({
   onNavigate,
   onLogout,
   adminNotifCount,
+  disputeCount,
 }: {
   current: string;
   onNavigate: (p: string) => void;
   onLogout: () => void;
   adminNotifCount: number;
+  disputeCount: number;
 }) => {
   const user = getCurrentUser();
 
@@ -72,12 +75,12 @@ const SidebarContent = ({
             >
               <item.icon className="h-4 w-4" />
               {item.label}
-              {item.badge && (
+              {(item as any).badgeKey === "disputes" && disputeCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
-                  {item.badge}
+                  {disputeCount}
                 </Badge>
               )}
-              {(item as any).dynamicBadge && adminNotifCount > 0 && (
+              {(item as any).dynamicBadge && !(item as any).badgeKey && adminNotifCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {adminNotifCount}
                 </Badge>
@@ -146,10 +149,16 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminNotifCount, setAdminNotifCount] = useState(0);
+  const [disputeBadgeCount, setDisputeBadgeCount] = useState(0);
 
   useEffect(() => {
-    setAdminNotifCount(getUnreadCount("admin"));
-    const interval = setInterval(() => setAdminNotifCount(getUnreadCount("admin")), 3000);
+    const update = () => {
+      setAdminNotifCount(getUnreadCount("admin"));
+      const disputes = getAllDisputes();
+      setDisputeBadgeCount(disputes.filter((d) => d.escalated && d.dsp4Status === "open").length);
+    };
+    update();
+    const interval = setInterval(update, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -165,12 +174,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-60 shrink-0 border-r bg-background lg:block">
-        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} />
+        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-60 p-0">
-          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} />
+          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
         </SheetContent>
       </Sheet>
 

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,26 +11,23 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import AdminLayout from "@/components/AdminLayout";
-import { Search, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Eye } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus } from "@/lib/taskTypes";
-
-const DEMO_TASKS = [
-  { id: "RLY-TSK-2026-D8K3M7", title: "Deliver documents to Koramangala", requestor: "Ravi Kumar", acceptor: "Amit T.", status: "open" as TaskStatus, reward: 500, created: "2026-02-10" },
-  { id: "RLY-TSK-2026-L4P9N2", title: "Design a logo for bakery startup", requestor: "Priya Sharma", acceptor: "Rohan J.", status: "in_progress" as TaskStatus, reward: 2000, created: "2026-02-08" },
-  { id: "RLY-TSK-2026-T7R2X5", title: "Translate brochure to Tamil", requestor: "Sanjay Patel", acceptor: "Sneha P.", status: "done" as TaskStatus, reward: 1500, created: "2026-02-05" },
-  { id: "RLY-TSK-2026-B5W8Q3", title: "Build landing page for SaaS", requestor: "Meera Joshi", acceptor: "Arjun M.", status: "disputed" as TaskStatus, reward: 5000, created: "2026-02-12" },
-  { id: "RLY-TSK-2026-S6J4V8", title: "Write SEO blog articles on fintech", requestor: "Ankit Verma", acceptor: "Priya K.", status: "completed" as TaskStatus, reward: 3000, created: "2026-02-11" },
-  { id: "RLY-TSK-2026-F2H8K4", title: "Social media management", requestor: "Arjun Mehta", acceptor: "—", status: "open" as TaskStatus, reward: 10000, created: "2026-02-14" },
-  { id: "RLY-TSK-2026-G5N3P7", title: "Data entry for product listings", requestor: "Rajesh S.", acceptor: "Rohan J.", status: "committed" as TaskStatus, reward: 3000, created: "2026-02-13" },
-  { id: "RLY-TSK-2026-H9Q6R2", title: "Photography for wedding event", requestor: "Meena K.", acceptor: "Amit T.", status: "closed" as TaskStatus, reward: 8000, created: "2026-01-28" },
-];
+import { getAllPlatformTasks } from "@/lib/adminData";
 
 const AdminAllTasks = () => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [tasks, setTasks] = useState(() => getAllPlatformTasks());
 
-  const filtered = DEMO_TASKS.filter((t) => {
-    if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !t.id.toLowerCase().includes(search.toLowerCase())) return false;
+  useEffect(() => {
+    const interval = setInterval(() => setTasks(getAllPlatformTasks()), 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const filtered = tasks.filter((t) => {
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !(t.taskId || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
     return true;
   });
@@ -38,7 +36,7 @@ const AdminAllTasks = () => {
     <AdminLayout>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">All Tasks</h1>
-        <p className="text-sm text-muted-foreground">Monitor and audit all platform tasks</p>
+        <p className="text-sm text-muted-foreground">Live view of all platform tasks</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -70,19 +68,23 @@ const AdminAllTasks = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((t) => (
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No tasks found</TableCell></TableRow>
+            ) : filtered.map((t) => (
               <TableRow key={t.id}>
-                <TableCell className="font-mono text-xs text-muted-foreground">{t.id}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{t.taskId || t.id}</TableCell>
                 <TableCell className="text-sm font-medium max-w-[200px] truncate">{t.title}</TableCell>
-                <TableCell className="text-sm">{t.requestor}</TableCell>
-                <TableCell className="text-sm">{t.acceptor}</TableCell>
+                <TableCell className="text-sm">{t.createdBy || "—"}</TableCell>
+                <TableCell className="text-sm">{t.acceptedBy || "—"}</TableCell>
                 <TableCell>
-                  <Badge className={`${STATUS_COLORS[t.status]} text-[10px]`}>{STATUS_LABELS[t.status]}</Badge>
+                  <Badge className={`${STATUS_COLORS[t.status as TaskStatus]} text-[10px]`}>{STATUS_LABELS[t.status as TaskStatus]}</Badge>
                 </TableCell>
-                <TableCell className="text-right text-sm font-semibold">₹{t.reward.toLocaleString()}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{t.created}</TableCell>
+                <TableCell className="text-right text-sm font-semibold">{t.currencySymbol || "₹"}{t.reward.toLocaleString()}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : "—"}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/task/${t.id}`)}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -90,12 +92,8 @@ const AdminAllTasks = () => {
         </Table>
       </Card>
 
-      <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-        <p>Showing {filtered.length} of {DEMO_TASKS.length} tasks</p>
-        <div className="flex gap-1">
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled><ChevronLeft className="h-4 w-4" /></Button>
-          <Button variant="outline" size="icon" className="h-8 w-8" disabled><ChevronRight className="h-4 w-4" /></Button>
-        </div>
+      <div className="mt-4 text-sm text-muted-foreground">
+        Showing {filtered.length} of {tasks.length} tasks
       </div>
     </AdminLayout>
   );
