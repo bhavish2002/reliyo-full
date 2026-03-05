@@ -10,12 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
 import { getUnreadCount } from "@/lib/notifications";
+import { getAllDisputes } from "@/lib/adminData";
 
 const overviewItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
   { label: "All Tasks", icon: FileText, path: "/admin/tasks" },
   { label: "Users", icon: Users, path: "/admin/users" },
-  { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", badge: 14 },
+  { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", dynamicBadge: true, badgeKey: "disputes" },
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
   { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
