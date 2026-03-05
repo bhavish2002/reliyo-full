@@ -149,10 +149,16 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminNotifCount, setAdminNotifCount] = useState(0);
+  const [disputeBadgeCount, setDisputeBadgeCount] = useState(0);
 
   useEffect(() => {
-    setAdminNotifCount(getUnreadCount("admin"));
-    const interval = setInterval(() => setAdminNotifCount(getUnreadCount("admin")), 3000);
+    const update = () => {
+      setAdminNotifCount(getUnreadCount("admin"));
+      const disputes = getAllDisputes();
+      setDisputeBadgeCount(disputes.filter((d) => d.escalated && d.dsp4Status === "open").length);
+    };
+    update();
+    const interval = setInterval(update, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -168,12 +174,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-60 shrink-0 border-r bg-background lg:block">
-        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} />
+        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-60 p-0">
-          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} />
+          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
         </SheetContent>
       </Sheet>
 
