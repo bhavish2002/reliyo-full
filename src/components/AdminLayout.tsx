@@ -31,11 +31,13 @@ const SidebarContent = ({
   onNavigate,
   onLogout,
   adminNotifCount,
+  disputeCount,
 }: {
   current: string;
   onNavigate: (p: string) => void;
   onLogout: () => void;
   adminNotifCount: number;
+  disputeCount: number;
 }) => {
   const user = getCurrentUser();
 
@@ -73,12 +75,12 @@ const SidebarContent = ({
             >
               <item.icon className="h-4 w-4" />
               {item.label}
-              {item.badge && (
+              {(item as any).badgeKey === "disputes" && disputeCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
-                  {item.badge}
+                  {disputeCount}
                 </Badge>
               )}
-              {(item as any).dynamicBadge && adminNotifCount > 0 && (
+              {(item as any).dynamicBadge && !(item as any).badgeKey && adminNotifCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {adminNotifCount}
                 </Badge>
