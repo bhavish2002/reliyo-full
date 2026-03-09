@@ -15,6 +15,7 @@ import {
   canComment, canTransition, getCommentPlaceholder, getStatusBanner,
   STATUS_LABELS, ROLE_LABELS,
 } from "@/lib/taskTypes";
+import { saveForceCloseRequest } from "@/lib/adminData";
 import {
   notifyAlertRaised, notifyForceCloseRequested, notifyTaskMarkedDone,
   notifyDisputeRaised, notifyFixResubmitted, notifyRatingRequired,
