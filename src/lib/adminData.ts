@@ -22,7 +22,7 @@ export function getAllPlatformTasks(): Task[] {
       if (!existing) {
         map.set(t.id, t);
       } else {
-        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed"];
+    const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"];
         const existingIdx = statusOrder.indexOf(existing.status);
         const newIdx = statusOrder.indexOf(t.status);
         if (newIdx >= existingIdx) {
