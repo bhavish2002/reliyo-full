@@ -209,6 +209,11 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
         message: "This task is closed and cannot be modified.",
         variant: "muted",
       };
+    case "force_closed":
+      return {
+        message: "This task was force-closed by admin. Escrow funds have been settled.",
+        variant: "destructive",
+      };
     default:
       return null;
   }
