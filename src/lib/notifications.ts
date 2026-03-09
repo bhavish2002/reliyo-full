@@ -101,7 +101,7 @@ function isTaskClosed(taskId: string): boolean {
   try {
     const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
     const task = tasks.find((t: any) => t.id === taskId);
-    return task?.status === "closed";
+    return task?.status === "closed" || task?.status === "force_closed";
   } catch {
     return false;
   }

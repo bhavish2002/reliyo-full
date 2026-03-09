@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,15 +10,16 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import AdminLayout from "@/components/AdminLayout";
+import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
 import { Search, Eye } from "lucide-react";
-import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus } from "@/lib/taskTypes";
+import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus, type Task } from "@/lib/taskTypes";
 import { getAllPlatformTasks } from "@/lib/adminData";
 
 const AdminAllTasks = () => {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tasks, setTasks] = useState(() => getAllPlatformTasks());
+  const [viewTask, setViewTask] = useState<Task | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setTasks(getAllPlatformTasks()), 3000);
@@ -82,7 +82,7 @@ const AdminAllTasks = () => {
                 <TableCell className="text-right text-sm font-semibold">{t.currencySymbol || "₹"}{t.reward.toLocaleString()}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : "—"}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/task/${t.id}`)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewTask(t)}>
                     <Eye className="h-4 w-4" />
                   </Button>
                 </TableCell>
@@ -95,6 +95,8 @@ const AdminAllTasks = () => {
       <div className="mt-4 text-sm text-muted-foreground">
         Showing {filtered.length} of {tasks.length} tasks
       </div>
+
+      <AdminTaskDetailDialog task={viewTask} open={!!viewTask} onOpenChange={() => setViewTask(null)} />
     </AdminLayout>
   );
 };

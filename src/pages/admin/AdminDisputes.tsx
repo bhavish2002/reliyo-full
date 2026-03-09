@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminLayout from "@/components/AdminLayout";
+import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
 import { AlertTriangle, Eye, Clock, CheckCircle2, XCircle, Shield, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -29,9 +29,9 @@ const DSP4_STATUS_COLORS: Record<Dsp4Status, string> = {
 };
 
 const AdminDisputes = () => {
-  const navigate = useNavigate();
   const [disputes, setDisputes] = useState<AdminDispute[]>([]);
   const [reviewDispute, setReviewDispute] = useState<AdminDispute | null>(null);
+  const [viewTask, setViewTask] = useState<AdminDispute | null>(null);
   const [adminComment, setAdminComment] = useState("");
   const [tab, setTab] = useState("disputes");
 
@@ -82,9 +82,9 @@ const AdminDisputes = () => {
     // Force-close: dispute was valid and acceptor didn't comply. Refund requestor.
     const comment = adminComment.trim() || "Admin has force-closed this task. Acceptor failed to complete work.";
     adminAddTimelineEntry(d.taskId, `🚫 ADMIN RESOLUTION (${d.disputeId}): ADMIN CLOSED — ${comment}. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation.`, "admin_action", {
-      fromStatus: "disputed", toStatus: "closed",
+      fromStatus: "disputed", toStatus: "force_closed",
     });
-    adminUpdateTaskStatus(d.taskId, "closed");
+    adminUpdateTaskStatus(d.taskId, "force_closed");
     saveDsp4Status(d.disputeId, "admin_closed");
     notifyTaskForceClosed(d.task);
     setReviewDispute(null);
@@ -130,7 +130,7 @@ const AdminDisputes = () => {
       </TableCell>
       <TableCell>
         <div className="flex gap-1">
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate(`/task/${d.taskId}`)}>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setViewTask(d)}>
             <Eye className="h-3 w-3" /> View
           </Button>
           {d.escalated && d.dsp4Status === "open" && (
@@ -325,6 +325,8 @@ const AdminDisputes = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AdminTaskDetailDialog task={viewTask?.task || null} open={!!viewTask} onOpenChange={() => setViewTask(null)} />
     </AdminLayout>
   );
 };

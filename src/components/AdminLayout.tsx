@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Users, AlertTriangle, DollarSign,
-  BarChart3, Settings, LogOut, Menu, Clock, Bell,
+  BarChart3, Settings, LogOut, Menu, Clock, Bell, FileX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -10,13 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
 import { getUnreadCount } from "@/lib/notifications";
-import { getAllDisputes } from "@/lib/adminData";
+import { getAllDisputes, getPendingForceCloseCount } from "@/lib/adminData";
 
 const overviewItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
   { label: "All Tasks", icon: FileText, path: "/admin/tasks" },
   { label: "Users", icon: Users, path: "/admin/users" },
   { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", dynamicBadge: true, badgeKey: "disputes" },
+  { label: "Close Requests", icon: FileX, path: "/admin/close-requests", dynamicBadge: true, badgeKey: "close_requests" },
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
   { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
@@ -32,12 +33,14 @@ const SidebarContent = ({
   onLogout,
   adminNotifCount,
   disputeCount,
+  closeRequestCount,
 }: {
   current: string;
   onNavigate: (p: string) => void;
   onLogout: () => void;
   adminNotifCount: number;
   disputeCount: number;
+  closeRequestCount: number;
 }) => {
   const user = getCurrentUser();
 
@@ -78,6 +81,11 @@ const SidebarContent = ({
               {(item as any).badgeKey === "disputes" && disputeCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {disputeCount}
+                </Badge>
+              )}
+              {(item as any).badgeKey === "close_requests" && closeRequestCount > 0 && (
+                <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
+                  {closeRequestCount}
                 </Badge>
               )}
               {(item as any).dynamicBadge && !(item as any).badgeKey && adminNotifCount > 0 && (
@@ -150,12 +158,14 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminNotifCount, setAdminNotifCount] = useState(0);
   const [disputeBadgeCount, setDisputeBadgeCount] = useState(0);
+  const [closeReqCount, setCloseReqCount] = useState(0);
 
   useEffect(() => {
     const update = () => {
       setAdminNotifCount(getUnreadCount("admin"));
       const disputes = getAllDisputes();
       setDisputeBadgeCount(disputes.filter((d) => d.escalated && d.dsp4Status === "open").length);
+      setCloseReqCount(getPendingForceCloseCount());
     };
     update();
     const interval = setInterval(update, 3000);
@@ -174,12 +184,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-60 shrink-0 border-r bg-background lg:block">
-        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
+        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-60 p-0">
-          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
+          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} />
         </SheetContent>
       </Sheet>
 

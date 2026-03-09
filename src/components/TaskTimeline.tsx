@@ -15,6 +15,7 @@ import {
   canComment, canTransition, getCommentPlaceholder, getStatusBanner,
   STATUS_LABELS, ROLE_LABELS,
 } from "@/lib/taskTypes";
+import { saveForceCloseRequest } from "@/lib/adminData";
 import {
   notifyAlertRaised, notifyForceCloseRequested, notifyTaskMarkedDone,
   notifyDisputeRaised, notifyFixResubmitted, notifyRatingRequired,
@@ -272,6 +273,21 @@ const TaskTimeline = ({
     );
     setShowForceCloseDialog(false);
     notifyForceCloseRequested(task);
+
+    // Store request in admin queue
+    saveForceCloseRequest({
+      id: `fcr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      taskId: task.id,
+      taskDisplayId: task.taskId || task.id,
+      taskTitle: task.title,
+      requestor: task.createdBy || currentUserName,
+      acceptor: task.acceptedBy || "—",
+      taskStatusAtRequest: task.status,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      task,
+    });
+
     onAddEntry([entry]);
   };
 
@@ -554,7 +570,7 @@ const TaskTimeline = ({
       <div className="px-4">{renderActions()}</div>
 
       {/* Comment composer */}
-      {status !== "closed" && status !== "completed" && status !== "open" && (
+      {status !== "closed" && status !== "force_closed" && status !== "completed" && status !== "open" && (
         <div className="border-t border-border p-4">
           <Textarea
             value={commentText}
@@ -590,10 +606,10 @@ const TaskTimeline = ({
       )}
 
       {/* Closed / completed footer */}
-      {(status === "closed") && (
+      {(status === "closed" || status === "force_closed") && (
         <div className="border-t border-border px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground bg-muted/30">
           <Lock className="h-4 w-4" />
-          This task is closed and cannot be modified.
+          This task is {status === "force_closed" ? "force closed" : "closed"} and cannot be modified.
         </div>
       )}
       {status === "completed" && currentUserRole !== "requestor" && (

@@ -5,7 +5,7 @@
  */
 
 import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS, PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT } from "@/lib/taskTypes";
-import { type AppNotification, getNotifications } from "@/lib/notifications";
+import { type AppNotification, getNotifications, notifyTaskForceClosed as _notifyForceClosed } from "@/lib/notifications";
 import { isEscalated } from "@/lib/disputeId";
 import { TEST_CREDENTIALS } from "@/lib/auth";
 
@@ -22,7 +22,7 @@ export function getAllPlatformTasks(): Task[] {
       if (!existing) {
         map.set(t.id, t);
       } else {
-        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed"];
+    const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"];
         const existingIdx = statusOrder.indexOf(existing.status);
         const newIdx = statusOrder.indexOf(t.status);
         if (newIdx >= existingIdx) {
@@ -219,7 +219,7 @@ export function getRevenueStats(): RevenueStats {
     const bucket = monthMap.get(createdMonth) || { revenue: 0, fees: 0, locked: 0, released: 0 };
 
     // All tasks with escrow locked (any status past open)
-    if (["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(t.status)) {
+    if (["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(t.status)) {
       bucket.locked += reward + trustDep;
       totalEscrowLocked += reward + trustDep;
     }
@@ -230,6 +230,15 @@ export function getRevenueStats(): RevenueStats {
       bucket.fees += plFee;
       bucket.released += reward + trustDep;
       totalRevenue += plFee;
+      totalEscrowReleased += reward + trustDep;
+    }
+
+    // Force-closed tasks: 3% penalty from trust deposit
+    if (t.status === "force_closed") {
+      const penaltyFee = parseFloat((trustDep * 0.03 / 0.10).toFixed(2)); // 3% of reward
+      bucket.fees += penaltyFee;
+      bucket.released += reward + trustDep;
+      totalRevenue += penaltyFee;
       totalEscrowReleased += reward + trustDep;
     }
 
@@ -313,4 +322,86 @@ export function adminAddTimelineEntry(taskId: string, message: string, entryType
     });
     localStorage.setItem(key, JSON.stringify(entries));
   } catch { /* skip */ }
+}
+
+// ── Force Close Requests ────────────────────────────────────────────────────
+
+export interface ForceCloseRequest {
+  id: string;
+  taskId: string;
+  taskDisplayId: string;
+  taskTitle: string;
+  requestor: string;
+  acceptor: string;
+  taskStatusAtRequest: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  resolvedAt?: string;
+  adminComment?: string;
+  task: Task;
+}
+
+const FORCE_CLOSE_KEY = "reliyo_force_close_requests";
+
+export function getAllForceCloseRequests(): ForceCloseRequest[] {
+  try {
+    const requests = JSON.parse(localStorage.getItem(FORCE_CLOSE_KEY) || "[]") as ForceCloseRequest[];
+    // Refresh task references with latest data
+    const tasks = getAllPlatformTasks();
+    return requests.map((r) => {
+      const latestTask = tasks.find((t) => t.id === r.taskId);
+      return latestTask ? { ...r, task: latestTask } : r;
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch {
+    return [];
+  }
+}
+
+export function saveForceCloseRequest(request: ForceCloseRequest): void {
+  const existing = getAllForceCloseRequests();
+  existing.unshift(request);
+  localStorage.setItem(FORCE_CLOSE_KEY, JSON.stringify(existing));
+}
+
+export function resolveForceCloseRequest(requestId: string, resolution: "approved" | "rejected", comment?: string): void {
+  try {
+    const requests = JSON.parse(localStorage.getItem(FORCE_CLOSE_KEY) || "[]") as ForceCloseRequest[];
+    const idx = requests.findIndex((r) => r.id === requestId);
+    if (idx < 0) return;
+
+    requests[idx].status = resolution;
+    requests[idx].resolvedAt = new Date().toISOString();
+    requests[idx].adminComment = comment;
+    localStorage.setItem(FORCE_CLOSE_KEY, JSON.stringify(requests));
+
+    const req = requests[idx];
+
+    if (resolution === "approved") {
+      // Move task to force_closed
+      adminUpdateTaskStatus(req.taskId, "force_closed");
+      adminAddTimelineEntry(
+        req.taskId,
+        `🚫 ADMIN: Force-close request APPROVED. Task moved to Force Closed. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation.`,
+        "admin_action",
+        { fromStatus: req.taskStatusAtRequest, toStatus: "force_closed" }
+      );
+      // Notify
+      _notifyForceClosed(req.task);
+    } else {
+      adminAddTimelineEntry(
+        req.taskId,
+        `ℹ️ ADMIN: Force-close request REJECTED. Task remains in ${req.taskStatusAtRequest}. ${comment || ""}`,
+        "admin_action"
+      );
+    }
+  } catch { /* skip */ }
+}
+
+export function getPendingForceCloseCount(): number {
+  try {
+    const requests = JSON.parse(localStorage.getItem(FORCE_CLOSE_KEY) || "[]") as ForceCloseRequest[];
+    return requests.filter((r) => r.status === "pending").length;
+  } catch {
+    return 0;
+  }
 }

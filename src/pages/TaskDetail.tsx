@@ -161,7 +161,7 @@ const TaskDetail = () => {
         // Use the one with more advanced status, or the one that has acceptedBy
         found = { ...fromTasks, ...fromAccepted, status: fromTasks.status === fromAccepted.status ? fromTasks.status : fromAccepted.status };
         // Prefer the status that's further along
-        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed"];
+        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"];
         const tasksIdx = statusOrder.indexOf(fromTasks.status as TaskStatus);
         const acceptedIdx = statusOrder.indexOf(fromAccepted.status as TaskStatus);
         found.status = acceptedIdx >= tasksIdx ? fromAccepted.status : fromTasks.status;
@@ -382,17 +382,18 @@ const TaskDetail = () => {
     { label: "Task created", filled: true },
     { label: "Reward locked in escrow", filled: true },
     { label: "Task published", filled: status !== "open" || true },
-    { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status) },
-    { label: "Work in progress", filled: ["in_progress", "done", "disputed", "completed", "closed"].includes(status) },
+    { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status) },
+    { label: "Work in progress", filled: ["in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status) },
     { label: "Work done", filled: ["done", "disputed", "completed", "closed"].includes(status) },
     { label: "Completed & rated", filled: ["completed", "closed"].includes(status) },
     { label: "Closed", filled: status === "closed" },
+    { label: "Force Closed", filled: status === "force_closed" },
   ];
 
   // Show timeline component when task has gone past open
   const showTimeline = isOwner
-    ? ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status)
-    : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status);
+    ? ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status)
+    : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status);
 
   return (
     <DashboardLayout>
@@ -532,10 +533,10 @@ const TaskDetail = () => {
                   </div>
                 ) : status === "open" && !isOwner ? (
                   <Button className="w-full" onClick={handleAcceptClick}>Accept Task</Button>
-                ) : status === "closed" ? (
+                ) : status === "closed" || status === "force_closed" ? (
                   <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
                     <Lock className="h-4 w-4 shrink-0" />
-                    This task is closed.
+                    This task is {status === "force_closed" ? "force closed" : "closed"}.
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground text-center py-2">

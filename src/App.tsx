@@ -20,6 +20,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAllTasks from "./pages/admin/AdminAllTasks";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminDisputes from "./pages/admin/AdminDisputes";
+import AdminCloseRequests from "./pages/admin/AdminCloseRequests";
 import AdminRevenue from "./pages/admin/AdminRevenue";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminSettings from "./pages/admin/AdminSettings";
@@ -51,6 +52,7 @@ const App = () => (
           <Route path="/admin/tasks" element={<AdminAllTasks />} />
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/disputes" element={<AdminDisputes />} />
+          <Route path="/admin/close-requests" element={<AdminCloseRequests />} />
           <Route path="/admin/revenue" element={<AdminRevenue />} />
           <Route path="/admin/analytics" element={<AdminAnalytics />} />
           <Route path="/admin/settings" element={<AdminSettings />} />

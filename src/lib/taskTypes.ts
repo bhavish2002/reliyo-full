@@ -11,10 +11,11 @@ export type TaskStatus =
   | "done"
   | "disputed"
   | "completed"
-  | "closed";
+  | "closed"
+  | "force_closed";
 
 export const TASK_STATUSES: TaskStatus[] = [
-  "open", "committed", "in_progress", "done", "disputed", "completed", "closed",
+  "open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed",
 ];
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -25,6 +26,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   disputed: "Disputed",
   completed: "Completed",
   closed: "Closed",
+  force_closed: "Force Closed",
 };
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -35,18 +37,20 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   disputed: "bg-[hsl(35,90%,50%)] text-white",
   completed: "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))]",
   closed: "bg-muted text-muted-foreground",
+  force_closed: "bg-destructive/80 text-destructive-foreground",
 };
 
 // ── Allowed Transitions ─────────────────────────────────────────────────────
 // Key: current status → value: list of valid next statuses
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   open: ["committed", "closed"],
-  committed: ["in_progress", "open"], // open = quit within grace period
-  in_progress: ["done", "closed"],    // closed = admin force-close
+  committed: ["in_progress", "open", "force_closed"], // open = quit within grace period; force_closed = admin approved
+  in_progress: ["done", "closed", "force_closed"],    // force_closed = admin approved force-close
   done: ["completed", "disputed"],
-  disputed: ["done", "closed"],       // done = fix resubmitted; closed = admin force-close
+  disputed: ["done", "closed", "force_closed"],       // done = fix resubmitted; force_closed = admin force-close (DSP4)
   completed: ["closed"],
   closed: [],
+  force_closed: [],
 };
 
 export function canTransition(from: TaskStatus, to: TaskStatus): boolean {
@@ -129,6 +133,7 @@ export function canComment(status: TaskStatus, role: AuthorRole): boolean {
     case "completed":
       return false; // no comments, only rating
     case "closed":
+    case "force_closed":
       return false; // read-only
     default:
       return false;
@@ -203,6 +208,11 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
       return {
         message: "This task is closed and cannot be modified.",
         variant: "muted",
+      };
+    case "force_closed":
+      return {
+        message: "This task was force-closed by admin. Escrow funds have been settled.",
+        variant: "destructive",
       };
     default:
       return null;
