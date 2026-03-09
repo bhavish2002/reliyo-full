@@ -11,10 +11,11 @@ export type TaskStatus =
   | "done"
   | "disputed"
   | "completed"
-  | "closed";
+  | "closed"
+  | "force_closed";
 
 export const TASK_STATUSES: TaskStatus[] = [
-  "open", "committed", "in_progress", "done", "disputed", "completed", "closed",
+  "open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed",
 ];
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
