@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminLayout from "@/components/AdminLayout";
+import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
 import { AlertTriangle, Eye, Clock, CheckCircle2, XCircle, Shield, MessageSquare } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
