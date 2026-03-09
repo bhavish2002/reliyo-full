@@ -5,6 +5,7 @@
  */
 
 import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS, PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT } from "@/lib/taskTypes";
+import { notifyTaskForceClosed as _notifyForceClosed } from "@/lib/notifications";
 import { type AppNotification, getNotifications } from "@/lib/notifications";
 import { isEscalated } from "@/lib/disputeId";
 import { TEST_CREDENTIALS } from "@/lib/auth";
