@@ -392,8 +392,8 @@ const TaskDetail = () => {
 
   // Show timeline component when task has gone past open
   const showTimeline = isOwner
-    ? ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status)
-    : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status);
+    ? ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status)
+    : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status);
 
   return (
     <DashboardLayout>
