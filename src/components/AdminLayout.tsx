@@ -33,12 +33,14 @@ const SidebarContent = ({
   onLogout,
   adminNotifCount,
   disputeCount,
+  closeRequestCount,
 }: {
   current: string;
   onNavigate: (p: string) => void;
   onLogout: () => void;
   adminNotifCount: number;
   disputeCount: number;
+  closeRequestCount: number;
 }) => {
   const user = getCurrentUser();
 
