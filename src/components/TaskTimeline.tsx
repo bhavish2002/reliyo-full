@@ -572,7 +572,7 @@ const TaskTimeline = ({
       <div className="px-4">{renderActions()}</div>
 
       {/* Comment composer */}
-      {status !== "closed" && status !== "completed" && status !== "open" && (
+      {status !== "closed" && status !== "force_closed" && status !== "completed" && status !== "open" && (
         <div className="border-t border-border p-4">
           <Textarea
             value={commentText}
