@@ -131,7 +131,7 @@ const AdminDisputes = () => {
       </TableCell>
       <TableCell>
         <div className="flex gap-1">
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => navigate(`/task/${d.taskId}`)}>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setViewTask(d)}>
             <Eye className="h-3 w-3" /> View
           </Button>
           {d.escalated && d.dsp4Status === "open" && (
