@@ -98,6 +98,8 @@ const AdminAllTasks = () => {
       <div className="mt-4 text-sm text-muted-foreground">
         Showing {filtered.length} of {tasks.length} tasks
       </div>
+
+      <AdminTaskDetailDialog task={viewTask} open={!!viewTask} onOpenChange={() => setViewTask(null)} />
     </AdminLayout>
   );
 };
