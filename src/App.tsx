@@ -20,6 +20,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAllTasks from "./pages/admin/AdminAllTasks";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminDisputes from "./pages/admin/AdminDisputes";
+import AdminCloseRequests from "./pages/admin/AdminCloseRequests";
 import AdminRevenue from "./pages/admin/AdminRevenue";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminSettings from "./pages/admin/AdminSettings";
