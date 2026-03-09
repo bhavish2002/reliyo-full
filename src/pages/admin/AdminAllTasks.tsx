@@ -19,10 +19,10 @@ import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus } from "@/
 import { getAllPlatformTasks } from "@/lib/adminData";
 
 const AdminAllTasks = () => {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tasks, setTasks] = useState(() => getAllPlatformTasks());
+  const [viewTask, setViewTask] = useState<Task | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setTasks(getAllPlatformTasks()), 3000);
