@@ -83,6 +83,11 @@ const SidebarContent = ({
                   {disputeCount}
                 </Badge>
               )}
+              {(item as any).badgeKey === "close_requests" && closeRequestCount > 0 && (
+                <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
+                  {closeRequestCount}
+                </Badge>
+              )}
               {(item as any).dynamicBadge && !(item as any).badgeKey && adminNotifCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {adminNotifCount}
