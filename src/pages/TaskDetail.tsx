@@ -382,11 +382,12 @@ const TaskDetail = () => {
     { label: "Task created", filled: true },
     { label: "Reward locked in escrow", filled: true },
     { label: "Task published", filled: status !== "open" || true },
-    { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(status) },
-    { label: "Work in progress", filled: ["in_progress", "done", "disputed", "completed", "closed"].includes(status) },
+    { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status) },
+    { label: "Work in progress", filled: ["in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status) },
     { label: "Work done", filled: ["done", "disputed", "completed", "closed"].includes(status) },
     { label: "Completed & rated", filled: ["completed", "closed"].includes(status) },
     { label: "Closed", filled: status === "closed" },
+    { label: "Force Closed", filled: status === "force_closed" },
   ];
 
   // Show timeline component when task has gone past open
