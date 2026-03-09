@@ -387,8 +387,7 @@ export function resolveForceCloseRequest(requestId: string, resolution: "approve
         { fromStatus: req.taskStatusAtRequest, toStatus: "force_closed" }
       );
       // Notify
-      const { notifyTaskForceClosed } = require("@/lib/notifications");
-      notifyTaskForceClosed(req.task);
+      _notifyForceClosed(req.task);
     } else {
       adminAddTimelineEntry(
         req.taskId,
