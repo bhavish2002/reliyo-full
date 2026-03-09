@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +10,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import AdminLayout from "@/components/AdminLayout";
+import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
 import { Search, Eye } from "lucide-react";
+import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus } from "@/lib/taskTypes";
+import { getAllPlatformTasks } from "@/lib/adminData";
+import type { Task } from "@/lib/taskTypes";
 import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus } from "@/lib/taskTypes";
 import { getAllPlatformTasks } from "@/lib/adminData";
 
