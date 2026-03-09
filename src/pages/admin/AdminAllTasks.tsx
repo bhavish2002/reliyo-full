@@ -85,7 +85,7 @@ const AdminAllTasks = () => {
                 <TableCell className="text-right text-sm font-semibold">{t.currencySymbol || "₹"}{t.reward.toLocaleString()}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : "—"}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/task/${t.id}`)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewTask(t)}>
                     <Eye className="h-4 w-4" />
                   </Button>
                 </TableCell>
