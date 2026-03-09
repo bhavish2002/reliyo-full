@@ -37,6 +37,7 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   disputed: "bg-[hsl(35,90%,50%)] text-white",
   completed: "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))]",
   closed: "bg-muted text-muted-foreground",
+  force_closed: "bg-destructive/80 text-destructive-foreground",
 };
 
 // ── Allowed Transitions ─────────────────────────────────────────────────────
