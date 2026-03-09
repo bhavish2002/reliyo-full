@@ -17,6 +17,7 @@ const overviewItems = [
   { label: "All Tasks", icon: FileText, path: "/admin/tasks" },
   { label: "Users", icon: Users, path: "/admin/users" },
   { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", dynamicBadge: true, badgeKey: "disputes" },
+  { label: "Close Requests", icon: FileX, path: "/admin/close-requests", dynamicBadge: true, badgeKey: "close_requests" },
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
   { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
