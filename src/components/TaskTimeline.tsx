@@ -272,6 +272,24 @@ const TaskTimeline = ({
     );
     setShowForceCloseDialog(false);
     notifyForceCloseRequested(task);
+
+    // Store request in admin queue
+    try {
+      const { saveForceCloseRequest } = require("@/lib/adminData");
+      saveForceCloseRequest({
+        id: `fcr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        taskId: task.id,
+        taskDisplayId: task.taskId || task.id,
+        taskTitle: task.title,
+        requestor: task.createdBy || currentUserName,
+        acceptor: task.acceptedBy || "—",
+        taskStatusAtRequest: task.status,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        task,
+      });
+    } catch {}
+
     onAddEntry([entry]);
   };
 

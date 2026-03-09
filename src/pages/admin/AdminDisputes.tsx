@@ -326,6 +326,8 @@ const AdminDisputes = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AdminTaskDetailDialog task={viewTask?.task || null} open={!!viewTask} onOpenChange={() => setViewTask(null)} />
     </AdminLayout>
   );
 };

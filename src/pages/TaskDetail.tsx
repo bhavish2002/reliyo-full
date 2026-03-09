@@ -161,7 +161,7 @@ const TaskDetail = () => {
         // Use the one with more advanced status, or the one that has acceptedBy
         found = { ...fromTasks, ...fromAccepted, status: fromTasks.status === fromAccepted.status ? fromTasks.status : fromAccepted.status };
         // Prefer the status that's further along
-        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed"];
+        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"];
         const tasksIdx = statusOrder.indexOf(fromTasks.status as TaskStatus);
         const acceptedIdx = statusOrder.indexOf(fromAccepted.status as TaskStatus);
         found.status = acceptedIdx >= tasksIdx ? fromAccepted.status : fromTasks.status;
