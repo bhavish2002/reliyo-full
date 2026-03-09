@@ -184,12 +184,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-60 shrink-0 border-r bg-background lg:block">
-        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
+        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-60 p-0">
-          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} />
+          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} />
         </SheetContent>
       </Sheet>
 
