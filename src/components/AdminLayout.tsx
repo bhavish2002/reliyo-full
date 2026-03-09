@@ -158,12 +158,14 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminNotifCount, setAdminNotifCount] = useState(0);
   const [disputeBadgeCount, setDisputeBadgeCount] = useState(0);
+  const [closeReqCount, setCloseReqCount] = useState(0);
 
   useEffect(() => {
     const update = () => {
       setAdminNotifCount(getUnreadCount("admin"));
       const disputes = getAllDisputes();
       setDisputeBadgeCount(disputes.filter((d) => d.escalated && d.dsp4Status === "open").length);
+      setCloseReqCount(getPendingForceCloseCount());
     };
     update();
     const interval = setInterval(update, 3000);
