@@ -101,6 +101,7 @@ const STATUS_PIE_COLORS: Record<TaskStatus, string> = {
   disputed: "hsl(var(--destructive))",
   completed: "hsl(var(--success))",
   closed: "hsl(var(--muted-foreground))",
+  force_closed: "hsl(0, 70%, 45%)",
 };
 
 // ── Custom tooltip ──────────────────────────────────────────────────────────

@@ -31,6 +31,7 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   open: "bg-success text-success-foreground",
   done: "bg-[hsl(220,70%,50%)] text-white",
   closed: "bg-muted text-muted-foreground",
+  force_closed: "bg-destructive/80 text-destructive-foreground",
 };
 
 const PieTooltip = ({ active, payload }: any) => {
