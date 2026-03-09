@@ -30,9 +30,9 @@ const DSP4_STATUS_COLORS: Record<Dsp4Status, string> = {
 };
 
 const AdminDisputes = () => {
-  const navigate = useNavigate();
   const [disputes, setDisputes] = useState<AdminDispute[]>([]);
   const [reviewDispute, setReviewDispute] = useState<AdminDispute | null>(null);
+  const [viewTask, setViewTask] = useState<AdminDispute | null>(null);
   const [adminComment, setAdminComment] = useState("");
   const [tab, setTab] = useState("disputes");
 
