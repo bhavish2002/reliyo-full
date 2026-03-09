@@ -26,6 +26,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   disputed: "Disputed",
   completed: "Completed",
   closed: "Closed",
+  force_closed: "Force Closed",
 };
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {
