@@ -44,12 +44,13 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
 // Key: current status → value: list of valid next statuses
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   open: ["committed", "closed"],
-  committed: ["in_progress", "open"], // open = quit within grace period
-  in_progress: ["done", "closed"],    // closed = admin force-close
+  committed: ["in_progress", "open", "force_closed"], // open = quit within grace period; force_closed = admin approved
+  in_progress: ["done", "closed", "force_closed"],    // force_closed = admin approved force-close
   done: ["completed", "disputed"],
-  disputed: ["done", "closed"],       // done = fix resubmitted; closed = admin force-close
+  disputed: ["done", "closed", "force_closed"],       // done = fix resubmitted; force_closed = admin force-close (DSP4)
   completed: ["closed"],
   closed: [],
+  force_closed: [],
 };
 
 export function canTransition(from: TaskStatus, to: TaskStatus): boolean {
