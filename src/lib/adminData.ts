@@ -219,7 +219,7 @@ export function getRevenueStats(): RevenueStats {
     const bucket = monthMap.get(createdMonth) || { revenue: 0, fees: 0, locked: 0, released: 0 };
 
     // All tasks with escrow locked (any status past open)
-    if (["committed", "in_progress", "done", "disputed", "completed", "closed"].includes(t.status)) {
+    if (["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(t.status)) {
       bucket.locked += reward + trustDep;
       totalEscrowLocked += reward + trustDep;
     }

@@ -533,10 +533,10 @@ const TaskDetail = () => {
                   </div>
                 ) : status === "open" && !isOwner ? (
                   <Button className="w-full" onClick={handleAcceptClick}>Accept Task</Button>
-                ) : status === "closed" ? (
+                ) : status === "closed" || status === "force_closed" ? (
                   <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
                     <Lock className="h-4 w-4 shrink-0" />
-                    This task is closed.
+                    This task is {status === "force_closed" ? "force closed" : "closed"}.
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground text-center py-2">
