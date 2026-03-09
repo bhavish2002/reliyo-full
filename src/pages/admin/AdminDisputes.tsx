@@ -83,9 +83,9 @@ const AdminDisputes = () => {
     // Force-close: dispute was valid and acceptor didn't comply. Refund requestor.
     const comment = adminComment.trim() || "Admin has force-closed this task. Acceptor failed to complete work.";
     adminAddTimelineEntry(d.taskId, `🚫 ADMIN RESOLUTION (${d.disputeId}): ADMIN CLOSED — ${comment}. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation.`, "admin_action", {
-      fromStatus: "disputed", toStatus: "closed",
+      fromStatus: "disputed", toStatus: "force_closed",
     });
-    adminUpdateTaskStatus(d.taskId, "closed");
+    adminUpdateTaskStatus(d.taskId, "force_closed");
     saveDsp4Status(d.disputeId, "admin_closed");
     notifyTaskForceClosed(d.task);
     setReviewDispute(null);
