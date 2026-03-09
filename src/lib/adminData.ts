@@ -233,6 +233,15 @@ export function getRevenueStats(): RevenueStats {
       totalEscrowReleased += reward + trustDep;
     }
 
+    // Force-closed tasks: 3% penalty from trust deposit
+    if (t.status === "force_closed") {
+      const penaltyFee = parseFloat((trustDep * 0.03 / 0.10).toFixed(2)); // 3% of reward
+      bucket.fees += penaltyFee;
+      bucket.released += reward + trustDep;
+      totalRevenue += penaltyFee;
+      totalEscrowReleased += reward + trustDep;
+    }
+
     monthMap.set(createdMonth, bucket);
   });
 
