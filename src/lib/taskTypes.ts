@@ -133,6 +133,7 @@ export function canComment(status: TaskStatus, role: AuthorRole): boolean {
     case "completed":
       return false; // no comments, only rating
     case "closed":
+    case "force_closed":
       return false; // read-only
     default:
       return false;
