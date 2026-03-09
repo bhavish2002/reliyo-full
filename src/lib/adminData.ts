@@ -314,3 +314,86 @@ export function adminAddTimelineEntry(taskId: string, message: string, entryType
     localStorage.setItem(key, JSON.stringify(entries));
   } catch { /* skip */ }
 }
+
+// ── Force Close Requests ────────────────────────────────────────────────────
+
+export interface ForceCloseRequest {
+  id: string;
+  taskId: string;
+  taskDisplayId: string;
+  taskTitle: string;
+  requestor: string;
+  acceptor: string;
+  taskStatusAtRequest: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  resolvedAt?: string;
+  adminComment?: string;
+  task: Task;
+}
+
+const FORCE_CLOSE_KEY = "reliyo_force_close_requests";
+
+export function getAllForceCloseRequests(): ForceCloseRequest[] {
+  try {
+    const requests = JSON.parse(localStorage.getItem(FORCE_CLOSE_KEY) || "[]") as ForceCloseRequest[];
+    // Refresh task references with latest data
+    const tasks = getAllPlatformTasks();
+    return requests.map((r) => {
+      const latestTask = tasks.find((t) => t.id === r.taskId);
+      return latestTask ? { ...r, task: latestTask } : r;
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch {
+    return [];
+  }
+}
+
+export function saveForceCloseRequest(request: ForceCloseRequest): void {
+  const existing = getAllForceCloseRequests();
+  existing.unshift(request);
+  localStorage.setItem(FORCE_CLOSE_KEY, JSON.stringify(existing));
+}
+
+export function resolveForceCloseRequest(requestId: string, resolution: "approved" | "rejected", comment?: string): void {
+  try {
+    const requests = JSON.parse(localStorage.getItem(FORCE_CLOSE_KEY) || "[]") as ForceCloseRequest[];
+    const idx = requests.findIndex((r) => r.id === requestId);
+    if (idx < 0) return;
+
+    requests[idx].status = resolution;
+    requests[idx].resolvedAt = new Date().toISOString();
+    requests[idx].adminComment = comment;
+    localStorage.setItem(FORCE_CLOSE_KEY, JSON.stringify(requests));
+
+    const req = requests[idx];
+
+    if (resolution === "approved") {
+      // Move task to force_closed
+      adminUpdateTaskStatus(req.taskId, "force_closed");
+      adminAddTimelineEntry(
+        req.taskId,
+        `🚫 ADMIN: Force-close request APPROVED. Task moved to Force Closed. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation.`,
+        "admin_action",
+        { fromStatus: req.taskStatusAtRequest, toStatus: "force_closed" }
+      );
+      // Notify
+      const { notifyTaskForceClosed } = require("@/lib/notifications");
+      notifyTaskForceClosed(req.task);
+    } else {
+      adminAddTimelineEntry(
+        req.taskId,
+        `ℹ️ ADMIN: Force-close request REJECTED. Task remains in ${req.taskStatusAtRequest}. ${comment || ""}`,
+        "admin_action"
+      );
+    }
+  } catch { /* skip */ }
+}
+
+export function getPendingForceCloseCount(): number {
+  try {
+    const requests = JSON.parse(localStorage.getItem(FORCE_CLOSE_KEY) || "[]") as ForceCloseRequest[];
+    return requests.filter((r) => r.status === "pending").length;
+  } catch {
+    return 0;
+  }
+}
