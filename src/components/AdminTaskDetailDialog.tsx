@@ -1,16 +1,24 @@
+import { useState, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  type Task, type TaskStatus, type TimelineEntry,
+  type Task, type TaskStatus, type TimelineEntry, type AuthorRole,
   STATUS_COLORS, STATUS_LABELS, PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT,
+  ROLE_LABELS,
 } from "@/lib/taskTypes";
+import { adminAddTimelineEntry } from "@/lib/adminData";
 import { format } from "date-fns";
 import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
-import { AlertTriangle, Lock, Info, Star, MessageSquare, Settings, Shield, Bell, Clock } from "lucide-react";
+import {
+  AlertTriangle, Lock, Info, Star, MessageSquare, Settings, Shield, Bell,
+  Clock, Send, Paperclip, FileIcon, ImageIcon, X,
+} from "lucide-react";
 
 const ROLE_ICONS: Record<string, React.ElementType> = {
   status_change: Settings,
@@ -21,6 +29,27 @@ const ROLE_ICONS: Record<string, React.ElementType> = {
   comment: MessageSquare,
 };
 
+const ROLE_AVATAR_COLORS: Record<string, string> = {
+  requestor: "bg-primary/10 text-primary",
+  acceptor: "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]",
+  admin: "bg-destructive/10 text-destructive",
+  system: "bg-muted text-muted-foreground",
+};
+
+const MAX_FILE_SIZE_MB = 25;
+
+interface FileAttachment {
+  name: string;
+  size: number;
+  type: string;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 interface AdminTaskDetailDialogProps {
   task: Task | null;
   open: boolean;
@@ -28,6 +57,11 @@ interface AdminTaskDetailDialogProps {
 }
 
 const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDialogProps) => {
+  const [adminComment, setAdminComment] = useState("");
+  const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
+  const [timelineKey, setTimelineKey] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!task) return null;
 
   const status = task.status as TaskStatus;
@@ -41,10 +75,53 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
     timeline = JSON.parse(localStorage.getItem(`reliyo_timeline_${task.id}`) || "[]");
   } catch {}
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newFiles: FileAttachment[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        alert(`File "${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
+        continue;
+      }
+      newFiles.push({ name: file.name, size: file.size, type: file.type });
+    }
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAdminComment = () => {
+    if (!adminComment.trim() && attachedFiles.length === 0) return;
+
+    let message = adminComment.trim();
+    if (attachedFiles.length > 0) {
+      const fileList = attachedFiles.map(f => `📎 ${f.name} (${formatFileSize(f.size)})`).join("\n");
+      message = message ? `${message}\n\n${fileList}` : fileList;
+    }
+
+    adminAddTimelineEntry(task.id, message, "admin_action");
+    setAdminComment("");
+    setAttachedFiles([]);
+    setTimelineKey(k => k + 1); // force re-read
+  };
+
+  // Re-read timeline when key changes
+  let currentTimeline = timeline;
+  if (timelineKey > 0) {
+    try {
+      currentTimeline = JSON.parse(localStorage.getItem(`reliyo_timeline_${task.id}`) || "[]");
+    } catch {}
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <div className="flex items-center gap-2">
             <Badge className={`${STATUS_COLORS[status] || "bg-muted"} text-xs`}>
               {STATUS_LABELS[status] || task.status}
@@ -139,35 +216,149 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
               </div>
             </div>
 
-            {/* Timeline */}
-            {timeline.length > 0 && (
-              <div className="rounded-xl border bg-card p-4">
-                <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" /> Activity & Comments ({timeline.length})
-                </h3>
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {timeline.map((entry) => {
+            {/* Timeline / Activity & Comments */}
+            <div className="rounded-xl border bg-card p-4">
+              <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" /> Activity & Comments ({currentTimeline.length})
+              </h3>
+              {currentTimeline.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  <Clock className="h-6 w-6 mx-auto mb-2 opacity-40" />
+                  No activity yet.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                  {currentTimeline.map((entry) => {
                     const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
+                    const isSystem = entry.systemGenerated;
+                    const avatarColor = ROLE_AVATAR_COLORS[entry.authorRole] || ROLE_AVATAR_COLORS.system;
+
+                    // Parse attachments from message
+                    const messageLines = entry.message.split("\n");
+                    const textLines = messageLines.filter(l => !l.startsWith("📎 "));
+                    const attachmentLines = messageLines.filter(l => l.startsWith("📎 "));
+
+                    if (isSystem) {
+                      return (
+                        <div key={entry.id} className="flex gap-2 py-1.5">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted mt-0.5">
+                            <Icon className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className="text-xs font-semibold text-foreground">{entry.author}</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {format(new Date(entry.timestamp), "MMM d, h:mm a")}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{entry.message}</p>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div key={entry.id} className="flex gap-2 py-1.5">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted mt-0.5">
-                          <Icon className="h-3 w-3 text-muted-foreground" />
-                        </div>
+                        <Avatar className="h-6 w-6 shrink-0 mt-0.5">
+                          <AvatarFallback className={`text-[10px] font-semibold ${avatarColor}`}>
+                            {entry.author.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-0.5">
                             <span className="text-xs font-semibold text-foreground">{entry.author}</span>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">
+                              {ROLE_LABELS[entry.authorRole as AuthorRole] || entry.authorRole}
+                            </Badge>
                             <span className="text-[10px] text-muted-foreground">
                               {format(new Date(entry.timestamp), "MMM d, h:mm a")}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground whitespace-pre-wrap">{entry.message}</p>
+                          <div className="rounded-md bg-muted/50 border border-border px-2.5 py-1.5">
+                            {textLines.filter(Boolean).length > 0 && (
+                              <p className="text-xs text-foreground whitespace-pre-wrap">{textLines.join("\n").trim()}</p>
+                            )}
+                            {attachmentLines.length > 0 && (
+                              <div className={`${textLines.filter(Boolean).length > 0 ? "mt-1.5 pt-1.5 border-t border-border" : ""} space-y-0.5`}>
+                                {attachmentLines.map((line, i) => (
+                                  <div key={i} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                    <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                                    <span>{line.replace("📎 ", "")}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
+              )}
+
+              {/* Admin comment composer */}
+              <div className="mt-4 pt-3 border-t border-border">
+                <p className="text-xs font-semibold text-foreground mb-2">Admin Comment</p>
+                {attachedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {attachedFiles.map((f, i) => (
+                      <div key={i} className="flex items-center gap-1 rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[10px]">
+                        {f.type.startsWith("image/") ? (
+                          <ImageIcon className="h-2.5 w-2.5 text-primary shrink-0" />
+                        ) : (
+                          <FileIcon className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="truncate max-w-[100px]">{f.name}</span>
+                        <button onClick={() => removeFile(i)} className="hover:text-destructive">
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Textarea
+                  value={adminComment}
+                  onChange={(e) => setAdminComment(e.target.value)}
+                  placeholder="Add a comment as admin..."
+                  className="min-h-[50px] text-xs resize-none"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAdminComment();
+                    }
+                  }}
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 text-muted-foreground hover:text-foreground h-6 px-1.5 text-[10px]"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Paperclip className="h-3 w-3" /> Attach
+                    </Button>
+                    <span className="text-[10px] text-muted-foreground">Max {MAX_FILE_SIZE_MB}MB</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="gap-1 h-7 text-xs"
+                    disabled={!adminComment.trim() && attachedFiles.length === 0}
+                    onClick={handleAdminComment}
+                  >
+                    <Send className="h-3 w-3" /> Send
+                  </Button>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         </ScrollArea>
       </DialogContent>

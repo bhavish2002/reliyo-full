@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Send, AlertTriangle, Lock, Settings, Shield, Star,
   CheckCircle2, XCircle, Info, MessageSquare, Clock, Bell,
+  Paperclip, X, FileIcon, ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,25 @@ import {
 } from "@/lib/notifications";
 import { format } from "date-fns";
 import { generateDisputeId, MAX_DISPUTES, isEscalated } from "@/lib/disputeId";
+
+// ── File attachment constants ────────────────────────────────────────────────
+const MAX_FILE_SIZE_MB = 25;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const ALLOWED_FILE_TYPES = [
+  "image/jpeg", "image/png", "image/gif", "image/webp",
+  "application/pdf",
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain", "text/csv",
+  "application/zip", "application/x-rar-compressed",
+];
+
+interface FileAttachment {
+  name: string;
+  size: number;
+  type: string;
+  dataUrl?: string; // for images preview
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +67,12 @@ function createSystemEntry(
     entryType,
     metadata,
   };
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // ── Role styling ─────────────────────────────────────────────────────────────
@@ -108,7 +134,9 @@ const TaskTimeline = ({
   const [ratingValue, setRatingValue] = useState(0);
   const [ratingFeedback, setRatingFeedback] = useState("");
   const [showForceCloseDialog, setShowForceCloseDialog] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const status = task.status as TaskStatus;
   const allowed = canComment(status, currentUserRole);
@@ -138,18 +166,61 @@ const TaskTimeline = ({
     }
   }, [isMandatoryRating]);
 
+  // ── File attachment handling ────────────────────────────────────────────
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newFiles: FileAttachment[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        alert(`File "${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
+        continue;
+      }
+      const attachment: FileAttachment = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      };
+      // For images, create a preview data URL
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          attachment.dataUrl = ev.target?.result as string;
+          setAttachedFiles(prev => [...prev]);
+        };
+        reader.readAsDataURL(file);
+      }
+      newFiles.push(attachment);
+    }
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   // ── Submit comment ──────────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    if (!commentText.trim() || !allowed || submitting) return;
+    if ((!commentText.trim() && attachedFiles.length === 0) || !allowed || submitting) return;
     setSubmitting(true);
+
+    let message = commentText.trim();
+    if (attachedFiles.length > 0) {
+      const fileList = attachedFiles.map(f => `📎 ${f.name} (${formatFileSize(f.size)})`).join("\n");
+      message = message ? `${message}\n\n${fileList}` : fileList;
+    }
 
     const newEntry: TimelineEntry = {
       id: generateEntryId(),
       taskId: task.id,
       author: currentUserName,
       authorRole: currentUserRole,
-      message: commentText.trim(),
+      message,
       timestamp: new Date().toISOString(),
       systemGenerated: false,
       entryType: "comment",
@@ -173,6 +244,7 @@ const TaskTimeline = ({
     }
 
     setCommentText("");
+    setAttachedFiles([]);
     setSubmitting(false);
   };
 
@@ -334,7 +406,6 @@ const TaskTimeline = ({
     );
     setShowRatingDialog(false);
     onRatingSubmit?.(ratingValue, ratingFeedback);
-    // Notify both requestor and acceptor about task closure
     notifyTaskClosed(task);
     onStatusChange("closed", [ratingEntry, closeEntry]);
   };
@@ -344,6 +415,12 @@ const TaskTimeline = ({
   const renderEntry = (entry: TimelineEntry) => {
     const isSystem = entry.systemGenerated;
     const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
+
+    // Check for file attachments in message
+    const hasAttachments = entry.message.includes("📎 ");
+    const messageLines = entry.message.split("\n");
+    const textLines = messageLines.filter(l => !l.startsWith("📎 "));
+    const attachmentLines = messageLines.filter(l => l.startsWith("📎 "));
 
     if (isSystem) {
       return (
@@ -380,7 +457,19 @@ const TaskTimeline = ({
             </Badge>
           </div>
           <div className="rounded-lg bg-card border border-border px-3 py-2">
-            <p className="text-sm text-foreground whitespace-pre-wrap">{entry.message}</p>
+            {textLines.filter(Boolean).length > 0 && (
+              <p className="text-sm text-foreground whitespace-pre-wrap">{textLines.join("\n").trim()}</p>
+            )}
+            {attachmentLines.length > 0 && (
+              <div className={`${textLines.filter(Boolean).length > 0 ? "mt-2 pt-2 border-t border-border" : ""} space-y-1`}>
+                {attachmentLines.map((line, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    <span>{line.replace("📎 ", "")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
             {format(new Date(entry.timestamp), "MMM d, yyyy h:mm a")}
@@ -572,6 +661,25 @@ const TaskTimeline = ({
       {/* Comment composer */}
       {status !== "closed" && status !== "force_closed" && status !== "completed" && status !== "open" && (
         <div className="border-t border-border p-4">
+          {/* Attached files preview */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {attachedFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">
+                  {f.type.startsWith("image/") ? (
+                    <ImageIcon className="h-3 w-3 text-primary shrink-0" />
+                  ) : (
+                    <FileIcon className="h-3 w-3 text-muted-foreground shrink-0" />
+                  )}
+                  <span className="truncate max-w-[120px]">{f.name}</span>
+                  <span className="text-muted-foreground">({formatFileSize(f.size)})</span>
+                  <button onClick={() => removeFile(i)} className="ml-0.5 hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <Textarea
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
@@ -586,15 +694,35 @@ const TaskTimeline = ({
             }}
           />
           <div className="flex items-center justify-between mt-2">
-            <p className="text-[10px] text-muted-foreground">
-              {!allowed
-                ? `You cannot comment in ${STATUS_LABELS[status]} status as ${ROLE_LABELS[currentUserRole]}.`
-                : "Shift+Enter for new line"}
-            </p>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+                accept={ALLOWED_FILE_TYPES.join(",")}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground hover:text-foreground h-7 px-2"
+                disabled={!allowed}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="h-3.5 w-3.5" /> Attach
+              </Button>
+              <p className="text-[10px] text-muted-foreground">
+                {!allowed
+                  ? `You cannot comment in ${STATUS_LABELS[status]} status as ${ROLE_LABELS[currentUserRole]}.`
+                  : `Max ${MAX_FILE_SIZE_MB}MB per file · Shift+Enter for new line`}
+              </p>
+            </div>
             {allowed && (
               <Button
                 size="sm"
-                disabled={!commentText.trim() || submitting}
+                disabled={(!commentText.trim() && attachedFiles.length === 0) || submitting}
                 onClick={handleSubmit}
                 className="gap-1.5"
               >

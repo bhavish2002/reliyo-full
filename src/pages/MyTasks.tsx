@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { MapPin, Calendar, ChevronRight, CheckCircle2, Clock, AlertTriangle, Trash2 } from "lucide-react";
+import { MapPin, Calendar, ChevronRight, CheckCircle2, Clock, AlertTriangle, Trash2, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,6 @@ const MyTasks = () => {
     }
 
     const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    // Only merge demo accepted for the acceptor user
     if (currentUser?.role === "acceptor" || currentUserName === "Priya Sharma") {
       const ids = new Set(storedAccepted.map((t) => t.id));
       const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
@@ -64,14 +63,11 @@ const MyTasks = () => {
 
   const createdTasks = tasks.filter((t) => t.createdBy === currentUserName);
   
-  // For accepted tasks, filter to only those accepted by current user
   const myAcceptedTasks = acceptedTasks.filter((t) => 
     t.acceptedBy === currentUserName || 
-    // fallback for demo data
     (currentUser?.role === "acceptor" && !t.acceptedBy)
   );
 
-  // Disputed tasks: from both created and accepted that are in "disputed" status
   const disputeTasks = [
     ...createdTasks.filter((t) => t.status === "disputed"),
     ...myAcceptedTasks.filter((t) => t.status === "disputed"),
@@ -85,12 +81,10 @@ const MyTasks = () => {
   };
 
   const handleQuitTask = (task: Task) => {
-    // Remove from accepted tasks
     const updatedAccepted = acceptedTasks.filter((t) => t.id !== task.id);
     setAcceptedTasks(updatedAccepted);
     localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(updatedAccepted.filter((t) => t.id !== task.id)));
 
-    // Move task back to "open" in reliyo_tasks
     const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const idx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (idx >= 0) {
@@ -99,10 +93,7 @@ const MyTasks = () => {
       setTasks(storedTasks);
     }
 
-    // Clean up timeline
     localStorage.removeItem(`reliyo_timeline_${task.id}`);
-
-    // Notify requestor that acceptor quit
     notifyAcceptorQuit(task);
 
     setQuitDialog(null);
@@ -113,13 +104,11 @@ const MyTasks = () => {
   };
 
   const handleDeleteTask = (task: Task) => {
-    // Remove from reliyo_tasks
     const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const updated = storedTasks.filter((t: Task) => t.id !== task.id);
     localStorage.setItem("reliyo_tasks", JSON.stringify(updated));
     setTasks(updated);
 
-    // Clean up timeline
     localStorage.removeItem(`reliyo_timeline_${task.id}`);
     setDeleteDialog(null);
     toast({
@@ -135,6 +124,9 @@ const MyTasks = () => {
   ];
 
   const currentList = tab === "created" ? createdTasks : tab === "accepted" ? myAcceptedTasks : disputeTasks;
+
+  // Check if any accepted task is in committed status
+  const hasCommittedTasks = myAcceptedTasks.some(t => t.status === "committed");
 
   return (
     <DashboardLayout>
@@ -155,6 +147,16 @@ const MyTasks = () => {
           </button>
         ))}
       </div>
+
+      {/* Quit task info notice for Accepted tab */}
+      {tab === "accepted" && hasCommittedTasks && (
+        <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 mb-4 text-sm text-primary">
+          <Info className="h-4 w-4 shrink-0 mt-0.5" />
+          <p>
+            <span className="font-semibold">Quit Task Policy:</span> You can quit a task only within the first <span className="font-semibold">{QUIT_GRACE_HOURS} hours</span> after accepting it. After this period, the "Quit Task" option will be disabled and you must complete the task.
+          </p>
+        </div>
+      )}
 
       {currentList.length === 0 ? (
         <div className="flex items-center gap-2 rounded-lg bg-[hsl(var(--success))]/10 p-4 text-sm text-[hsl(var(--success))]">
@@ -210,7 +212,6 @@ const MyTasks = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* Delete button for requestor's open tasks */}
                     {tab === "created" && task.status === "open" && !task.acceptedBy && (
                       <Button
                         variant="outline"
@@ -224,7 +225,6 @@ const MyTasks = () => {
                         <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                       </Button>
                     )}
-                    {/* Quit task button: always visible for committed tasks, disabled after 2hrs */}
                     {tab === "accepted" && isCommitted && (
                       <Button
                         variant="outline"

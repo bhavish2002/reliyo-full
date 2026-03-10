@@ -220,31 +220,13 @@ const Profile = () => {
           </CardContent>
         </Card>
 
-        {/* Stats */}
+        {/* Member info */}
         <Card className="rounded-xl">
           <CardContent className="p-6">
             <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
-              <Shield className="h-4 w-4" /> Reliability & Stats
+              <Shield className="h-4 w-4" /> Account Info
             </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg bg-[hsl(var(--success))]/10 p-3 text-center">
-                <p className="text-2xl font-bold text-[hsl(var(--success))]">{profile.reliability}%</p>
-                <p className="text-xs text-muted-foreground">Reliability Score</p>
-              </div>
-              <div className="rounded-lg bg-primary/10 p-3 text-center">
-                <p className="text-2xl font-bold text-primary">{profile.rating}</p>
-                <p className="text-xs text-muted-foreground">Avg Rating</p>
-              </div>
-              <div className="rounded-lg bg-muted p-3 text-center">
-                <p className="text-2xl font-bold text-foreground">{profile.tasksCompleted}</p>
-                <p className="text-xs text-muted-foreground">Tasks Completed</p>
-              </div>
-              <div className="rounded-lg bg-muted p-3 text-center">
-                <p className="text-2xl font-bold text-foreground">{profile.tasksCreated}</p>
-                <p className="text-xs text-muted-foreground">Tasks Created</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-4">Member since {profile.memberSince}</p>
+            <p className="text-xs text-muted-foreground">Member since {profile.memberSince}</p>
           </CardContent>
         </Card>
 
