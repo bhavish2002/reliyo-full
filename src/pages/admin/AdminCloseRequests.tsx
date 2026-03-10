@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import AdminLayout from "@/components/AdminLayout";
 import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
-import { Eye, CheckCircle2, XCircle, FileX, Shield } from "lucide-react";
+import { Eye, CheckCircle2, XCircle, FileX, Shield, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   getAllForceCloseRequests, resolveForceCloseRequest,
@@ -36,7 +36,11 @@ const AdminCloseRequests = () => {
   const resolved = requests.filter((r) => r.status !== "pending");
 
   const handleApprove = (r: ForceCloseRequest) => {
-    resolveForceCloseRequest(r.id, "approved", adminComment.trim() || "Force-close approved by admin.");
+    if (!adminComment.trim()) {
+      toast({ title: "Comment Required", description: "Admin comment is mandatory for approving force-close requests.", variant: "destructive" });
+      return;
+    }
+    resolveForceCloseRequest(r.id, "approved", adminComment.trim());
     setReviewReq(null);
     setAdminComment("");
     reload();
@@ -44,7 +48,11 @@ const AdminCloseRequests = () => {
   };
 
   const handleReject = (r: ForceCloseRequest) => {
-    resolveForceCloseRequest(r.id, "rejected", adminComment.trim() || "Force-close rejected by admin.");
+    if (!adminComment.trim()) {
+      toast({ title: "Comment Required", description: "Admin comment is mandatory for rejecting force-close requests.", variant: "destructive" });
+      return;
+    }
+    resolveForceCloseRequest(r.id, "rejected", adminComment.trim());
     setReviewReq(null);
     setAdminComment("");
     reload();
@@ -184,30 +192,50 @@ const AdminCloseRequests = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
-              <p><span className="font-medium">Task:</span> {reviewReq?.taskTitle}</p>
-              <p><span className="font-medium">Task Status:</span> {reviewReq ? STATUS_LABELS[reviewReq.taskStatusAtRequest as TaskStatus] || reviewReq.taskStatusAtRequest : ""}</p>
-              <p><span className="font-medium">Requestor:</span> {reviewReq?.requestor}</p>
-              <p><span className="font-medium">Acceptor:</span> {reviewReq?.acceptor}</p>
+            <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Task</p>
+                  <p className="font-medium">{reviewReq?.taskTitle}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Task Status</p>
+                  <p className="font-medium">{reviewReq ? STATUS_LABELS[reviewReq.taskStatusAtRequest as TaskStatus] || reviewReq.taskStatusAtRequest : ""}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Requestor</p>
+                  <p className="font-medium">{reviewReq?.requestor}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Acceptor</p>
+                  <p className="font-medium">{reviewReq?.acceptor}</p>
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground mt-2">
                 Review the task details and activity before making a decision.
               </p>
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground mb-1">Admin Comment (optional)</p>
+              <p className="text-sm font-medium text-foreground mb-1">Admin Comment <span className="text-destructive">*</span></p>
               <Textarea
                 value={adminComment}
                 onChange={(e) => setAdminComment(e.target.value)}
-                placeholder="Add your reasoning..."
+                placeholder="Enter your reasoning (mandatory)..."
                 className="min-h-[60px]"
               />
+              {!adminComment.trim() && (
+                <p className="text-[10px] text-destructive mt-1 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Comment is required to approve or reject
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Button
                 variant="outline"
                 className="w-full justify-start gap-2 h-auto py-3"
+                disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleApprove(reviewReq)}
               >
                 <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
@@ -220,6 +248,7 @@ const AdminCloseRequests = () => {
               <Button
                 variant="outline"
                 className="w-full justify-start gap-2 h-auto py-3"
+                disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleReject(reviewReq)}
               >
                 <XCircle className="h-4 w-4 text-destructive" />

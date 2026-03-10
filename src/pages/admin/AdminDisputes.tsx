@@ -48,11 +48,19 @@ const AdminDisputes = () => {
   const activeNormal = normalDisputes.filter((d) => d.task.status === "disputed").length;
   const activeEscalated = escalatedDisputes.filter((d) => d.dsp4Status === "open").length;
 
-  // ── DSP4 Actions ──────────────────────────────────────────────────────────
+  // ── DSP4 Actions (mandatory comment) ──────────────────────────────────────
+
+  const validateComment = () => {
+    if (!adminComment.trim()) {
+      toast({ title: "Comment Required", description: "Admin comment is mandatory for dispute resolution.", variant: "destructive" });
+      return false;
+    }
+    return true;
+  };
 
   const handleResolveValid = (d: AdminDispute) => {
-    // Dispute is valid: acceptor must complete work. Task stays disputed.
-    const comment = adminComment.trim() || "Admin has reviewed this dispute. The dispute is valid — acceptor must complete the pending work or a penalty will be applied.";
+    if (!validateComment()) return;
+    const comment = adminComment.trim();
     adminAddTimelineEntry(d.taskId, `⚠️ ADMIN RESOLUTION (${d.disputeId}): RESOLVED VALID — ${comment}`, "admin_action", {
       fromStatus: "disputed", toStatus: "disputed",
     });
@@ -64,8 +72,8 @@ const AdminDisputes = () => {
   };
 
   const handleResolveInvalid = (d: AdminDispute) => {
-    // Dispute is invalid: no actual work pending. Close task, release escrow normally.
-    const comment = adminComment.trim() || "Admin has reviewed this dispute. The dispute is invalid — no actual work is pending. Task will be closed.";
+    if (!validateComment()) return;
+    const comment = adminComment.trim();
     adminAddTimelineEntry(d.taskId, `✅ ADMIN RESOLUTION (${d.disputeId}): RESOLVED INVALID — ${comment}. Escrow released: reward - ${PLATFORM_FEE_PERCENT}% PL fee to acceptor + full trust deposit refunded.`, "admin_action", {
       fromStatus: "disputed", toStatus: "closed",
     });
@@ -79,8 +87,8 @@ const AdminDisputes = () => {
   };
 
   const handleAdminClose = (d: AdminDispute) => {
-    // Force-close: dispute was valid and acceptor didn't comply. Refund requestor.
-    const comment = adminComment.trim() || "Admin has force-closed this task. Acceptor failed to complete work.";
+    if (!validateComment()) return;
+    const comment = adminComment.trim();
     adminAddTimelineEntry(d.taskId, `🚫 ADMIN RESOLUTION (${d.disputeId}): ADMIN CLOSED — ${comment}. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation.`, "admin_action", {
       fromStatus: "disputed", toStatus: "force_closed",
     });
@@ -96,7 +104,7 @@ const AdminDisputes = () => {
   // ── Render dispute row ────────────────────────────────────────────────────
 
   const renderRow = (d: AdminDispute) => (
-    <TableRow key={d.disputeId}>
+    <TableRow key={`${d.disputeId}-${d.taskId}`}>
       <TableCell className="font-mono text-xs text-muted-foreground">{d.disputeId}</TableCell>
       <TableCell>
         <div>
@@ -264,23 +272,43 @@ const AdminDisputes = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
-              <p><span className="font-medium">Task:</span> {reviewDispute?.taskTitle}</p>
-              <p><span className="font-medium">Requestor:</span> {reviewDispute?.requestor}</p>
-              <p><span className="font-medium">Acceptor:</span> {reviewDispute?.acceptor}</p>
+            <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Task</p>
+                  <p className="font-medium">{reviewDispute?.taskTitle}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Dispute Level</p>
+                  <p className="font-medium text-destructive">DSP{reviewDispute?.disputeNumber}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Requestor</p>
+                  <p className="font-medium">{reviewDispute?.requestor}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Acceptor</p>
+                  <p className="font-medium">{reviewDispute?.acceptor}</p>
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground mt-2">
                 Review the task's Activity & Comments thread before making a decision.
               </p>
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground mb-1">Admin Comment (optional)</p>
+              <p className="text-sm font-medium text-foreground mb-1">Admin Comment <span className="text-destructive">*</span></p>
               <Textarea
                 value={adminComment}
                 onChange={(e) => setAdminComment(e.target.value)}
-                placeholder="Add your reasoning for the resolution..."
+                placeholder="Enter your reasoning for the resolution (mandatory)..."
                 className="min-h-[60px]"
               />
+              {!adminComment.trim() && (
+                <p className="text-[10px] text-destructive mt-1 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" /> Comment is required for all resolution actions
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -289,6 +317,7 @@ const AdminDisputes = () => {
               <Button
                 variant="outline"
                 className="w-full justify-start gap-2 h-auto py-3"
+                disabled={!adminComment.trim()}
                 onClick={() => reviewDispute && handleResolveValid(reviewDispute)}
               >
                 <AlertTriangle className="h-4 w-4 text-[hsl(35,90%,50%)]" />
@@ -301,6 +330,7 @@ const AdminDisputes = () => {
               <Button
                 variant="outline"
                 className="w-full justify-start gap-2 h-auto py-3"
+                disabled={!adminComment.trim()}
                 onClick={() => reviewDispute && handleResolveInvalid(reviewDispute)}
               >
                 <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
@@ -313,6 +343,7 @@ const AdminDisputes = () => {
               <Button
                 variant="outline"
                 className="w-full justify-start gap-2 h-auto py-3 border-destructive/30"
+                disabled={!adminComment.trim()}
                 onClick={() => reviewDispute && handleAdminClose(reviewDispute)}
               >
                 <XCircle className="h-4 w-4 text-destructive" />

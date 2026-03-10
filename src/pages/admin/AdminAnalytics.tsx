@@ -1,14 +1,40 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
 } from "recharts";
 import AdminLayout from "@/components/AdminLayout";
+import { RefreshCw, CalendarIcon } from "lucide-react";
 import { getAdminStats, getAllDisputes } from "@/lib/adminData";
+import { cn } from "@/lib/utils";
+import { format, subMonths, startOfMonth, startOfDay, endOfDay, isAfter, isBefore } from "date-fns";
+import type { DateRange } from "react-day-picker";
+
+type FilterMode = "6" | "3" | "custom";
 
 const AdminAnalytics = () => {
   const [stats, setStats] = useState(() => getAdminStats());
+  const [loading, setLoading] = useState(false);
+  const [filterMode, setFilterMode] = useState<FilterMode>("6");
+  const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setTimeout(() => {
+      setStats(getAdminStats());
+      setLoading(false);
+    }, 200);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => setStats(getAdminStats()), 5000);
@@ -47,11 +73,63 @@ const AdminAnalytics = () => {
     return total > 0 ? Math.round((closed / total) * 100) : 0;
   }, [stats]);
 
+  const maxCustomFrom = subMonths(new Date(), 6);
+  const filterLabel = filterMode === "6" ? "Last 6 Months" : filterMode === "3" ? "Last 3 Months" : "Custom";
+
   return (
     <AdminLayout>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Analytics</h1>
-        <p className="text-sm text-muted-foreground">Live platform performance insights</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Analytics</h1>
+          <p className="text-sm text-muted-foreground">Live platform performance insights</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={filterMode} onValueChange={(v) => {
+            setFilterMode(v as FilterMode);
+            if (v === "custom") setCalendarOpen(true);
+          }}>
+            <SelectTrigger className="h-9 w-[140px] text-xs">
+              <SelectValue>{filterLabel}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="6">Last 6 Months</SelectItem>
+              <SelectItem value="3">Last 3 Months</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {filterMode === "custom" && (
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs h-9">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  {customRange?.from ? (
+                    customRange.to
+                      ? `${format(customRange.from, "MMM d")} – ${format(customRange.to, "MMM d")}`
+                      : format(customRange.from, "MMM d, yyyy")
+                  ) : "Pick dates"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="range"
+                  selected={customRange}
+                  onSelect={(range) => {
+                    setCustomRange(range);
+                    if (range?.from && range?.to) setCalendarOpen(false);
+                  }}
+                  disabled={(date) => isAfter(date, new Date()) || isBefore(date, maxCustomFrom)}
+                  numberOfMonths={2}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+
+          <Button variant="outline" size="sm" onClick={reload} disabled={loading} className="gap-2 h-9">
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary cards */}

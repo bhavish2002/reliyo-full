@@ -148,26 +148,32 @@ export function getAllDisputes(): AdminDispute[] {
   const tasks = getAllPlatformTasks();
   const dsp4Map = getDsp4StatusMap();
   const disputes: AdminDispute[] = [];
+  // Track seen task IDs to prevent duplicate dispute entries per task
+  const seenTaskIds = new Set<string>();
 
   tasks.forEach((t) => {
+    if (seenTaskIds.has(t.id)) return;
+
     if (t.disputes && t.disputes.length > 0) {
-      t.disputes.forEach((d) => {
-        disputes.push({
-          disputeId: d.id,
-          disputeNumber: d.number,
-          taskId: t.id,
-          taskDisplayId: t.taskId || t.id,
-          taskTitle: t.title,
-          requestor: t.createdBy || "—",
-          acceptor: t.acceptedBy || "—",
-          escalated: d.escalated,
-          createdAt: d.createdAt,
-          dsp4Status: d.escalated ? (dsp4Map[d.id] || "open") : "open",
-          task: t,
-        });
+      // Deduplicate: show only the latest (highest) dispute level per task
+      const latestDispute = t.disputes.reduce((latest, d) =>
+        d.number > latest.number ? d : latest, t.disputes[0]);
+      seenTaskIds.add(t.id);
+      disputes.push({
+        disputeId: latestDispute.id,
+        disputeNumber: latestDispute.number,
+        taskId: t.id,
+        taskDisplayId: t.taskId || t.id,
+        taskTitle: t.title,
+        requestor: t.createdBy || "—",
+        acceptor: t.acceptedBy || "—",
+        escalated: latestDispute.escalated,
+        createdAt: latestDispute.createdAt,
+        dsp4Status: latestDispute.escalated ? (dsp4Map[latestDispute.id] || "open") : "open",
+        task: t,
       });
     } else if (t.status === "disputed" && (t.disputeCount || 0) > 0) {
-      // Fallback: task has disputeCount but no disputes array
+      seenTaskIds.add(t.id);
       const num = t.disputeCount || 1;
       const id = `DSP${num}-${t.id}`;
       disputes.push({
