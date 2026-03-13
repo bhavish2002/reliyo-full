@@ -19,7 +19,8 @@ import {
   getAllDisputes, saveDsp4Status, adminUpdateTaskStatus, adminAddTimelineEntry,
 } from "@/lib/adminData";
 import { notifyTaskForceClosed, notifyTaskClosed } from "@/lib/notifications";
-import { PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT } from "@/lib/taskTypes";
+import { PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, DSP4_COMPLETION_DAYS } from "@/lib/taskTypes";
+import { addDays, format, isAfter, differenceInDays } from "date-fns";
 
 const DSP4_STATUS_COLORS: Record<Dsp4Status, string> = {
   open: "bg-primary/10 text-primary border-primary/20",
@@ -46,7 +47,7 @@ const AdminDisputes = () => {
   const escalatedDisputes = disputes.filter((d) => d.escalated);
 
   const activeNormal = normalDisputes.filter((d) => d.task.status === "disputed").length;
-  const activeEscalated = escalatedDisputes.filter((d) => d.dsp4Status === "open").length;
+  const activeEscalated = escalatedDisputes.filter((d) => d.dsp4Status === "open" || d.dsp4Status === "resolved_valid").length;
 
   // ── DSP4 Actions (mandatory comment) ──────────────────────────────────────
 
@@ -61,14 +62,38 @@ const AdminDisputes = () => {
   const handleResolveValid = (d: AdminDispute) => {
     if (!validateComment()) return;
     const comment = adminComment.trim();
-    adminAddTimelineEntry(d.taskId, `⚠️ ADMIN RESOLUTION (${d.disputeId}): RESOLVED VALID — ${comment}`, "admin_action", {
+    
+    // Calculate completion window
+    const deadline = d.task.extendedDeadline || d.task.deadline;
+    const deadlinePassed = deadline ? isAfter(new Date(), new Date(deadline)) : true;
+    let completionDeadline: string;
+    
+    if (deadlinePassed) {
+      completionDeadline = format(addDays(new Date(), DSP4_COMPLETION_DAYS), "yyyy-MM-dd");
+    } else {
+      const remaining = differenceInDays(new Date(deadline), new Date());
+      if (remaining < DSP4_COMPLETION_DAYS) {
+        completionDeadline = format(addDays(new Date(), DSP4_COMPLETION_DAYS), "yyyy-MM-dd");
+      } else {
+        completionDeadline = deadline;
+      }
+    }
+
+    adminAddTimelineEntry(d.taskId, `⚠️ ADMIN RESOLUTION (${d.disputeId}): RESOLVED VALID — ${comment}. Acceptor must complete the work by ${format(new Date(completionDeadline), "MMMM do, yyyy")} or task will be force-closed.`, "admin_action", {
       fromStatus: "disputed", toStatus: "disputed",
     });
     saveDsp4Status(d.disputeId, "resolved_valid");
+    
+    // Set dsp4ResolvedValid flag and extended deadline on task
+    adminUpdateTaskStatus(d.taskId, "disputed", { 
+      dsp4ResolvedValid: true, 
+      extendedDeadline: completionDeadline 
+    });
+    
     setReviewDispute(null);
     setAdminComment("");
     reload();
-    toast({ title: "Dispute Resolved Valid", description: "Acceptor has been warned. Task remains in disputed state." });
+    toast({ title: "Dispute Resolved Valid", description: `Acceptor has ${DSP4_COMPLETION_DAYS} working days to complete. Task remains in disputed state.` });
   };
 
   const handleResolveInvalid = (d: AdminDispute) => {
@@ -141,7 +166,8 @@ const AdminDisputes = () => {
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => setViewTask(d)}>
             <Eye className="h-3 w-3" /> View
           </Button>
-          {d.escalated && d.dsp4Status === "open" && (
+          {/* Show Review button for open AND resolved_valid (allows second review) */}
+          {d.escalated && (d.dsp4Status === "open" || d.dsp4Status === "resolved_valid") && (
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-destructive/30 text-destructive" onClick={() => { setReviewDispute(d); setAdminComment(""); }}>
               <Shield className="h-3 w-3" /> Review
             </Button>
@@ -181,7 +207,7 @@ const AdminDisputes = () => {
         <Card className="rounded-xl">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-[hsl(var(--success))]">
-              {disputes.filter((d) => d.dsp4Status !== "open" || (!d.escalated && d.task.status !== "disputed")).length}
+              {disputes.filter((d) => d.dsp4Status === "resolved_invalid" || d.dsp4Status === "admin_closed" || (!d.escalated && d.task.status !== "disputed")).length}
             </p>
             <p className="text-xs text-muted-foreground">Resolved</p>
           </CardContent>
@@ -268,6 +294,9 @@ const AdminDisputes = () => {
             </DialogTitle>
             <DialogDescription>
               <span className="font-mono font-semibold">{reviewDispute?.disputeId}</span> — {reviewDispute?.taskTitle}
+              {reviewDispute?.dsp4Status === "resolved_valid" && (
+                <span className="block mt-1 text-xs text-[hsl(35,90%,50%)]">Previously resolved as VALID. You can take further action.</span>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -314,18 +343,21 @@ const AdminDisputes = () => {
             <div className="space-y-2">
               <p className="text-sm font-semibold text-foreground">Actions</p>
 
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2 h-auto py-3"
-                disabled={!adminComment.trim()}
-                onClick={() => reviewDispute && handleResolveValid(reviewDispute)}
-              >
-                <AlertTriangle className="h-4 w-4 text-[hsl(35,90%,50%)]" />
-                <div className="text-left">
-                  <p className="font-medium">Resolved Valid</p>
-                  <p className="text-xs text-muted-foreground">Acceptor must complete work or penalty applies. Task stays disputed.</p>
-                </div>
-              </Button>
+              {/* Only show Resolved Valid if not already resolved valid */}
+              {reviewDispute?.dsp4Status !== "resolved_valid" && (
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-2 h-auto py-3"
+                  disabled={!adminComment.trim()}
+                  onClick={() => reviewDispute && handleResolveValid(reviewDispute)}
+                >
+                  <AlertTriangle className="h-4 w-4 text-[hsl(35,90%,50%)]" />
+                  <div className="text-left">
+                    <p className="font-medium">Resolved Valid</p>
+                    <p className="text-xs text-muted-foreground">Acceptor gets {DSP4_COMPLETION_DAYS} days to complete. Task stays disputed.</p>
+                  </div>
+                </Button>
+              )}
 
               <Button
                 variant="outline"

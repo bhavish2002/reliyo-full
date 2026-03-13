@@ -15,6 +15,9 @@ import { Search, Eye } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus, type Task } from "@/lib/taskTypes";
 import { getAllPlatformTasks } from "@/lib/adminData";
 
+// Filter out "completed" from dropdown (deprecated)
+const DROPDOWN_STATUSES = TASK_STATUSES.filter(s => s !== "completed");
+
 const AdminAllTasks = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -47,8 +50,8 @@ const AdminAllTasks = () => {
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {TASK_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
+            <SelectItem value="all">All Status</SelectItem>
+            {DROPDOWN_STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>

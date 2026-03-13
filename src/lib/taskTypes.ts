@@ -41,13 +41,12 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
 };
 
 // ── Allowed Transitions ─────────────────────────────────────────────────────
-// Key: current status → value: list of valid next statuses
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   open: ["committed", "closed"],
-  committed: ["in_progress", "open", "force_closed"], // open = quit within grace period; force_closed = admin approved
-  in_progress: ["done", "closed", "force_closed"],    // force_closed = admin approved force-close
+  committed: ["in_progress", "open", "force_closed"],
+  in_progress: ["done", "closed", "force_closed"],
   done: ["completed", "disputed"],
-  disputed: ["done", "closed", "force_closed"],       // done = fix resubmitted; force_closed = admin force-close (DSP4)
+  disputed: ["done", "closed", "force_closed"],
   completed: ["closed"],
   closed: [],
   force_closed: [],
@@ -83,7 +82,16 @@ export interface TimelineEntry {
     alertType?: "progress_reminder" | "force_close_request" | "sla_warning";
     rating?: number;
     disputeCount?: number;
+    attachments?: FileAttachmentData[];
   };
+}
+
+// ── File attachment data stored in timeline metadata ────────────────────────
+export interface FileAttachmentData {
+  name: string;
+  size: number;
+  type: string;
+  dataUrl?: string; // base64 data URL for images
 }
 
 // ── Task Interface ──────────────────────────────────────────────────────────
@@ -98,6 +106,7 @@ export interface Task {
   location: string;
   country?: string;
   deadline: string;
+  extendedDeadline?: string; // extended deadline (does not overwrite original)
   updateFrequency: string;
   skills: string[];
   domain: string;
@@ -114,6 +123,7 @@ export interface Task {
   ratingFeedback?: string;
   statusEnteredAt?: string;
   disputes?: Array<{ id: string; number: number; escalated: boolean; createdAt: string }>;
+  dsp4ResolvedValid?: boolean; // flag when DSP4 resolved valid - acceptor can mark done
 }
 
 // ── Permission Helpers ──────────────────────────────────────────────────────
@@ -121,9 +131,9 @@ export interface Task {
 export function canComment(status: TaskStatus, role: AuthorRole): boolean {
   switch (status) {
     case "open":
-      return false; // no comments in open state
+      return false;
     case "committed":
-      return role === "acceptor"; // only acceptor can post first comment
+      return role === "acceptor";
     case "in_progress":
       return role === "requestor" || role === "acceptor";
     case "done":
@@ -131,10 +141,10 @@ export function canComment(status: TaskStatus, role: AuthorRole): boolean {
     case "disputed":
       return role === "requestor" || role === "acceptor" || role === "admin";
     case "completed":
-      return false; // no comments, only rating
+      return false;
     case "closed":
     case "force_closed":
-      return false; // read-only
+      return false;
     default:
       return false;
   }
@@ -219,7 +229,13 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
   }
 }
 
+// ── Effective deadline helper ───────────────────────────────────────────────
+export function getEffectiveDeadline(task: Task): string {
+  return task.extendedDeadline || task.deadline;
+}
+
 // ── Platform Constants ──────────────────────────────────────────────────────
 export const PLATFORM_FEE_PERCENT = 5;
 export const TRUST_DEPOSIT_PERCENT = 10;
 export const QUIT_GRACE_HOURS = 2;
+export const DSP4_COMPLETION_DAYS = 10;

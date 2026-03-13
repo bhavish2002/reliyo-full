@@ -7,7 +7,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import AdminLayout from "@/components/AdminLayout";
 import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
@@ -191,38 +191,38 @@ const AdminCloseRequests = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-2">
-              <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-4 py-3">
+            <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-muted-foreground">Task</p>
-                  <p className="font-medium">{reviewReq?.taskTitle}</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Task</p>
+                  <p className="font-medium text-sm">{reviewReq?.taskTitle}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Task Status</p>
-                  <p className="font-medium">{reviewReq ? STATUS_LABELS[reviewReq.taskStatusAtRequest as TaskStatus] || reviewReq.taskStatusAtRequest : ""}</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Task Status</p>
+                  <p className="font-medium text-sm">{reviewReq ? STATUS_LABELS[reviewReq.taskStatusAtRequest as TaskStatus] || reviewReq.taskStatusAtRequest : ""}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Requestor</p>
-                  <p className="font-medium">{reviewReq?.requestor}</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Requestor</p>
+                  <p className="font-medium text-sm">{reviewReq?.requestor}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Acceptor</p>
-                  <p className="font-medium">{reviewReq?.acceptor}</p>
+                  <p className="text-xs text-muted-foreground mb-0.5">Acceptor</p>
+                  <p className="font-medium text-sm">{reviewReq?.acceptor}</p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-xs text-muted-foreground">
                 Review the task details and activity before making a decision.
               </p>
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground mb-1">Admin Comment <span className="text-destructive">*</span></p>
+              <p className="text-sm font-medium text-foreground mb-1.5">Admin Comment <span className="text-destructive">*</span></p>
               <Textarea
                 value={adminComment}
                 onChange={(e) => setAdminComment(e.target.value)}
                 placeholder="Enter your reasoning (mandatory)..."
-                className="min-h-[60px]"
+                className="min-h-[70px]"
               />
               {!adminComment.trim() && (
                 <p className="text-[10px] text-destructive mt-1 flex items-center gap-1">

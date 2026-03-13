@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import {
   Send, AlertTriangle, Lock, Settings, Shield, Star,
   CheckCircle2, XCircle, Info, MessageSquare, Clock, Bell,
-  Paperclip, X, FileIcon, ImageIcon,
+  Paperclip, X, FileIcon, ImageIcon, Download, Eye,
+  CalendarIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,9 +13,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  type Task, type TaskStatus, type TimelineEntry, type AuthorRole,
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  type Task, type TaskStatus, type TimelineEntry, type AuthorRole, type FileAttachmentData,
   canComment, canTransition, getCommentPlaceholder, getStatusBanner,
-  STATUS_LABELS, ROLE_LABELS,
+  STATUS_LABELS, ROLE_LABELS, getEffectiveDeadline, DSP4_COMPLETION_DAYS,
 } from "@/lib/taskTypes";
 import { saveForceCloseRequest } from "@/lib/adminData";
 import {
@@ -22,8 +27,9 @@ import {
   notifyDisputeRaised, notifyFixResubmitted, notifyRatingRequired,
   notifyTaskClosed,
 } from "@/lib/notifications";
-import { format } from "date-fns";
+import { format, addDays, differenceInDays, isAfter, isBefore } from "date-fns";
 import { generateDisputeId, MAX_DISPUTES, isEscalated } from "@/lib/disputeId";
+import { cn } from "@/lib/utils";
 
 // ── File attachment constants ────────────────────────────────────────────────
 const MAX_FILE_SIZE_MB = 25;
@@ -41,7 +47,7 @@ interface FileAttachment {
   name: string;
   size: number;
   type: string;
-  dataUrl?: string; // for images preview
+  dataUrl?: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -107,12 +113,13 @@ const BANNER_STYLES: Record<string, string> = {
 
 interface TaskTimelineProps {
   task: Task;
-  currentUserRole: AuthorRole; // "requestor" | "acceptor"
+  currentUserRole: AuthorRole;
   currentUserName: string;
   entries: TimelineEntry[];
   onAddEntry: (entries: TimelineEntry[]) => void;
   onStatusChange: (newStatus: TaskStatus, entries: TimelineEntry[]) => void;
   onRatingSubmit?: (rating: number, feedback: string) => void;
+  onDeadlineExtend?: (newDeadline: string) => void;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -125,6 +132,7 @@ const TaskTimeline = ({
   onAddEntry,
   onStatusChange,
   onRatingSubmit,
+  onDeadlineExtend,
 }: TaskTimelineProps) => {
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -134,7 +142,10 @@ const TaskTimeline = ({
   const [ratingValue, setRatingValue] = useState(0);
   const [ratingFeedback, setRatingFeedback] = useState("");
   const [showForceCloseDialog, setShowForceCloseDialog] = useState(false);
+  const [showExtendDialog, setShowExtendDialog] = useState(false);
+  const [extendDate, setExtendDate] = useState<Date | undefined>(undefined);
   const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,6 +153,11 @@ const TaskTimeline = ({
   const allowed = canComment(status, currentUserRole);
   const banner = getStatusBanner(status, currentUserRole);
   const placeholder = getCommentPlaceholder(status, currentUserRole);
+  const effectiveDeadline = getEffectiveDeadline(task);
+
+  // Deadline awareness
+  const deadlinePassed = effectiveDeadline ? isAfter(new Date(), new Date(effectiveDeadline)) : false;
+  const daysUntilDeadline = effectiveDeadline ? differenceInDays(new Date(effectiveDeadline), new Date()) : null;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -149,13 +165,11 @@ const TaskTimeline = ({
     }
   }, [entries.length]);
 
-  // Mandatory rating: auto-open non-dismissable dialog when completed + requestor
+  // Mandatory rating
   const isMandatoryRating = status === "completed" && currentUserRole === "requestor";
 
   useEffect(() => {
-    if (isMandatoryRating) {
-      setShowRatingDialog(true);
-    }
+    if (isMandatoryRating) setShowRatingDialog(true);
   }, [isMandatoryRating]);
 
   useEffect(() => {
@@ -184,8 +198,15 @@ const TaskTimeline = ({
         size: file.size,
         type: file.type,
       };
-      // For images, create a preview data URL
       if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          attachment.dataUrl = ev.target?.result as string;
+          setAttachedFiles(prev => [...prev]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // For non-image files, create a data URL too for download
         const reader = new FileReader();
         reader.onload = (ev) => {
           attachment.dataUrl = ev.target?.result as string;
@@ -215,6 +236,11 @@ const TaskTimeline = ({
       message = message ? `${message}\n\n${fileList}` : fileList;
     }
 
+    // Store attachment data in metadata for later preview/download
+    const attachmentData: FileAttachmentData[] = attachedFiles.map(f => ({
+      name: f.name, size: f.size, type: f.type, dataUrl: f.dataUrl,
+    }));
+
     const newEntry: TimelineEntry = {
       id: generateEntryId(),
       taskId: task.id,
@@ -224,11 +250,11 @@ const TaskTimeline = ({
       timestamp: new Date().toISOString(),
       systemGenerated: false,
       entryType: "comment",
+      metadata: attachmentData.length > 0 ? { attachments: attachmentData } : undefined,
     };
 
     const newEntries = [newEntry];
 
-    // If committed + acceptor's first comment → transition to in_progress
     if (status === "committed" && currentUserRole === "acceptor") {
       const systemMsg = createSystemEntry(
         task.id,
@@ -346,7 +372,6 @@ const TaskTimeline = ({
     setShowForceCloseDialog(false);
     notifyForceCloseRequested(task);
 
-    // Store request in admin queue
     saveForceCloseRequest({
       id: `fcr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       taskId: task.id,
@@ -388,6 +413,22 @@ const TaskTimeline = ({
     onStatusChange("closed", [closeEntry]);
   };
 
+  // ── Deadline extension ────────────────────────────────────────────────
+
+  const handleExtendDeadline = () => {
+    if (!extendDate) return;
+    const newDeadline = format(extendDate, "yyyy-MM-dd");
+    const entry = createSystemEntry(
+      task.id,
+      `📅 Deadline extended by Requestor (${currentUserName}) to ${format(extendDate, "MMMM do, yyyy")}`,
+      "status_change"
+    );
+    setShowExtendDialog(false);
+    setExtendDate(undefined);
+    onAddEntry([entry]);
+    onDeadlineExtend?.(newDeadline);
+  };
+
   // ── Rating submission ──────────────────────────────────────────────────
 
   const handleSubmitRating = () => {
@@ -410,17 +451,29 @@ const TaskTimeline = ({
     onStatusChange("closed", [ratingEntry, closeEntry]);
   };
 
+  // ── Download attachment ────────────────────────────────────────────────
+
+  const downloadAttachment = (att: FileAttachmentData) => {
+    if (!att.dataUrl) return;
+    const link = document.createElement("a");
+    link.href = att.dataUrl;
+    link.download = att.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // ── Render timeline entry ──────────────────────────────────────────────
 
   const renderEntry = (entry: TimelineEntry) => {
     const isSystem = entry.systemGenerated;
     const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
 
-    // Check for file attachments in message
     const hasAttachments = entry.message.includes("📎 ");
     const messageLines = entry.message.split("\n");
     const textLines = messageLines.filter(l => !l.startsWith("📎 "));
     const attachmentLines = messageLines.filter(l => l.startsWith("📎 "));
+    const attachmentData = entry.metadata?.attachments || [];
 
     if (isSystem) {
       return (
@@ -460,7 +513,43 @@ const TaskTimeline = ({
             {textLines.filter(Boolean).length > 0 && (
               <p className="text-sm text-foreground whitespace-pre-wrap">{textLines.join("\n").trim()}</p>
             )}
-            {attachmentLines.length > 0 && (
+            {/* Render attachments with preview/download */}
+            {attachmentData.length > 0 ? (
+              <div className={`${textLines.filter(Boolean).length > 0 ? "mt-2 pt-2 border-t border-border" : ""} space-y-2`}>
+                {attachmentData.map((att, i) => (
+                  <div key={i} className="space-y-1">
+                    {att.type.startsWith("image/") && att.dataUrl && (
+                      <img
+                        src={att.dataUrl}
+                        alt={att.name}
+                        className="max-w-[200px] max-h-[150px] rounded-md border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setPreviewImage(att.dataUrl!)}
+                      />
+                    )}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Paperclip className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{att.name} ({formatFileSize(att.size)})</span>
+                      {att.dataUrl && (
+                        <button
+                          onClick={() => downloadAttachment(att)}
+                          className="flex items-center gap-0.5 text-primary hover:underline shrink-0"
+                        >
+                          <Download className="h-3 w-3" /> Download
+                        </button>
+                      )}
+                      {att.type.startsWith("image/") && att.dataUrl && (
+                        <button
+                          onClick={() => setPreviewImage(att.dataUrl!)}
+                          className="flex items-center gap-0.5 text-primary hover:underline shrink-0"
+                        >
+                          <Eye className="h-3 w-3" /> Preview
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : attachmentLines.length > 0 ? (
               <div className={`${textLines.filter(Boolean).length > 0 ? "mt-2 pt-2 border-t border-border" : ""} space-y-1`}>
                 {attachmentLines.map((line, i) => (
                   <div key={i} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -469,7 +558,7 @@ const TaskTimeline = ({
                   </div>
                 ))}
               </div>
-            )}
+            ) : null}
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
             {format(new Date(entry.timestamp), "MMM d, yyyy h:mm a")}
@@ -517,41 +606,47 @@ const TaskTimeline = ({
       }
     }
 
-    // Done: requestor can accept or dispute
+    // Done: requestor can accept or dispute (but NOT if DSP4 already resolved — no more disputes)
     if (status === "done" && currentUserRole === "requestor") {
       actions.push(
         <Button key="accept-work" size="sm" onClick={handleAcceptWork} className="gap-1.5">
           <CheckCircle2 className="h-3.5 w-3.5" /> Accept Work
-        </Button>,
-        <Button
-          key="dispute"
-          variant="outline"
-          size="sm"
-          onClick={() => setShowDisputeDialog(true)}
-          disabled={(task.disputeCount || 0) >= MAX_DISPUTES}
-          className="gap-1.5 text-destructive border-destructive/30"
-        >
-          <AlertTriangle className="h-3.5 w-3.5" />
-          {(task.disputeCount || 0) >= MAX_DISPUTES ? "Max Disputes Reached" : "Raise Dispute"}
         </Button>
       );
+      // Block disputes if DSP4 was already hit (disputeCount >= MAX_DISPUTES)
+      if ((task.disputeCount || 0) < MAX_DISPUTES) {
+        actions.push(
+          <Button
+            key="dispute"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDisputeDialog(true)}
+            className="gap-1.5 text-destructive border-destructive/30"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
+          </Button>
+        );
+      }
     }
 
-    // Disputed: acceptor can resubmit fix (only if NOT escalated / DSP4)
+    // Disputed: acceptor can resubmit fix if NOT escalated OR if DSP4 resolved valid
     const disputeIsEscalated = isEscalated(task.disputeCount || 0);
 
-    if (status === "disputed" && currentUserRole === "acceptor" && !disputeIsEscalated) {
-      actions.push(
-        <Button
-          key="resubmit"
-          size="sm"
-          disabled={!commentText.trim()}
-          onClick={handleResubmitFix}
-          className="gap-1.5"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" /> Submit Fix & Move to Done
-        </Button>
-      );
+    if (status === "disputed" && currentUserRole === "acceptor") {
+      // Allow if not escalated, OR if DSP4 resolved valid
+      if (!disputeIsEscalated || task.dsp4ResolvedValid) {
+        actions.push(
+          <Button
+            key="resubmit"
+            size="sm"
+            disabled={!commentText.trim()}
+            onClick={handleResubmitFix}
+            className="gap-1.5"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" /> Submit Fix & Move to Done
+          </Button>
+        );
+      }
     }
 
     // Escalated dispute (DSP4): admin-only controls
@@ -574,6 +669,15 @@ const TaskTimeline = ({
           className="gap-1.5"
         >
           <XCircle className="h-3.5 w-3.5" /> Force-Close Task
+        </Button>
+      );
+    }
+
+    // Deadline extension: requestor can extend if deadline has passed (in_progress or committed)
+    if (deadlinePassed && currentUserRole === "requestor" && ["committed", "in_progress", "done", "disputed"].includes(status)) {
+      actions.push(
+        <Button key="extend" variant="outline" size="sm" onClick={() => setShowExtendDialog(true)} className="gap-1.5">
+          <CalendarIcon className="h-3.5 w-3.5" /> Extend Deadline
         </Button>
       );
     }
@@ -606,6 +710,50 @@ const TaskTimeline = ({
         </Badge>
       </div>
 
+      {/* Deadline banner for acceptor */}
+      {currentUserRole === "acceptor" && effectiveDeadline && !["closed", "force_closed", "completed"].includes(status) && (
+        <div className={cn(
+          "flex items-center gap-2 mx-4 mt-3 rounded-lg border p-3 text-sm font-medium",
+          deadlinePassed
+            ? "bg-destructive/10 border-destructive/20 text-destructive"
+            : daysUntilDeadline !== null && daysUntilDeadline <= 3
+            ? "bg-[hsl(35,90%,50%)]/10 border-[hsl(35,90%,50%)]/20 text-[hsl(35,90%,50%)]"
+            : "bg-primary/10 border-primary/20 text-primary"
+        )}>
+          <Clock className="h-4 w-4 shrink-0" />
+          <div>
+            <span className="font-bold">Deadline: {format(new Date(effectiveDeadline), "MMMM do, yyyy")}</span>
+            {task.extendedDeadline && <span className="ml-1 text-xs">(Extended)</span>}
+            {deadlinePassed && <span className="ml-2">⚠️ Deadline has passed!</span>}
+            {!deadlinePassed && daysUntilDeadline !== null && daysUntilDeadline <= 3 && (
+              <span className="ml-2">⏰ {daysUntilDeadline} day{daysUntilDeadline !== 1 ? "s" : ""} remaining</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Deadline reminder for requestor */}
+      {currentUserRole === "requestor" && effectiveDeadline && !["closed", "force_closed", "open"].includes(status) && (
+        <div className={cn(
+          "flex items-center gap-2 mx-4 mt-3 rounded-lg border p-3 text-sm",
+          deadlinePassed
+            ? "bg-destructive/10 border-destructive/20 text-destructive"
+            : daysUntilDeadline !== null && daysUntilDeadline <= 3
+            ? "bg-[hsl(35,90%,50%)]/10 border-[hsl(35,90%,50%)]/20 text-[hsl(35,90%,50%)]"
+            : "bg-muted border-border text-muted-foreground"
+        )}>
+          <CalendarIcon className="h-4 w-4 shrink-0" />
+          <div>
+            <span>Deadline: <strong>{format(new Date(effectiveDeadline), "MMMM do, yyyy")}</strong></span>
+            {task.extendedDeadline && <span className="ml-1 text-xs">(Extended)</span>}
+            {deadlinePassed && <span className="ml-2 font-medium">⚠️ Deadline has passed. You can extend it.</span>}
+            {!deadlinePassed && daysUntilDeadline !== null && daysUntilDeadline <= 3 && (
+              <span className="ml-2">⏰ {daysUntilDeadline} day{daysUntilDeadline !== 1 ? "s" : ""} remaining — review approaching</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Status banner */}
       {banner && (
         <div className={`flex items-start gap-2 mx-4 mt-3 rounded-lg border p-3 text-sm ${BANNER_STYLES[banner.variant]}`}>
@@ -628,10 +776,15 @@ const TaskTimeline = ({
           <Shield className="h-4 w-4 shrink-0 mt-0.5" />
           <div>
             <span className="font-semibold">Escalated dispute — admin review in progress.</span>
-            {currentUserRole === "acceptor" && (
+            {task.dsp4ResolvedValid && (
+              <span className="block mt-1 text-xs font-medium">
+                ✅ Admin resolved as VALID. Acceptor: please complete the work and mark as Done.
+              </span>
+            )}
+            {!task.dsp4ResolvedValid && currentUserRole === "acceptor" && (
               <span className="block mt-1 text-xs">You may add comments only. Status changes are restricted to admin.</span>
             )}
-            {currentUserRole === "requestor" && (
+            {!task.dsp4ResolvedValid && currentUserRole === "requestor" && (
               <span className="block mt-1 text-xs">Awaiting admin resolution. You may add comments.</span>
             )}
           </div>
@@ -661,13 +814,17 @@ const TaskTimeline = ({
       {/* Comment composer */}
       {status !== "closed" && status !== "force_closed" && status !== "completed" && status !== "open" && (
         <div className="border-t border-border p-4">
-          {/* Attached files preview */}
           {attachedFiles.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-3">
               {attachedFiles.map((f, i) => (
                 <div key={i} className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">
                   {f.type.startsWith("image/") ? (
-                    <ImageIcon className="h-3 w-3 text-primary shrink-0" />
+                    <>
+                      {f.dataUrl && (
+                        <img src={f.dataUrl} alt={f.name} className="h-8 w-8 rounded object-cover" />
+                      )}
+                      <ImageIcon className="h-3 w-3 text-primary shrink-0" />
+                    </>
                   ) : (
                     <FileIcon className="h-3 w-3 text-muted-foreground shrink-0" />
                   )}
@@ -760,16 +917,11 @@ const TaskTimeline = ({
               {(task.disputeCount || 0) + 1 >= MAX_DISPUTES
                 ? `This will be Dispute #${(task.disputeCount || 0) + 1} (ESCALATED). Admin review will be required.`
                 : `This will create Dispute #${(task.disputeCount || 0) + 1}/${MAX_DISPUTES}. The acceptor will be notified and can submit fixes.`}
-              {(task.disputeCount || 0) >= MAX_DISPUTES && " Maximum disputes reached for this task."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowDisputeDialog(false)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={handleRaiseDispute}
-              disabled={(task.disputeCount || 0) >= MAX_DISPUTES}
-            >
+            <Button variant="destructive" onClick={handleRaiseDispute}>
               Confirm Dispute
             </Button>
           </DialogFooter>
@@ -816,6 +968,47 @@ const TaskTimeline = ({
               {isEscalated(task.disputeCount || 0) && currentUserRole === "admin" ? "Force-Close Now" : "Submit Request"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Extend deadline dialog */}
+      <Dialog open={showExtendDialog} onOpenChange={setShowExtendDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5 text-primary" /> Extend Deadline
+            </DialogTitle>
+            <DialogDescription>
+              Select a new deadline. The original deadline ({task.deadline ? format(new Date(task.deadline), "MMM d, yyyy") : "—"}) will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center py-2">
+            <Calendar
+              mode="single"
+              selected={extendDate}
+              onSelect={setExtendDate}
+              disabled={(date) => isBefore(date, addDays(new Date(), 1))}
+              className="rounded-md border"
+            />
+          </div>
+          {extendDate && (
+            <p className="text-sm text-center text-foreground">
+              New deadline: <strong>{format(extendDate, "MMMM do, yyyy")}</strong>
+            </p>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowExtendDialog(false)}>Cancel</Button>
+            <Button disabled={!extendDate} onClick={handleExtendDeadline}>Confirm Extension</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image preview dialog */}
+      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+        <DialogContent className="sm:max-w-2xl p-2">
+          {previewImage && (
+            <img src={previewImage} alt="Preview" className="w-full h-auto rounded-lg" />
+          )}
         </DialogContent>
       </Dialog>
 

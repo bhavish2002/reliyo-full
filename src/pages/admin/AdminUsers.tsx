@@ -13,24 +13,11 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import AdminLayout from "@/components/AdminLayout";
 import { Search, Flag, Ban, AlertTriangle } from "lucide-react";
-import { getAllPlatformUsers, getAllPlatformTasks, type PlatformUser } from "@/lib/adminData";
+import { getAllPlatformUsers, getAllPlatformTasks, getSuspendedUsers, suspendUserWithPhone, type PlatformUser } from "@/lib/adminData";
 import { toast } from "@/hooks/use-toast";
+import { TEST_CREDENTIALS } from "@/lib/auth";
 
 const ACTIVE_STATUSES = ["committed", "in_progress", "done", "disputed"];
-
-function getSuspendedUsers(): Record<string, { reason: string; suspendedAt: string }> {
-  try {
-    return JSON.parse(localStorage.getItem("reliyo_suspended_users") || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function suspendUser(userId: string, reason: string) {
-  const suspended = getSuspendedUsers();
-  suspended[userId] = { reason, suspendedAt: new Date().toISOString() };
-  localStorage.setItem("reliyo_suspended_users", JSON.stringify(suspended));
-}
 
 function getUserOnboardDate(name: string): string {
   try {
@@ -78,6 +65,11 @@ function hasActiveTasks(name: string): boolean {
   );
 }
 
+function getUserPhone(userId: string): string | undefined {
+  const cred = TEST_CREDENTIALS.find(c => c.user.id === userId);
+  return cred?.phone;
+}
+
 const AdminUsers = () => {
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState(() => getAllPlatformUsers());
@@ -110,11 +102,12 @@ const AdminUsers = () => {
       return;
     }
 
-    suspendUser(suspendDialog.id, suspendReason.trim());
+    const phone = getUserPhone(suspendDialog.id);
+    suspendUserWithPhone(suspendDialog.id, suspendReason.trim(), phone);
     setSuspendedMap(getSuspendedUsers());
     setSuspendDialog(null);
     setSuspendReason("");
-    toast({ title: "User Suspended", description: `${suspendDialog.name} has been suspended.` });
+    toast({ title: "User Suspended", description: `${suspendDialog.name} has been suspended and cannot log in again.` });
   };
 
   return (
@@ -136,7 +129,6 @@ const AdminUsers = () => {
           <TableHeader>
             <TableRow>
               <TableHead className="text-xs">User</TableHead>
-              <TableHead className="text-xs">Role</TableHead>
               <TableHead className="text-xs text-center">Tasks Created</TableHead>
               <TableHead className="text-xs text-center">Tasks Accepted</TableHead>
               <TableHead className="text-xs text-center">Onboarded On</TableHead>
@@ -147,7 +139,7 @@ const AdminUsers = () => {
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No users found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No users found</TableCell></TableRow>
             ) : filtered.map((u) => {
               const isSuspended = !!suspendedMap[u.id];
               return (
@@ -167,9 +159,6 @@ const AdminUsers = () => {
                         <p className="text-xs text-muted-foreground">{u.email}</p>
                       </div>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">{u.role}</Badge>
                   </TableCell>
                   <TableCell className="text-center text-sm">{u.tasksCreated}</TableCell>
                   <TableCell className="text-center text-sm">{u.tasksAccepted}</TableCell>
@@ -213,7 +202,7 @@ const AdminUsers = () => {
               <AlertTriangle className="h-5 w-5 text-destructive" /> Suspend User
             </DialogTitle>
             <DialogDescription>
-              Suspend {suspendDialog?.name}. They will not be able to log in again using the same phone number.
+              Suspend {suspendDialog?.name}. They will not be able to log in again using the same phone number or create/accept any tasks.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">

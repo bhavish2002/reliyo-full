@@ -16,7 +16,6 @@ export function getAllPlatformTasks(): Task[] {
     const created = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
     const map = new Map<string, Task>();
-    // Merge — prefer accepted store for status (more advanced)
     [...created, ...accepted].forEach((t) => {
       const existing = map.get(t.id);
       if (!existing) {
@@ -52,6 +51,7 @@ export interface PlatformUser {
 export function getAllPlatformUsers(): PlatformUser[] {
   const tasks = getAllPlatformTasks();
   const userMap = new Map<string, PlatformUser>();
+  const suspendedMap = getSuspendedUsers();
 
   // Seed from test credentials
   TEST_CREDENTIALS.forEach((c) => {
@@ -63,7 +63,7 @@ export function getAllPlatformUsers(): PlatformUser[] {
         role: c.user.role === "requestor" ? "Requestor" : "Acceptor",
         tasksCreated: 0,
         tasksAccepted: 0,
-        status: "active",
+        status: suspendedMap[c.user.id] ? "suspended" : "active",
         flagged: false,
       });
     }
@@ -83,6 +83,7 @@ export function getAllPlatformUsers(): PlatformUser[] {
         flagged: false,
       };
       u.tasksCreated += 1;
+      if (suspendedMap[u.id]) u.status = "suspended";
       userMap.set(t.createdBy, u);
     }
     if (t.acceptedBy) {
@@ -97,11 +98,56 @@ export function getAllPlatformUsers(): PlatformUser[] {
         flagged: false,
       };
       u.tasksAccepted += 1;
+      if (suspendedMap[u.id]) u.status = "suspended";
       userMap.set(t.acceptedBy, u);
     }
   });
 
   return Array.from(userMap.values());
+}
+
+// ── Suspended Users ─────────────────────────────────────────────────────────
+
+export function getSuspendedUsers(): Record<string, { reason: string; suspendedAt: string }> {
+  try {
+    return JSON.parse(localStorage.getItem("reliyo_suspended_users") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+export function suspendUser(userId: string, reason: string): void {
+  const suspended = getSuspendedUsers();
+  suspended[userId] = { reason, suspendedAt: new Date().toISOString() };
+  localStorage.setItem("reliyo_suspended_users", JSON.stringify(suspended));
+}
+
+export function isUserSuspended(userId: string): boolean {
+  return !!getSuspendedUsers()[userId];
+}
+
+export function isPhoneSuspended(phone: string): boolean {
+  // Check if any suspended user has this phone
+  const suspended = getSuspendedUsers();
+  try {
+    const suspendedPhones = JSON.parse(localStorage.getItem("reliyo_suspended_phones") || "[]") as string[];
+    return suspendedPhones.includes(phone);
+  } catch {
+    return false;
+  }
+}
+
+export function suspendUserWithPhone(userId: string, reason: string, phone?: string): void {
+  suspendUser(userId, reason);
+  if (phone) {
+    try {
+      const phones = JSON.parse(localStorage.getItem("reliyo_suspended_phones") || "[]") as string[];
+      if (!phones.includes(phone)) {
+        phones.push(phone);
+        localStorage.setItem("reliyo_suspended_phones", JSON.stringify(phones));
+      }
+    } catch {}
+  }
 }
 
 // ── Disputes (from tasks that have disputes array or disputeCount) ───────────
@@ -125,8 +171,8 @@ export interface AdminDispute {
   acceptor: string;
   escalated: boolean;
   createdAt: string;
-  dsp4Status: Dsp4Status; // only meaningful for escalated
-  task: Task; // reference for navigation/review
+  dsp4Status: Dsp4Status;
+  task: Task;
 }
 
 /** Retrieve or initialize the DSP4 resolution status map from localStorage */
@@ -144,18 +190,21 @@ export function saveDsp4Status(disputeId: string, status: Dsp4Status): void {
   localStorage.setItem("reliyo_dsp4_status", JSON.stringify(map));
 }
 
+export function getDsp4StatusForDispute(disputeId: string): Dsp4Status {
+  const map = getDsp4StatusMap();
+  return map[disputeId] || "open";
+}
+
 export function getAllDisputes(): AdminDispute[] {
   const tasks = getAllPlatformTasks();
   const dsp4Map = getDsp4StatusMap();
   const disputes: AdminDispute[] = [];
-  // Track seen task IDs to prevent duplicate dispute entries per task
   const seenTaskIds = new Set<string>();
 
   tasks.forEach((t) => {
     if (seenTaskIds.has(t.id)) return;
 
     if (t.disputes && t.disputes.length > 0) {
-      // Deduplicate: show only the latest (highest) dispute level per task
       const latestDispute = t.disputes.reduce((latest, d) =>
         d.number > latest.number ? d : latest, t.disputes[0]);
       seenTaskIds.add(t.id);
@@ -199,6 +248,8 @@ export function getAllDisputes(): AdminDispute[] {
 
 export interface RevenueStats {
   totalRevenue: number;
+  platformFeeEarnings: number;
+  commissionFeeEarnings: number;
   totalEscrowLocked: number;
   totalEscrowReleased: number;
   monthlyRevenue: { month: string; revenue: number; fees: number }[];
@@ -210,7 +261,8 @@ export function getRevenueStats(): RevenueStats {
   const fee = PLATFORM_FEE_PERCENT / 100;
   const deposit = TRUST_DEPOSIT_PERCENT / 100;
 
-  let totalRevenue = 0;
+  let platformFeeEarnings = 0;
+  let commissionFeeEarnings = 0;
   let totalEscrowLocked = 0;
   let totalEscrowReleased = 0;
 
@@ -224,32 +276,31 @@ export function getRevenueStats(): RevenueStats {
 
     const bucket = monthMap.get(createdMonth) || { revenue: 0, fees: 0, locked: 0, released: 0 };
 
-    // All tasks with escrow locked (any status past open)
     if (["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(t.status)) {
       bucket.locked += reward + trustDep;
       totalEscrowLocked += reward + trustDep;
     }
 
-    // Closed tasks: revenue realized
     if (t.status === "closed") {
       bucket.revenue += reward;
       bucket.fees += plFee;
       bucket.released += reward + trustDep;
-      totalRevenue += plFee;
+      platformFeeEarnings += plFee;
       totalEscrowReleased += reward + trustDep;
     }
 
-    // Force-closed tasks: 3% penalty from trust deposit
     if (t.status === "force_closed") {
-      const penaltyFee = parseFloat((trustDep * 0.03 / 0.10).toFixed(2)); // 3% of reward
+      const penaltyFee = parseFloat((reward * 0.03).toFixed(2)); // 3% of reward as commission
       bucket.fees += penaltyFee;
       bucket.released += reward + trustDep;
-      totalRevenue += penaltyFee;
+      commissionFeeEarnings += penaltyFee;
       totalEscrowReleased += reward + trustDep;
     }
 
     monthMap.set(createdMonth, bucket);
   });
+
+  const totalRevenue = platformFeeEarnings + commissionFeeEarnings;
 
   const monthlyRevenue = Array.from(monthMap.entries()).map(([month, d]) => ({
     month, revenue: d.revenue, fees: d.fees,
@@ -259,7 +310,7 @@ export function getRevenueStats(): RevenueStats {
     month, locked: d.locked, released: d.released,
   }));
 
-  return { totalRevenue, totalEscrowLocked, totalEscrowReleased, monthlyRevenue, monthlyEscrow };
+  return { totalRevenue, platformFeeEarnings, commissionFeeEarnings, totalEscrowLocked, totalEscrowReleased, monthlyRevenue, monthlyEscrow };
 }
 
 // ── Stats summary ───────────────────────────────────────────────────────────
@@ -276,8 +327,7 @@ export function getAdminStats() {
   }, {} as Record<TaskStatus, number>);
 
   const activeDisputes = disputes.filter((d) => {
-    if (d.escalated) return d.dsp4Status === "open";
-    // Non-escalated: task still in disputed state
+    if (d.escalated) return d.dsp4Status === "open" || d.dsp4Status === "resolved_valid";
     return d.task.status === "disputed";
   });
 
@@ -296,14 +346,14 @@ export function getAdminStats() {
 
 // ── Persist task status change from admin ───────────────────────────────────
 
-export function adminUpdateTaskStatus(taskId: string, newStatus: TaskStatus): void {
+export function adminUpdateTaskStatus(taskId: string, newStatus: TaskStatus, extraFields?: Partial<Task>): void {
   const stores = ["reliyo_tasks", "reliyo_accepted_tasks"];
   stores.forEach((key) => {
     try {
       const tasks = JSON.parse(localStorage.getItem(key) || "[]") as Task[];
       const idx = tasks.findIndex((t) => t.id === taskId);
       if (idx >= 0) {
-        tasks[idx] = { ...tasks[idx], status: newStatus, statusEnteredAt: new Date().toISOString() };
+        tasks[idx] = { ...tasks[idx], status: newStatus, statusEnteredAt: new Date().toISOString(), ...extraFields };
         localStorage.setItem(key, JSON.stringify(tasks));
       }
     } catch { /* skip */ }
@@ -352,7 +402,6 @@ const FORCE_CLOSE_KEY = "reliyo_force_close_requests";
 export function getAllForceCloseRequests(): ForceCloseRequest[] {
   try {
     const requests = JSON.parse(localStorage.getItem(FORCE_CLOSE_KEY) || "[]") as ForceCloseRequest[];
-    // Refresh task references with latest data
     const tasks = getAllPlatformTasks();
     return requests.map((r) => {
       const latestTask = tasks.find((t) => t.id === r.taskId);
@@ -383,15 +432,13 @@ export function resolveForceCloseRequest(requestId: string, resolution: "approve
     const req = requests[idx];
 
     if (resolution === "approved") {
-      // Move task to force_closed
       adminUpdateTaskStatus(req.taskId, "force_closed");
       adminAddTimelineEntry(
         req.taskId,
-        `🚫 ADMIN: Force-close request APPROVED. Task moved to Force Closed. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation.`,
+        `🚫 ADMIN: Force-close request APPROVED. Task moved to Force Closed. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation. ${comment || ""}`,
         "admin_action",
         { fromStatus: req.taskStatusAtRequest, toStatus: "force_closed" }
       );
-      // Notify
       _notifyForceClosed(req.task);
     } else {
       adminAddTimelineEntry(
