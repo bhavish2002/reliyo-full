@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
-import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2, Clock } from "lucide-react";
+import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2, Clock, CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   type Task, type TaskStatus, type TimelineEntry, type AuthorRole,
   STATUS_COLORS, STATUS_LABELS,
   PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, QUIT_GRACE_HOURS,
+  getEffectiveDeadline,
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
 import { checkInactivity, sendStrikeNotifications } from "@/lib/inactivity";
@@ -67,7 +68,6 @@ const DEMO_BROWSE_TASKS: Task[] = [
   },
 ];
 
-// ── Demo tasks with various statuses to test the full lifecycle ──────────────
 const DEMO_CREATED_TASKS: Task[] = [
   {
     id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office",
@@ -92,7 +92,6 @@ const DEMO_CREATED_TASKS: Task[] = [
   },
 ];
 
-// ── Demo timeline entries ────────────────────────────────────────────────────
 const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
   demo2: [
     { id: "tl1", taskId: "demo2", author: "System", authorRole: "system", message: "Task created and reward locked in escrow.", timestamp: "2026-02-08T10:00:00Z", systemGenerated: true, entryType: "escrow" },
@@ -133,18 +132,15 @@ const TaskDetail = () => {
 
   const CURRENT_USER = currentUser?.name || "Guest";
 
-  // Determine user's role for this task
   const getUserRole = (t: Task): AuthorRole => {
     if (t.createdBy === CURRENT_USER) return "requestor";
     if (t.acceptedBy === CURRENT_USER) return "acceptor";
-    // Check if current user accepted this task in localStorage
     const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
     if (accepted.some((a) => a.id === t.id && (a.acceptedBy === CURRENT_USER || !a.acceptedBy))) return "acceptor";
-    return "requestor"; // default for viewing
+    return "requestor";
   };
 
   useEffect(() => {
-    // Look up task from multiple sources - prefer reliyo_tasks as canonical source
     const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
     
@@ -153,14 +149,11 @@ const TaskDetail = () => {
     if (!found) found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
     if (!found) found = DEMO_CREATED_TASKS.find((t) => t.id === id);
     
-    // If found in both reliyo_tasks and reliyo_accepted_tasks, merge to get latest status
     if (found) {
       const fromTasks = storedTasks.find((t) => t.id === id);
       const fromAccepted = acceptedTasks.find((t) => t.id === id);
       if (fromTasks && fromAccepted) {
-        // Use the one with more advanced status, or the one that has acceptedBy
         found = { ...fromTasks, ...fromAccepted, status: fromTasks.status === fromAccepted.status ? fromTasks.status : fromAccepted.status };
-        // Prefer the status that's further along
         const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"];
         const tasksIdx = statusOrder.indexOf(fromTasks.status as TaskStatus);
         const acceptedIdx = statusOrder.indexOf(fromAccepted.status as TaskStatus);
@@ -169,7 +162,6 @@ const TaskDetail = () => {
       setTask(found);
     }
 
-    // Load timeline entries
     const storedTimeline = JSON.parse(localStorage.getItem(`reliyo_timeline_${id}`) || "null");
     if (storedTimeline) {
       setTimelineEntries(storedTimeline);
@@ -205,8 +197,6 @@ const TaskDetail = () => {
       const updated = [...timelineEntries, ...inactivity.pendingEntries];
       setTimelineEntries(updated);
       localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(updated));
-
-      // Send notifications + email for each new strike
       sendStrikeNotifications(task, inactivity.pendingEntries, currentUser?.email);
     }
 
@@ -229,7 +219,6 @@ const TaskDetail = () => {
       const closedTask: Task = { ...task, status: "closed" };
       setTask(closedTask);
 
-      // Persist to both stores
       const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
       const idx = storedTasks.findIndex((t) => t.id === task.id);
       if (idx >= 0) { storedTasks[idx] = { ...storedTasks[idx], status: "closed" }; localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks)); }
@@ -242,7 +231,6 @@ const TaskDetail = () => {
     }
   }, [task?.id, task?.status]);
 
-  // Compute inactivity state for banner display
   const inactivityState = task ? checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries) : null;
 
   if (!task) {
@@ -264,11 +252,11 @@ const TaskDetail = () => {
   const isOwner = task.createdBy === CURRENT_USER;
   const userRole = getUserRole(task);
   const status = task.status as TaskStatus;
+  const effectiveDeadline = getEffectiveDeadline(task);
 
   const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
   const isAlreadyAccepted = acceptedTasks.some((t: any) => t.id === task.id);
 
-  // Can delete: only requestor, only open status, no acceptor yet
   const canDelete = isOwner && status === "open" && !task.acceptedBy;
 
   // ── Delete task handler ─────────────────────────────────────────────────────
@@ -337,7 +325,6 @@ const TaskDetail = () => {
     setTimelineEntries(updated);
     saveTimeline(updated);
 
-    // Update task status
     const updatedTask: Task = { ...task, status: newStatus, statusEnteredAt: new Date().toISOString() };
     if (newStatus === "disputed") {
       updatedTask.disputeCount = (task.disputeCount || 0) + 1;
@@ -349,8 +336,7 @@ const TaskDetail = () => {
     }
     setTask(updatedTask);
 
-    // *** CRITICAL: Persist to BOTH localStorage stores so both users see the change ***
-    const persistData = { status: newStatus, statusEnteredAt: updatedTask.statusEnteredAt, disputeCount: updatedTask.disputeCount, disputes: updatedTask.disputes };
+    const persistData = { status: newStatus, statusEnteredAt: updatedTask.statusEnteredAt, disputeCount: updatedTask.disputeCount, disputes: updatedTask.disputes, dsp4ResolvedValid: updatedTask.dsp4ResolvedValid };
     const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
     const taskIdx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (taskIdx >= 0) {
@@ -376,6 +362,29 @@ const TaskDetail = () => {
     setTask(updatedTask);
   };
 
+  const handleDeadlineExtend = (newDeadline: string) => {
+    const updatedTask = { ...task, extendedDeadline: newDeadline };
+    setTask(updatedTask);
+
+    // Persist to both stores
+    const stores = ["reliyo_tasks", "reliyo_accepted_tasks"];
+    stores.forEach((key) => {
+      try {
+        const tasks = JSON.parse(localStorage.getItem(key) || "[]") as Task[];
+        const idx = tasks.findIndex((t) => t.id === task.id);
+        if (idx >= 0) {
+          tasks[idx] = { ...tasks[idx], extendedDeadline: newDeadline };
+          localStorage.setItem(key, JSON.stringify(tasks));
+        }
+      } catch {}
+    });
+
+    toast({
+      title: "Deadline Extended",
+      description: `New deadline: ${format(new Date(newDeadline), "MMMM do, yyyy")}`,
+    });
+  };
+
   // ── Task lifecycle timeline (visual steps) ────────────────────────────────
 
   const lifecycleSteps = [
@@ -390,7 +399,6 @@ const TaskDetail = () => {
     { label: "Force Closed", filled: status === "force_closed" },
   ];
 
-  // Show timeline component when task has gone past open
   const showTimeline = isOwner
     ? ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status)
     : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status);
@@ -398,7 +406,6 @@ const TaskDetail = () => {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto">
-        {/* Back button */}
         <button
           onClick={() => navigate(-1)}
           className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -462,7 +469,15 @@ const TaskDetail = () => {
                   <div><p className="text-xs text-primary">Description</p><p className="font-medium">{task.description}</p></div>
                   <div><p className="text-xs text-primary">Manpower</p><p className="font-medium">{task.manpower}</p></div>
                   <div><p className="text-xs text-primary">Location</p><p className="font-medium">{task.location || "—"}</p></div>
-                  <div><p className="text-xs text-primary">Deadline</p><p className="font-medium">{task.deadline ? format(new Date(task.deadline), "MMMM do, yyyy") : "—"}</p></div>
+                  <div>
+                    <p className="text-xs text-primary">Deadline</p>
+                    <p className="font-medium">{task.deadline ? format(new Date(task.deadline), "MMMM do, yyyy") : "—"}</p>
+                    {task.extendedDeadline && (
+                      <p className="text-xs text-[hsl(35,90%,50%)] font-medium mt-0.5">
+                        Extended: {format(new Date(task.extendedDeadline), "MMMM do, yyyy")}
+                      </p>
+                    )}
+                  </div>
                   <div><p className="text-xs text-primary">Update Frequency</p><p className="font-medium">{task.updateFrequency || "—"}</p></div>
                   <div><p className="text-xs text-primary">Skills</p><p className="font-medium">{task.skills?.join(", ") || "—"}</p></div>
                   <div><p className="text-xs text-primary">Domain</p><p className="font-medium">{task.domain || "—"}</p></div>
@@ -501,6 +516,7 @@ const TaskDetail = () => {
                 onAddEntry={handleAddEntry}
                 onStatusChange={handleStatusChange}
                 onRatingSubmit={handleRatingSubmit}
+                onDeadlineExtend={handleDeadlineExtend}
               />
             )}
           </div>

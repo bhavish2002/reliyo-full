@@ -85,12 +85,10 @@ const Profile = () => {
   const [draft, setDraft] = useState(DEFAULT_PROFILE);
   const [settings, setSettings] = useState<UserSettings>(() => getUserSettings(userId));
 
-  // Apply theme on mount and when it changes
   useEffect(() => {
     applyTheme(settings.darkMode);
   }, [settings.darkMode]);
 
-  // Listen for system theme changes when mode is "system"
   useEffect(() => {
     if (settings.darkMode !== "system") return;
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
@@ -272,10 +270,9 @@ const Profile = () => {
                   <p className="text-xs text-muted-foreground">Choose your preferred appearance — applies instantly</p>
                 </div>
               </div>
-              <Select value={settings.darkMode} onValueChange={(v) => toggleSetting("darkMode", v as UserSettings["darkMode"])}>
+              <Select value={settings.darkMode === "system" ? "light" : settings.darkMode} onValueChange={(v) => toggleSetting("darkMode", v as UserSettings["darkMode"])}>
                 <SelectTrigger className="w-28 h-8 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="system">System</SelectItem>
                   <SelectItem value="light">Light</SelectItem>
                   <SelectItem value="dark">Dark</SelectItem>
                 </SelectContent>

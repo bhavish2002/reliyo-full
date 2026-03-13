@@ -13,12 +13,11 @@ import {
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from "recharts";
 import AdminLayout from "@/components/AdminLayout";
-import { DollarSign, TrendingUp, Wallet, RefreshCw, CalendarIcon, Percent, Coins } from "lucide-react";
+import { DollarSign, TrendingUp, Wallet, RefreshCw, CalendarIcon, Coins } from "lucide-react";
 import { getRevenueStats } from "@/lib/adminData";
 import { cn } from "@/lib/utils";
-import { format, subMonths, startOfMonth, startOfDay, endOfDay, isAfter, isBefore, parseISO } from "date-fns";
+import { format, subMonths, startOfMonth, startOfDay, endOfDay, isAfter, isBefore } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { PLATFORM_FEE_PERCENT } from "@/lib/taskTypes";
 
 type FilterMode = "6" | "3" | "custom";
 
@@ -57,7 +56,6 @@ const AdminRevenue = () => {
     };
   }, [filterMode, customRange]);
 
-  // Filter chart data by range
   const filteredMonthlyRevenue = useMemo(() => {
     return revenue.monthlyRevenue.filter(d => {
       const date = new Date(d.month + " 1");
@@ -72,15 +70,10 @@ const AdminRevenue = () => {
     });
   }, [revenue.monthlyEscrow, rangeStart, rangeEnd]);
 
-  // Compute commission fee (3% from force-closed trust deposits)
-  const commissionFee = useMemo(() => {
-    return parseFloat((revenue.totalRevenue * 0.3).toFixed(2)); // approximate
-  }, [revenue.totalRevenue]);
-
   const stats = [
-    { label: "Total Revenue", value: `₹${revenue.totalRevenue.toLocaleString()}`, icon: DollarSign, sub: "All platform earnings" },
-    { label: "Platform Fee", value: `${PLATFORM_FEE_PERCENT}%`, icon: Percent, sub: "Standard platform fee rate" },
-    { label: "Commission Fee", value: `₹${commissionFee.toLocaleString()}`, icon: Coins, sub: "From force-close penalties" },
+    { label: "Total Revenue", value: `₹${revenue.totalRevenue.toLocaleString()}`, icon: DollarSign, sub: "Platform Fee + Commission Fee" },
+    { label: "Platform Fee", value: `₹${revenue.platformFeeEarnings.toLocaleString()}`, icon: DollarSign, sub: "5% fee from closed tasks" },
+    { label: "Commission Fee", value: `₹${revenue.commissionFeeEarnings.toLocaleString()}`, icon: Coins, sub: "3% penalty from force-closures" },
     { label: "Escrow Locked", value: `₹${revenue.totalEscrowLocked.toLocaleString()}`, icon: Wallet, sub: "Currently held in escrow" },
     { label: "Escrow Released", value: `₹${revenue.totalEscrowReleased.toLocaleString()}`, icon: TrendingUp, sub: "Total released from escrow" },
   ];
