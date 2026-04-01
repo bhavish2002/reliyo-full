@@ -163,12 +163,8 @@ const PaymentGateway = () => {
           <div className="w-full rounded-xl bg-muted p-4 text-sm text-left space-y-2">
             <div className="flex justify-between"><span className="text-muted-foreground">Amount Paid</span><span className="font-semibold">{currencySymbol}{fmtMoney(amount)}</span></div>
             {!isAcceptFlow && (
-              <div className="flex justify-between"><span className="text-muted-foreground">Platform Fee</span><span className="font-semibold text-destructive">-{currencySymbol}{fmtMoney(platformFee)}</span></div>
-            )}
-            {!isAcceptFlow && (
-              <div className="flex justify-between font-semibold border-t border-border pt-2 mt-2">
-                <span>Worker Payout</span>
-                <span className="text-success">{currencySymbol}{fmtMoney(amount - platformFee)}</span>
+              <div className="flex justify-between text-muted-foreground text-xs pt-1">
+                <span>Platform fee will be deducted at payout</span>
               </div>
             )}
           </div>
