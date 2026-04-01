@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard,
-  Smartphone, Building2, Wallet, Lock, ShieldCheck,
+  Smartphone, Building2, Lock, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,7 +26,6 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   { id: "upi", label: "UPI", description: "Pay via Google Pay, PhonePe, Paytm, or any UPI app", icon: Smartphone },
   { id: "card", label: "Credit / Debit Card", description: "Visa, Mastercard, RuPay accepted", icon: CreditCard },
   { id: "netbanking", label: "Net Banking", description: "All major Indian banks supported", icon: Building2 },
-  { id: "wallet", label: "Wallet", description: "Paytm, Amazon Pay, Mobikwik & more", icon: Wallet },
 ];
 
 const PaymentGateway = () => {
@@ -51,7 +50,6 @@ const PaymentGateway = () => {
         upi: "success",
         card: "pending",
         netbanking: "failed",
-        wallet: "success",
       };
       const outcome = outcomeMap[selectedMethod] ?? "success";
       setStatus(outcome);

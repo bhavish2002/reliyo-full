@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Shield, Phone, Loader2, CheckCircle2, Info, AlertCircle } from "lucide-react";
 import { authenticateByPhone, setCurrentUser, getRedirectForRole } from "@/lib/auth";
+import { isPhoneSuspended } from "@/lib/adminData";
 import { toast } from "@/hooks/use-toast";
 import CountryCodeSelect from "@/components/CountryCodeSelect";
 import { getCountryByCode } from "@/lib/countries";
@@ -64,6 +65,13 @@ const SignIn = () => {
     setAccountError(null);
     setIsSubmitting(true);
     try {
+      // Check if phone is suspended
+      if (isPhoneSuspended(data.phone)) {
+        setAccountError("This account has been suspended due to policy violations. Contact support for details.");
+        setIsSubmitting(false);
+        return;
+      }
+
       // Check hardcoded test credentials first
       const testUser = authenticateByPhone(data.phone);
       if (testUser) {

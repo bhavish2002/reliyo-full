@@ -191,70 +191,70 @@ const AdminCloseRequests = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-3">
-            <div className="rounded-lg border bg-muted/40 p-4 text-sm space-y-3">
-              <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4 py-4">
+            <div className="rounded-xl border bg-muted/30 p-5 text-sm space-y-4">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Task</p>
-                  <p className="font-medium text-sm">{reviewReq?.taskTitle}</p>
+                  <p className="text-xs text-muted-foreground mb-1">Task</p>
+                  <p className="font-semibold text-sm">{reviewReq?.taskTitle}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Task Status</p>
-                  <p className="font-medium text-sm">{reviewReq ? STATUS_LABELS[reviewReq.taskStatusAtRequest as TaskStatus] || reviewReq.taskStatusAtRequest : ""}</p>
+                  <p className="text-xs text-muted-foreground mb-1">Task Status</p>
+                  <p className="font-semibold text-sm">{reviewReq ? STATUS_LABELS[reviewReq.taskStatusAtRequest as TaskStatus] || reviewReq.taskStatusAtRequest : ""}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Requestor</p>
-                  <p className="font-medium text-sm">{reviewReq?.requestor}</p>
+                  <p className="text-xs text-muted-foreground mb-1">Requestor</p>
+                  <p className="font-semibold text-sm">{reviewReq?.requestor}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Acceptor</p>
-                  <p className="font-medium text-sm">{reviewReq?.acceptor}</p>
+                  <p className="text-xs text-muted-foreground mb-1">Acceptor</p>
+                  <p className="font-semibold text-sm">{reviewReq?.acceptor}</p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground pt-1 border-t border-border">
                 Review the task details and activity before making a decision.
               </p>
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground mb-1.5">Admin Comment <span className="text-destructive">*</span></p>
+              <p className="text-sm font-semibold text-foreground mb-2">Admin Comment <span className="text-destructive">*</span></p>
               <Textarea
                 value={adminComment}
                 onChange={(e) => setAdminComment(e.target.value)}
                 placeholder="Enter your reasoning (mandatory)..."
-                className="min-h-[70px]"
+                className="min-h-[80px]"
               />
               {!adminComment.trim() && (
-                <p className="text-[10px] text-destructive mt-1 flex items-center gap-1">
+                <p className="text-[11px] text-destructive mt-1.5 flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" /> Comment is required to approve or reject
                 </p>
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3 pt-1">
               <Button
                 variant="outline"
-                className="w-full justify-start gap-2 h-auto py-3"
+                className="w-full justify-start gap-3 h-auto py-3.5 px-4"
                 disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleApprove(reviewReq)}
               >
-                <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
+                <CheckCircle2 className="h-5 w-5 text-[hsl(var(--success))] shrink-0" />
                 <div className="text-left">
-                  <p className="font-medium">Approve — Force Close</p>
-                  <p className="text-xs text-muted-foreground">Task moves to Force Closed. Reward refunded to requestor, trust deposit penalty applied.</p>
+                  <p className="font-semibold text-sm">Approve — Force Close</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Task moves to Force Closed. Reward refunded to requestor, trust deposit penalty applied.</p>
                 </div>
               </Button>
 
               <Button
                 variant="outline"
-                className="w-full justify-start gap-2 h-auto py-3"
+                className="w-full justify-start gap-3 h-auto py-3.5 px-4"
                 disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleReject(reviewReq)}
               >
-                <XCircle className="h-4 w-4 text-destructive" />
+                <XCircle className="h-5 w-5 text-destructive shrink-0" />
                 <div className="text-left">
-                  <p className="font-medium">Reject</p>
-                  <p className="text-xs text-muted-foreground">Task remains in its current status. Request dismissed.</p>
+                  <p className="font-semibold text-sm">Reject</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Task remains in its current status. Request dismissed.</p>
                 </div>
               </Button>
             </div>

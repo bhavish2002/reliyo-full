@@ -127,6 +127,18 @@ export function pushNotification(params: {
   // Idempotency check
   if (isDuplicate(existing, params.taskId, params.type)) return;
 
+  // Admin notifications should route to admin sections, not user task view
+  let ctaPath = `/task/${params.taskId}`;
+  if (params.target === "admin") {
+    if (params.type === "admin_force_close_request") {
+      ctaPath = "/admin/close-requests";
+    } else if (params.type === "admin_dispute_escalation") {
+      ctaPath = "/admin/disputes";
+    } else {
+      ctaPath = "/admin/all-tasks";
+    }
+  }
+
   const notification: AppNotification = {
     id: generateId(),
     taskId: params.taskId,
@@ -137,7 +149,7 @@ export function pushNotification(params: {
     target: params.target,
     title: params.title,
     message: params.message,
-    ctaPath: `/task/${params.taskId}`,
+    ctaPath,
     timestamp: new Date().toISOString(),
     read: false,
     flagged: false,

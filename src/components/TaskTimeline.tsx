@@ -608,23 +608,49 @@ const TaskTimeline = ({
 
     // Done: requestor can accept or dispute (but NOT if DSP4 already resolved — no more disputes)
     if (status === "done" && currentUserRole === "requestor") {
+      // If DSP4 was resolved valid, show different message — no dispute option
+      const isDsp4Resolved = (task.disputeCount || 0) >= MAX_DISPUTES;
+      
       actions.push(
         <Button key="accept-work" size="sm" onClick={handleAcceptWork} className="gap-1.5">
           <CheckCircle2 className="h-3.5 w-3.5" /> Accept Work
         </Button>
       );
       // Block disputes if DSP4 was already hit (disputeCount >= MAX_DISPUTES)
-      if ((task.disputeCount || 0) < MAX_DISPUTES) {
+      if (!isDsp4Resolved) {
+        // 48-hour cooldown: check last dispute timestamp
+        const lastDisputeEntry = [...entries].reverse().find(
+          e => e.entryType === "status_change" && e.metadata?.toStatus === "disputed"
+        );
+        const cooldownMs = 48 * 60 * 60 * 1000;
+        const lastDisputeTime = lastDisputeEntry ? new Date(lastDisputeEntry.timestamp).getTime() : 0;
+        const now = Date.now();
+        const cooldownRemaining = lastDisputeTime > 0 ? cooldownMs - (now - lastDisputeTime) : 0;
+        const isOnCooldown = cooldownRemaining > 0;
+        const hoursRemaining = Math.ceil(cooldownRemaining / (60 * 60 * 1000));
+
         actions.push(
-          <Button
-            key="dispute"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowDisputeDialog(true)}
-            className="gap-1.5 text-destructive border-destructive/30"
-          >
-            <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
-          </Button>
+          <div key="dispute-wrapper" className="relative group">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => !isOnCooldown && setShowDisputeDialog(true)}
+              disabled={isOnCooldown}
+              className={cn(
+                "gap-1.5",
+                isOnCooldown
+                  ? "opacity-50 cursor-not-allowed"
+                  : "text-destructive border-destructive/30"
+              )}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
+            </Button>
+            {isOnCooldown && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-md bg-foreground text-background text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                Cooldown: {hoursRemaining}h remaining before next dispute
+              </div>
+            )}
+          </div>
         );
       }
     }
