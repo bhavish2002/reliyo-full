@@ -88,9 +88,9 @@ const AdminNotifications = () => {
                       <p className="text-xs text-muted-foreground">{formatDate(n.timestamp)}</p>
                       <button
                         className="text-xs text-primary hover:underline flex items-center gap-1"
-                        onClick={(e) => { e.stopPropagation(); navigate(n.ctaPath); }}
+                        onClick={(e) => { e.stopPropagation(); navigate(n.ctaPath.startsWith("/admin") ? n.ctaPath : n.type.startsWith("admin_force_close") ? "/admin/close-requests" : n.type.startsWith("admin_dispute") ? "/admin/disputes" : "/admin/all-tasks"); }}
                       >
-                        View Task <ExternalLink className="h-3 w-3" />
+                        View <ExternalLink className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
