@@ -70,7 +70,7 @@ const AdminNotifications = () => {
               <Card
                 key={n.id}
                 className={`rounded-xl transition-colors cursor-pointer ${!n.read ? "border-primary/30 bg-primary/[0.02]" : ""} ${n.flagged ? "ring-1 ring-primary/40" : ""}`}
-                onClick={() => navigate(n.ctaPath)}
+                onClick={() => navigate(n.ctaPath.startsWith("/admin") ? n.ctaPath : n.type.startsWith("admin_force_close") ? "/admin/close-requests" : n.type.startsWith("admin_dispute") ? "/admin/disputes" : "/admin/all-tasks")}
               >
                 <div className="flex items-start gap-4 p-4">
                   <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${style.className}`}>
