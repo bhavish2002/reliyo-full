@@ -26,7 +26,6 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   { id: "upi", label: "UPI", description: "Pay via Google Pay, PhonePe, Paytm, or any UPI app", icon: Smartphone },
   { id: "card", label: "Credit / Debit Card", description: "Visa, Mastercard, RuPay accepted", icon: CreditCard },
   { id: "netbanking", label: "Net Banking", description: "All major Indian banks supported", icon: Building2 },
-  { id: "wallet", label: "Wallet", description: "Paytm, Amazon Pay, Mobikwik & more", icon: Wallet },
 ];
 
 const PaymentGateway = () => {

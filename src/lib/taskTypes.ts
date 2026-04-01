@@ -190,7 +190,7 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
     case "done":
       if (role === "requestor") {
         return {
-          message: "The acceptor has marked this task as done. Review the work and accept or raise a dispute.",
+          message: "The acceptor has marked this task as done. Please review the work.",
           variant: "info",
         };
       }

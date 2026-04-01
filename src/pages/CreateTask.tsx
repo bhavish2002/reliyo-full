@@ -530,7 +530,7 @@ const CreateTask = () => {
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span>Total Reward</span><span>{cs}{rewardNum.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{cs}{platformFee.toFixed(2)}</span></div>
+                <div className="flex justify-between text-muted-foreground"><span>Platform Fee</span><span className="text-xs italic">Deducted at payout</span></div>
               </div>
 
               <div className="mt-4 flex justify-between rounded-lg bg-muted p-3 font-semibold">
