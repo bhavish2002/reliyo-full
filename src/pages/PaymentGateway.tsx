@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard,
-  Smartphone, Building2, Wallet, Lock, ShieldCheck,
+  Smartphone, Building2, Lock, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
