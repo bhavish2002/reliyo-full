@@ -50,7 +50,6 @@ const PaymentGateway = () => {
         upi: "success",
         card: "pending",
         netbanking: "failed",
-        wallet: "success",
       };
       const outcome = outcomeMap[selectedMethod] ?? "success";
       setStatus(outcome);
