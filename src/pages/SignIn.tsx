@@ -65,6 +65,13 @@ const SignIn = () => {
     setAccountError(null);
     setIsSubmitting(true);
     try {
+      // Check if phone is suspended
+      if (isPhoneSuspended(data.phone)) {
+        setAccountError("This account has been suspended due to policy violations. Contact support for details.");
+        setIsSubmitting(false);
+        return;
+      }
+
       // Check hardcoded test credentials first
       const testUser = authenticateByPhone(data.phone);
       if (testUser) {
