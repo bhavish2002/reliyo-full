@@ -417,6 +417,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                       );
                     })}
                   </div>
+                  </ScrollArea>
                   <div ref={timelineEndRef} />
                   </>
                 )}
