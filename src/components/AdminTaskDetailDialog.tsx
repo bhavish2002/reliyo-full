@@ -299,6 +299,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                     No activity yet.
                   </div>
                 ) : (
+                  <>
                   <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
                     {currentTimeline.map((entry) => {
                       const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
