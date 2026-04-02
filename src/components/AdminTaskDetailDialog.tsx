@@ -84,12 +84,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
     }
   }, [open, task?.id]);
 
-  // Auto-scroll to bottom of timeline when new entries added
-  useEffect(() => {
-    if (timelineEndRef.current) {
-      setTimeout(() => timelineEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    }
-  }, [timelineKey]);
+  // No auto-scroll — dialog opens at the top by default
 
   // Auto-refresh timeline every 3s while open
   useEffect(() => {
