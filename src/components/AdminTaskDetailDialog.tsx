@@ -416,10 +416,9 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                         </div>
                       );
                     })}
-                  </div>
-                )}
-
-                {/* Admin comment composer */}
+                   </div>
+                    <div ref={timelineEndRef} />
+                 )}
                 <div className="mt-4 pt-3 border-t border-border">
                   <p className="text-xs font-semibold text-foreground mb-2">Admin Comment</p>
                   {attachedFiles.length > 0 && (
