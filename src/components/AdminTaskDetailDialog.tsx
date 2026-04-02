@@ -419,9 +419,11 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                     })}
                   </div>
                   <div ref={timelineEndRef} />
+                  </>
                 )}
 
                 {/* Admin comment composer */}
+                <div className="mt-4 pt-3 border-t border-border">
                   <p className="text-xs font-semibold text-foreground mb-2">Admin Comment</p>
                   {attachedFiles.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
