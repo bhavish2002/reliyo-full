@@ -475,7 +475,10 @@ const TaskTimeline = ({
     const attachmentLines = messageLines.filter(l => l.startsWith("📎 "));
     const attachmentData = entry.metadata?.attachments || [];
 
-    if (isSystem) {
+    // Admin comments should render with ADMIN badge, not as anonymous system entries
+    const isAdminComment = entry.authorRole === "admin" && entry.entryType === "admin_action";
+
+    if (isSystem && !isAdminComment) {
       return (
         <div key={entry.id} className="flex gap-3 py-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">

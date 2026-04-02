@@ -306,7 +306,10 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                       const attachmentLines = messageLines.filter(l => l.startsWith("📎 "));
                       const attachmentData: FileAttachmentData[] = entry.metadata?.attachments || [];
 
-                      if (isSystem) {
+                      // Admin comments should show with ADMIN badge, not as anonymous system entries
+                      const isAdminComment = entry.authorRole === "admin" && entry.entryType === "admin_action";
+
+                      if (isSystem && !isAdminComment) {
                         return (
                           <div key={entry.id} className="flex gap-2 py-1.5">
                             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted mt-0.5">
