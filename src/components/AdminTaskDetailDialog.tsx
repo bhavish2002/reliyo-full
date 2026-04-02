@@ -295,7 +295,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                   </div>
                 ) : (
                   <>
-                  <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                  <div className="space-y-2 pr-1">
                     {currentTimeline.map((entry) => {
                       const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
                       const isSystem = entry.systemGenerated;
