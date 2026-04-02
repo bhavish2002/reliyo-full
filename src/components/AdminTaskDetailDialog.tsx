@@ -84,12 +84,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
     }
   }, [open, task?.id]);
 
-  // Auto-scroll to bottom of timeline when new entries added
-  useEffect(() => {
-    if (timelineEndRef.current) {
-      setTimeout(() => timelineEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-    }
-  }, [timelineKey]);
+  // No auto-scroll — dialog opens at the top by default
 
   // Auto-refresh timeline every 3s while open
   useEffect(() => {
@@ -163,7 +158,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
         authorRole: "admin",
         message,
         timestamp: new Date().toISOString(),
-        systemGenerated: true,
+        systemGenerated: false,
         entryType: "admin_action",
         metadata: attachmentData.length > 0 ? { attachments: attachmentData } : undefined,
       });
@@ -300,7 +295,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                   </div>
                 ) : (
                   <>
-                  <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
+                  <div className="space-y-2 pr-1">
                     {currentTimeline.map((entry) => {
                       const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
                       const isSystem = entry.systemGenerated;
@@ -311,7 +306,10 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                       const attachmentLines = messageLines.filter(l => l.startsWith("📎 "));
                       const attachmentData: FileAttachmentData[] = entry.metadata?.attachments || [];
 
-                      if (isSystem) {
+                      // Admin comments should show with ADMIN badge, not as anonymous system entries
+                      const isAdminComment = entry.authorRole === "admin" && entry.entryType === "admin_action";
+
+                      if (isSystem && !isAdminComment) {
                         return (
                           <div key={entry.id} className="flex gap-2 py-1.5">
                             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted mt-0.5">
