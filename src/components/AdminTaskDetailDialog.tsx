@@ -158,7 +158,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
         authorRole: "admin",
         message,
         timestamp: new Date().toISOString(),
-        systemGenerated: true,
+        systemGenerated: false,
         entryType: "admin_action",
         metadata: attachmentData.length > 0 ? { attachments: attachmentData } : undefined,
       });
