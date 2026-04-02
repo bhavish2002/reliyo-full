@@ -295,7 +295,8 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                   </div>
                 ) : (
                   <>
-                  <div className="space-y-2 pr-1">
+                  <ScrollArea className="max-h-[250px]">
+                  <div className="space-y-2 pr-3">
                     {currentTimeline.map((entry) => {
                       const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
                       const isSystem = entry.systemGenerated;
@@ -416,6 +417,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                       );
                     })}
                   </div>
+                  </ScrollArea>
                   <div ref={timelineEndRef} />
                   </>
                 )}
