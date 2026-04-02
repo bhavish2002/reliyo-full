@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -73,6 +73,30 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
   const [timelineKey, setTimelineKey] = useState(0);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const timelineEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-refresh timeline when dialog opens or task changes
+  useEffect(() => {
+    if (open && task) {
+      setTimelineKey(k => k + 1);
+      setAdminComment("");
+      setAttachedFiles([]);
+    }
+  }, [open, task?.id]);
+
+  // Auto-scroll to bottom of timeline when new entries added
+  useEffect(() => {
+    if (timelineEndRef.current) {
+      setTimeout(() => timelineEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  }, [timelineKey]);
+
+  // Auto-refresh timeline every 3s while open
+  useEffect(() => {
+    if (!open) return;
+    const interval = setInterval(() => setTimelineKey(k => k + 1), 3000);
+    return () => clearInterval(interval);
+  }, [open]);
 
   if (!task) return null;
 
@@ -275,6 +299,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                     No activity yet.
                   </div>
                 ) : (
+                  <>
                   <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
                     {currentTimeline.map((entry) => {
                       const Icon = ROLE_ICONS[entry.entryType] || MessageSquare;
@@ -393,6 +418,8 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
                       );
                     })}
                   </div>
+                  <div ref={timelineEndRef} />
+                  </>
                 )}
 
                 {/* Admin comment composer */}
