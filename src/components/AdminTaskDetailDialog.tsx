@@ -181,22 +181,24 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader className="shrink-0">
-            <div className="flex items-center gap-2">
-              <Badge className={`${STATUS_COLORS[status] || "bg-muted"} text-xs`}>
-                {STATUS_LABELS[status] || task.status}
-              </Badge>
-              <span className="text-lg font-bold text-foreground">{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span>
-            </div>
-            <DialogTitle className="text-lg">{task.title}</DialogTitle>
-            {task.taskId && (
-              <p className="text-xs font-mono text-muted-foreground select-all">{task.taskId}</p>
-            )}
-          </DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
+          <div className="shrink-0 px-6 pt-6 pb-2">
+            <DialogHeader>
+              <div className="flex items-center gap-2">
+                <Badge className={`${STATUS_COLORS[status] || "bg-muted"} text-xs`}>
+                  {STATUS_LABELS[status] || task.status}
+                </Badge>
+                <span className="text-lg font-bold text-foreground">{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span>
+              </div>
+              <DialogTitle className="text-lg">{task.title}</DialogTitle>
+              {task.taskId && (
+                <p className="text-xs font-mono text-muted-foreground select-all">{task.taskId}</p>
+              )}
+            </DialogHeader>
+          </div>
 
-          <ScrollArea className="flex-1 -mx-6 px-6" style={{ maxHeight: "calc(90vh - 140px)" }}>
-            <div className="space-y-4 pb-4">
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="px-6 space-y-4 pb-4">
               {/* Dispute banner */}
               {status === "disputed" && task.disputeCount && task.disputeCount > 0 && (
                 <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${
