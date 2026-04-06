@@ -198,8 +198,7 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
           </div>
 
           <ScrollArea className="flex-1 min-h-0">
-            <div className="px-6">
-            <div className="space-y-4 pb-4">
+            <div className="px-6 space-y-4 pb-4">
               {/* Dispute banner */}
               {status === "disputed" && task.disputeCount && task.disputeCount > 0 && (
                 <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${
