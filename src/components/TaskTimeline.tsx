@@ -12,9 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import {
   type Task, type TaskStatus, type TimelineEntry, type AuthorRole, type FileAttachmentData,
@@ -30,6 +27,7 @@ import {
 import { format, addDays, differenceInDays, isAfter, isBefore } from "date-fns";
 import { generateDisputeId, MAX_DISPUTES, isEscalated } from "@/lib/disputeId";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 
 // ── File attachment constants ────────────────────────────────────────────────
 const MAX_FILE_SIZE_MB = 25;
@@ -42,6 +40,7 @@ const ALLOWED_FILE_TYPES = [
   "text/plain", "text/csv",
   "application/zip", "application/x-rar-compressed",
 ];
+const DISPUTE_COOLDOWN_MS = 48 * 60 * 60 * 1000;
 
 interface FileAttachment {
   name: string;
@@ -79,6 +78,13 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDisputeCooldown(ms: number): string {
+  const totalMinutes = Math.max(0, Math.ceil(ms / (60 * 1000)));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m`;
 }
 
 // ── Role styling ─────────────────────────────────────────────────────────────
@@ -146,6 +152,7 @@ const TaskTimeline = ({
   const [extendDate, setExtendDate] = useState<Date | undefined>(undefined);
   const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -154,6 +161,23 @@ const TaskTimeline = ({
   const banner = getStatusBanner(status, currentUserRole);
   const placeholder = getCommentPlaceholder(status, currentUserRole);
   const effectiveDeadline = getEffectiveDeadline(task);
+  const canShowRequestorDisputeAction =
+    currentUserRole === "requestor" &&
+    (status === "done" || status === "disputed") &&
+    (task.disputeCount || 0) < MAX_DISPUTES;
+  const lastDisputeTimestamp =
+    [...entries].reverse().find(
+      (entry) => entry.entryType === "status_change" && entry.metadata?.toStatus === "disputed",
+    )?.timestamp ?? task.disputes?.[task.disputes.length - 1]?.createdAt;
+  const getDisputeCooldownRemaining = (referenceTime: number) => {
+    if (!lastDisputeTimestamp) return 0;
+    const disputeTime = new Date(lastDisputeTimestamp).getTime();
+    if (Number.isNaN(disputeTime)) return 0;
+    return Math.max(0, DISPUTE_COOLDOWN_MS - (referenceTime - disputeTime));
+  };
+  const disputeCooldownRemaining = getDisputeCooldownRemaining(currentTime);
+  const isDisputeOnCooldown = disputeCooldownRemaining > 0;
+  const disputeCooldownMessage = `Next dispute available in ${formatDisputeCooldown(disputeCooldownRemaining)}.`;
 
   // Deadline awareness
   const deadlinePassed = effectiveDeadline ? isAfter(new Date(), new Date(effectiveDeadline)) : false;
@@ -164,6 +188,13 @@ const TaskTimeline = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [entries.length]);
+
+  useEffect(() => {
+    if (!canShowRequestorDisputeAction || !lastDisputeTimestamp) return;
+    setCurrentTime(Date.now());
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [canShowRequestorDisputeAction, lastDisputeTimestamp]);
 
   // Mandatory rating
   const isMandatoryRating = status === "completed" && currentUserRole === "requestor";
@@ -304,18 +335,40 @@ const TaskTimeline = ({
 
   // ── Requestor raises dispute ───────────────────────────────────────────
 
+  const handleOpenDisputeDialog = () => {
+    const liveCooldownRemaining = getDisputeCooldownRemaining(Date.now());
+    if (liveCooldownRemaining > 0) {
+      toast({
+        title: "Dispute cooldown active",
+        description: `You can raise the next dispute in ${formatDisputeCooldown(liveCooldownRemaining)}.`,
+      });
+      return;
+    }
+    setShowDisputeDialog(true);
+  };
+
   const handleRaiseDispute = () => {
-    if (!canTransition(status, "disputed")) return;
+    if (status !== "done" && status !== "disputed") return;
+    if (status === "done" && !canTransition(status, "disputed")) return;
     const disputeNumber = (task.disputeCount || 0) + 1;
     if (disputeNumber > MAX_DISPUTES) return;
+    const liveCooldownRemaining = getDisputeCooldownRemaining(Date.now());
+    if (liveCooldownRemaining > 0) {
+      toast({
+        title: "Dispute cooldown active",
+        description: `You can raise the next dispute in ${formatDisputeCooldown(liveCooldownRemaining)}.`,
+      });
+      return;
+    }
     const disputeId = generateDisputeId(task.taskId, disputeNumber);
     const escalated = isEscalated(disputeNumber);
     const escalationNote = escalated ? " ⚠️ ESCALATED — Admin review required." : "";
+    const disputeActionLabel = status === "disputed" ? "Dispute escalated" : "Dispute raised";
     const sysEntry = createSystemEntry(
       task.id,
-      `Dispute raised by Requestor (${currentUserName}). ${disputeId} (Dispute #${disputeNumber}/${MAX_DISPUTES}).${escalationNote}`,
+      `${disputeActionLabel} by Requestor (${currentUserName}). ${disputeId} (Dispute #${disputeNumber}/${MAX_DISPUTES}).${escalationNote}`,
       "status_change",
-      { fromStatus: "done", toStatus: "disputed", disputeCount: disputeNumber }
+      { fromStatus: status, toStatus: "disputed", disputeCount: disputeNumber }
     );
     setShowDisputeDialog(false);
     notifyDisputeRaised(task);
@@ -609,53 +662,42 @@ const TaskTimeline = ({
       }
     }
 
-    // Done: requestor can accept or dispute (but NOT if DSP4 already resolved — no more disputes)
+    // Done: requestor can accept work
     if (status === "done" && currentUserRole === "requestor") {
-      // If DSP4 was resolved valid, show different message — no dispute option
-      const isDsp4Resolved = (task.disputeCount || 0) >= MAX_DISPUTES;
-      
       actions.push(
         <Button key="accept-work" size="sm" onClick={handleAcceptWork} className="gap-1.5">
           <CheckCircle2 className="h-3.5 w-3.5" /> Accept Work
         </Button>
       );
-      // Block disputes if DSP4 was already hit (disputeCount >= MAX_DISPUTES)
-      if (!isDsp4Resolved) {
-        // 48-hour cooldown: check last dispute timestamp
-        const lastDisputeEntry = [...entries].reverse().find(
-          e => e.entryType === "status_change" && e.metadata?.toStatus === "disputed"
-        );
-        const cooldownMs = 48 * 60 * 60 * 1000;
-        const lastDisputeTime = lastDisputeEntry ? new Date(lastDisputeEntry.timestamp).getTime() : 0;
-        const now = Date.now();
-        const cooldownRemaining = lastDisputeTime > 0 ? cooldownMs - (now - lastDisputeTime) : 0;
-        const isOnCooldown = cooldownRemaining > 0;
-        const hoursRemaining = Math.ceil(cooldownRemaining / (60 * 60 * 1000));
+    }
 
-        actions.push(
-          <div key="dispute-wrapper" className="relative group">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => !isOnCooldown && setShowDisputeDialog(true)}
-              disabled={isOnCooldown}
-              className={cn(
-                "gap-1.5",
-                isOnCooldown
-                  ? "opacity-50 cursor-not-allowed"
-                  : "text-destructive border-destructive/30"
-              )}
-            >
-              <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
-            </Button>
-            {isOnCooldown && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-md bg-foreground text-background text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                Cooldown: {hoursRemaining}h remaining before next dispute
-              </div>
+    // Requestor can keep escalating disputes until DSP4, with a 48-hour cooldown between raises
+    if (canShowRequestorDisputeAction) {
+      actions.push(
+        <div key="dispute-wrapper" className="relative group">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleOpenDisputeDialog}
+            aria-disabled={isDisputeOnCooldown}
+            title={isDisputeOnCooldown ? disputeCooldownMessage : undefined}
+            className={cn(
+              "gap-1.5",
+              isDisputeOnCooldown
+                ? "cursor-not-allowed border-border text-muted-foreground hover:bg-background hover:text-muted-foreground"
+                : "border-destructive/30 text-destructive"
             )}
-          </div>
-        );
-      }
+          >
+            <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
+          </Button>
+          {isDisputeOnCooldown && (
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[240px] -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-center text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              {disputeCooldownMessage}
+            </div>
+          )}
+        </div>
+      );
     }
 
     // Disputed: acceptor can resubmit fix if NOT escalated OR if DSP4 resolved valid
@@ -944,14 +986,14 @@ const TaskTimeline = ({
             </DialogTitle>
             <DialogDescription>
               {(task.disputeCount || 0) + 1 >= MAX_DISPUTES
-                ? `This will be Dispute #${(task.disputeCount || 0) + 1} (ESCALATED). Admin review will be required.`
-                : `This will create Dispute #${(task.disputeCount || 0) + 1}/${MAX_DISPUTES}. The acceptor will be notified and can submit fixes.`}
+                ? `This will escalate to Dispute #${(task.disputeCount || 0) + 1} (ESCALATED). Admin review will be required.`
+                : `${status === "disputed" ? "This will escalate" : "This will create"} Dispute #${(task.disputeCount || 0) + 1}/${MAX_DISPUTES}. The acceptor will be notified and can submit fixes.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowDisputeDialog(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleRaiseDispute}>
-              Confirm Dispute
+              {status === "disputed" ? "Confirm Escalation" : "Confirm Dispute"}
             </Button>
           </DialogFooter>
         </DialogContent>
