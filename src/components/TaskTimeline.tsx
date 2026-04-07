@@ -165,10 +165,17 @@ const TaskTimeline = ({
     currentUserRole === "requestor" &&
     (status === "done" || status === "disputed") &&
     (task.disputeCount || 0) < MAX_DISPUTES;
-  const lastDisputeTimestamp =
-    [...entries].reverse().find(
-      (entry) => entry.entryType === "status_change" && entry.metadata?.toStatus === "disputed",
-    )?.timestamp ?? task.disputes?.[task.disputes.length - 1]?.createdAt;
+  const lastDisputeEntry = [...entries].reverse().find(
+    (entry) => entry.entryType === "status_change" && entry.metadata?.toStatus === "disputed",
+  );
+  const lastDoneAfterDisputeEntry = [...entries].reverse().find(
+    (entry) => entry.entryType === "status_change" && entry.metadata?.toStatus === "done" &&
+      lastDisputeEntry && new Date(entry.timestamp).getTime() > new Date(lastDisputeEntry.timestamp).getTime(),
+  );
+  // If acceptor moved task back to "done" after the last dispute, cooldown resets
+  const lastDisputeTimestamp = lastDoneAfterDisputeEntry
+    ? undefined
+    : (lastDisputeEntry?.timestamp ?? task.disputes?.[task.disputes.length - 1]?.createdAt);
   const getDisputeCooldownRemaining = (referenceTime: number) => {
     if (!lastDisputeTimestamp) return 0;
     const disputeTime = new Date(lastDisputeTimestamp).getTime();
