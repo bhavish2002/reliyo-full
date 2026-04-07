@@ -165,15 +165,34 @@ const TaskTimeline = ({
     currentUserRole === "requestor" &&
     (status === "done" || status === "disputed") &&
     (task.disputeCount || 0) < MAX_DISPUTES;
-  const lastDisputeEntry = [...entries].reverse().find(
-    (entry) => entry.entryType === "status_change" && entry.metadata?.toStatus === "disputed",
+
+  // Find the most recent dispute and done-after-dispute entries for cooldown logic
+  const sortedEntries = [...entries].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );
-  const lastDoneAfterDisputeEntry = [...entries].reverse().find(
-    (entry) => entry.entryType === "status_change" && entry.metadata?.toStatus === "done" &&
-      lastDisputeEntry && new Date(entry.timestamp).getTime() > new Date(lastDisputeEntry.timestamp).getTime(),
+  const lastDisputeEntry = [...sortedEntries].reverse().find(
+    (entry) =>
+      (entry.entryType === "status_change" && entry.metadata?.toStatus === "disputed") ||
+      (entry.systemGenerated && /dispute\s+(raised|escalated)/i.test(entry.message)),
   );
-  // If acceptor moved task back to "done" after the last dispute, cooldown resets
-  const lastDisputeTimestamp = lastDoneAfterDisputeEntry
+  const lastDisputeTime = lastDisputeEntry
+    ? new Date(lastDisputeEntry.timestamp).getTime()
+    : (task.disputes?.length ? new Date(task.disputes[task.disputes.length - 1].createdAt).getTime() : 0);
+
+  // Check if there's a "done" status change AFTER the last dispute
+  const lastDoneAfterDisputeEntry = lastDisputeTime > 0
+    ? [...sortedEntries].reverse().find(
+        (entry) =>
+          new Date(entry.timestamp).getTime() > lastDisputeTime &&
+          ((entry.entryType === "status_change" && entry.metadata?.toStatus === "done") ||
+           (entry.systemGenerated && /moved.*back to done|marked.*as done/i.test(entry.message))),
+      )
+    : undefined;
+
+  // If task is currently "done" AND there's a done entry after the last dispute, cooldown resets
+  // Also reset if current status is "done" and the task was moved back from disputed
+  const cooldownResetByDone = lastDoneAfterDisputeEntry != null || (status === "done" && lastDisputeTime > 0 && task.statusEnteredAt && new Date(task.statusEnteredAt).getTime() > lastDisputeTime);
+  const lastDisputeTimestamp = cooldownResetByDone
     ? undefined
     : (lastDisputeEntry?.timestamp ?? task.disputes?.[task.disputes.length - 1]?.createdAt);
   const getDisputeCooldownRemaining = (referenceTime: number) => {
