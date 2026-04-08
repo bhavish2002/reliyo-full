@@ -467,6 +467,18 @@ const TaskTimeline = ({
 
   // ── Requestor requests force-close ─────────────────────────────────────
 
+  const handleOpenForceCloseDialog = () => {
+    const liveCooldown = getForceCloseCooldownRemaining(Date.now());
+    if (liveCooldown > 0) {
+      toast({
+        title: "Force close cooldown active",
+        description: `You can request force close again in ${formatCooldown(liveCooldown)}.`,
+      });
+      return;
+    }
+    setShowForceCloseDialog(true);
+  };
+
   const handleForceCloseRequest = () => {
     const entry = createSystemEntry(
       task.id,
