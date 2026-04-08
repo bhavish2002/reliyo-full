@@ -239,11 +239,13 @@ const TaskTimeline = ({
   }, [entries.length]);
 
   useEffect(() => {
-    if (!canShowRequestorDisputeAction || !lastDisputeTimestamp) return;
+    const needsDisputeTimer = canShowRequestorDisputeAction && lastDisputeTimestamp;
+    const needsForceCloseTimer = lastForceCloseTimestamp && currentUserRole === "requestor";
+    if (!needsDisputeTimer && !needsForceCloseTimer) return;
     setCurrentTime(Date.now());
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [canShowRequestorDisputeAction, lastDisputeTimestamp]);
+  }, [canShowRequestorDisputeAction, lastDisputeTimestamp, lastForceCloseTimestamp, currentUserRole]);
 
   // Mandatory rating
   const isMandatoryRating = status === "completed" && currentUserRole === "requestor";
