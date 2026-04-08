@@ -213,7 +213,22 @@ const TaskTimeline = ({
   const isDisputeOnCooldown = disputeCooldownRemaining > 0;
   const disputeCooldownMessage = `Next dispute available in ${formatDisputeCooldown(disputeCooldownRemaining)}.`;
 
-  // Deadline awareness
+  // Force close cooldown logic (24h)
+  const lastForceCloseEntry = [...sortedEntries].reverse().find(
+    (entry) =>
+      entry.systemGenerated && /force.?close\s+requested/i.test(entry.message),
+  );
+  const lastForceCloseTimestamp = lastForceCloseEntry?.timestamp;
+  const getForceCloseCooldownRemaining = (referenceTime: number) => {
+    if (!lastForceCloseTimestamp) return 0;
+    const fcTime = new Date(lastForceCloseTimestamp).getTime();
+    if (Number.isNaN(fcTime)) return 0;
+    return Math.max(0, FORCE_CLOSE_COOLDOWN_MS - (referenceTime - fcTime));
+  };
+  const forceCloseCooldownRemaining = getForceCloseCooldownRemaining(currentTime);
+  const isForceCloseOnCooldown = forceCloseCooldownRemaining > 0;
+  const forceCloseCooldownMessage = `Next request available in ${formatCooldown(forceCloseCooldownRemaining)}.`;
+
   const deadlinePassed = effectiveDeadline ? isAfter(new Date(), new Date(effectiveDeadline)) : false;
   const daysUntilDeadline = effectiveDeadline ? differenceInDays(new Date(effectiveDeadline), new Date()) : null;
 
