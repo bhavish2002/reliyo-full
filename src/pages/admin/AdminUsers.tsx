@@ -93,7 +93,8 @@ const AdminUsers = () => {
   const handleSuspend = () => {
     if (!suspendDialog || !suspendReason.trim()) return;
 
-    if (hasActiveTasks(suspendDialog.name)) {
+    const activeCheck = hasActiveTasks(suspendDialog.name);
+    if (activeCheck) {
       toast({
         title: "Cannot Suspend",
         description: "This user has active tasks (Committed, In Progress, Done, or Disputed). Resolve those first.",
@@ -105,9 +106,31 @@ const AdminUsers = () => {
     const phone = getUserPhone(suspendDialog.id);
     suspendUserWithPhone(suspendDialog.id, suspendReason.trim(), phone);
     setSuspendedMap(getSuspendedUsers());
+
+    // Send termination notification (simulated email)
+    const terminationNotif = {
+      id: `notif-suspend-${Date.now()}`,
+      type: "admin_abuse_flag" as const,
+      title: "Account Terminated",
+      message: `Your account has been suspended due to policy violation: "${suspendReason.trim()}". You will no longer be able to access the platform. If you believe this is an error, contact support.`,
+      target: "requestor" as const,
+      priority: "critical" as const,
+      taskId: "",
+      taskTitle: "",
+      createdAt: new Date().toISOString(),
+      read: false,
+      userId: suspendDialog.id,
+      userName: suspendDialog.name,
+    };
+    try {
+      const existing = JSON.parse(localStorage.getItem("reliyo_notifications") || "[]");
+      existing.push(terminationNotif);
+      localStorage.setItem("reliyo_notifications", JSON.stringify(existing));
+    } catch {}
+
     setSuspendDialog(null);
     setSuspendReason("");
-    toast({ title: "User Suspended", description: `${suspendDialog.name} has been suspended and cannot log in again.` });
+    toast({ title: "User Suspended", description: `${suspendDialog.name} has been suspended. A termination notification has been sent.` });
   };
 
   return (

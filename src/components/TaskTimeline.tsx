@@ -41,6 +41,7 @@ const ALLOWED_FILE_TYPES = [
   "application/zip", "application/x-rar-compressed",
 ];
 const DISPUTE_COOLDOWN_MS = 48 * 60 * 60 * 1000;
+const FORCE_CLOSE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 interface FileAttachment {
   name: string;
@@ -81,6 +82,13 @@ function formatFileSize(bytes: number): string {
 }
 
 function formatDisputeCooldown(ms: number): string {
+  const totalMinutes = Math.max(0, Math.ceil(ms / (60 * 1000)));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m`;
+}
+
+function formatCooldown(ms: number): string {
   const totalMinutes = Math.max(0, Math.ceil(ms / (60 * 1000)));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
@@ -205,7 +213,22 @@ const TaskTimeline = ({
   const isDisputeOnCooldown = disputeCooldownRemaining > 0;
   const disputeCooldownMessage = `Next dispute available in ${formatDisputeCooldown(disputeCooldownRemaining)}.`;
 
-  // Deadline awareness
+  // Force close cooldown logic (24h)
+  const lastForceCloseEntry = [...sortedEntries].reverse().find(
+    (entry) =>
+      entry.systemGenerated && /force.?close\s+requested/i.test(entry.message),
+  );
+  const lastForceCloseTimestamp = lastForceCloseEntry?.timestamp;
+  const getForceCloseCooldownRemaining = (referenceTime: number) => {
+    if (!lastForceCloseTimestamp) return 0;
+    const fcTime = new Date(lastForceCloseTimestamp).getTime();
+    if (Number.isNaN(fcTime)) return 0;
+    return Math.max(0, FORCE_CLOSE_COOLDOWN_MS - (referenceTime - fcTime));
+  };
+  const forceCloseCooldownRemaining = getForceCloseCooldownRemaining(currentTime);
+  const isForceCloseOnCooldown = forceCloseCooldownRemaining > 0;
+  const forceCloseCooldownMessage = `Next request available in ${formatCooldown(forceCloseCooldownRemaining)}.`;
+
   const deadlinePassed = effectiveDeadline ? isAfter(new Date(), new Date(effectiveDeadline)) : false;
   const daysUntilDeadline = effectiveDeadline ? differenceInDays(new Date(effectiveDeadline), new Date()) : null;
 
@@ -216,11 +239,13 @@ const TaskTimeline = ({
   }, [entries.length]);
 
   useEffect(() => {
-    if (!canShowRequestorDisputeAction || !lastDisputeTimestamp) return;
+    const needsDisputeTimer = canShowRequestorDisputeAction && lastDisputeTimestamp;
+    const needsForceCloseTimer = lastForceCloseTimestamp && currentUserRole === "requestor";
+    if (!needsDisputeTimer && !needsForceCloseTimer) return;
     setCurrentTime(Date.now());
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [canShowRequestorDisputeAction, lastDisputeTimestamp]);
+  }, [canShowRequestorDisputeAction, lastDisputeTimestamp, lastForceCloseTimestamp, currentUserRole]);
 
   // Mandatory rating
   const isMandatoryRating = status === "completed" && currentUserRole === "requestor";
@@ -442,6 +467,18 @@ const TaskTimeline = ({
 
   // ── Requestor requests force-close ─────────────────────────────────────
 
+  const handleOpenForceCloseDialog = () => {
+    const liveCooldown = getForceCloseCooldownRemaining(Date.now());
+    if (liveCooldown > 0) {
+      toast({
+        title: "Force close cooldown active",
+        description: `You can request force close again in ${formatCooldown(liveCooldown)}.`,
+      });
+      return;
+    }
+    setShowForceCloseDialog(true);
+  };
+
   const handleForceCloseRequest = () => {
     const entry = createSystemEntry(
       task.id,
@@ -661,9 +698,28 @@ const TaskTimeline = ({
         <Button key="alert" variant="outline" size="sm" onClick={() => setShowAlertDialog(true)} className="gap-1.5">
           <Bell className="h-3.5 w-3.5" /> Send Alert
         </Button>,
-        <Button key="force-close" variant="outline" size="sm" onClick={() => setShowForceCloseDialog(true)} className="gap-1.5 text-destructive border-destructive/30">
-          <XCircle className="h-3.5 w-3.5" /> Request Force-Close
-        </Button>
+        <div key="force-close-wrapper" className="relative group">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenForceCloseDialog}
+            aria-disabled={isForceCloseOnCooldown}
+            title={isForceCloseOnCooldown ? forceCloseCooldownMessage : undefined}
+            className={cn(
+              "gap-1.5",
+              isForceCloseOnCooldown
+                ? "cursor-not-allowed border-border text-muted-foreground hover:bg-background hover:text-muted-foreground"
+                : "text-destructive border-destructive/30"
+            )}
+          >
+            <XCircle className="h-3.5 w-3.5" /> Request Force-Close
+          </Button>
+          {isForceCloseOnCooldown && (
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[240px] -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-center text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              {forceCloseCooldownMessage}
+            </div>
+          )}
+        </div>
       );
     }
 
@@ -681,9 +737,28 @@ const TaskTimeline = ({
           <Button key="alert" variant="outline" size="sm" onClick={() => setShowAlertDialog(true)} className="gap-1.5">
             <Bell className="h-3.5 w-3.5" /> Send Alert
           </Button>,
-          <Button key="force-close" variant="outline" size="sm" onClick={() => setShowForceCloseDialog(true)} className="gap-1.5 text-destructive border-destructive/30">
-            <XCircle className="h-3.5 w-3.5" /> Request Force-Close
-          </Button>
+          <div key="force-close-wrapper-ip" className="relative group">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenForceCloseDialog}
+              aria-disabled={isForceCloseOnCooldown}
+              title={isForceCloseOnCooldown ? forceCloseCooldownMessage : undefined}
+              className={cn(
+                "gap-1.5",
+                isForceCloseOnCooldown
+                  ? "cursor-not-allowed border-border text-muted-foreground hover:bg-background hover:text-muted-foreground"
+                  : "text-destructive border-destructive/30"
+              )}
+            >
+              <XCircle className="h-3.5 w-3.5" /> Request Force-Close
+            </Button>
+            {isForceCloseOnCooldown && (
+              <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[240px] -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-center text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                {forceCloseCooldownMessage}
+              </div>
+            )}
+          </div>
         );
       }
     }
