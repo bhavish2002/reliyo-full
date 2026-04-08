@@ -88,6 +88,13 @@ function formatDisputeCooldown(ms: number): string {
   return `${hours}h ${minutes}m`;
 }
 
+function formatCooldown(ms: number): string {
+  const totalMinutes = Math.max(0, Math.ceil(ms / (60 * 1000)));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m`;
+}
+
 // ── Role styling ─────────────────────────────────────────────────────────────
 
 const ROLE_AVATAR_COLORS: Record<AuthorRole, string> = {
