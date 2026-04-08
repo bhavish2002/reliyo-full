@@ -698,9 +698,28 @@ const TaskTimeline = ({
         <Button key="alert" variant="outline" size="sm" onClick={() => setShowAlertDialog(true)} className="gap-1.5">
           <Bell className="h-3.5 w-3.5" /> Send Alert
         </Button>,
-        <Button key="force-close" variant="outline" size="sm" onClick={() => setShowForceCloseDialog(true)} className="gap-1.5 text-destructive border-destructive/30">
-          <XCircle className="h-3.5 w-3.5" /> Request Force-Close
-        </Button>
+        <div key="force-close-wrapper" className="relative group">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenForceCloseDialog}
+            aria-disabled={isForceCloseOnCooldown}
+            title={isForceCloseOnCooldown ? forceCloseCooldownMessage : undefined}
+            className={cn(
+              "gap-1.5",
+              isForceCloseOnCooldown
+                ? "cursor-not-allowed border-border text-muted-foreground hover:bg-background hover:text-muted-foreground"
+                : "text-destructive border-destructive/30"
+            )}
+          >
+            <XCircle className="h-3.5 w-3.5" /> Request Force-Close
+          </Button>
+          {isForceCloseOnCooldown && (
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[240px] -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-center text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              {forceCloseCooldownMessage}
+            </div>
+          )}
+        </div>
       );
     }
 
