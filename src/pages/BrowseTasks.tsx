@@ -134,7 +134,11 @@ const BrowseTasks = () => {
       }
       if (domainFilter !== "All" && t.domain !== domainFilter) return false;
       return true;
-    }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}).sort((a, b) => {
+      const dateA = new Date((a as any).acceptedAt || a.createdAt || 0).getTime();
+      const dateB = new Date((b as any).acceptedAt || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
   }, [allTasks, searchQuery, countryFilter, domainFilter]);
 
   return (
