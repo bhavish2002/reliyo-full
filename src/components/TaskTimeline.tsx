@@ -41,6 +41,7 @@ const ALLOWED_FILE_TYPES = [
   "application/zip", "application/x-rar-compressed",
 ];
 const DISPUTE_COOLDOWN_MS = 48 * 60 * 60 * 1000;
+const FORCE_CLOSE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 interface FileAttachment {
   name: string;
