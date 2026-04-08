@@ -61,17 +61,23 @@ const MyTasks = () => {
     }
   }, []);
 
-  const createdTasks = tasks.filter((t) => t.createdBy === currentUserName);
+  const sortByRecent = (a: Task, b: Task) => {
+    const dateA = new Date(a.acceptedAt || a.createdAt || 0).getTime();
+    const dateB = new Date(b.acceptedAt || b.createdAt || 0).getTime();
+    return dateB - dateA;
+  };
+
+  const createdTasks = tasks.filter((t) => t.createdBy === currentUserName).sort(sortByRecent);
   
   const myAcceptedTasks = acceptedTasks.filter((t) => 
     t.acceptedBy === currentUserName || 
     (currentUser?.role === "acceptor" && !t.acceptedBy)
-  );
+  ).sort(sortByRecent);
 
   const disputeTasks = [
     ...createdTasks.filter((t) => t.status === "disputed"),
     ...myAcceptedTasks.filter((t) => t.status === "disputed"),
-  ];
+  ].sort(sortByRecent);
 
   const canQuitTask = (task: Task) => {
     if (!task.acceptedAt) return false;

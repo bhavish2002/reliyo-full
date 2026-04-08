@@ -124,19 +124,17 @@ const BrowseTasks = () => {
 
   const filtered = useMemo(() => {
     return allTasks.filter((t) => {
-      // Exclude own tasks
       const currentUser = getCurrentUser();
       if (currentUser && t.createdBy === currentUser.name) return false;
       if (t.status !== "open") return false;
       if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-      // Country filter: match on the country field
       if (countryFilter !== "All") {
         const taskCountry = t.country?.toLowerCase() || "";
         if (taskCountry !== countryFilter.toLowerCase()) return false;
       }
       if (domainFilter !== "All" && t.domain !== domainFilter) return false;
       return true;
-    });
+    }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   }, [allTasks, searchQuery, countryFilter, domainFilter]);
 
   return (

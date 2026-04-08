@@ -33,7 +33,7 @@ const AdminAllTasks = () => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !(t.taskId || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
     return true;
-  });
+  }).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   return (
     <AdminLayout>
