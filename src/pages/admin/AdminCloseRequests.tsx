@@ -181,80 +181,89 @@ const AdminCloseRequests = () => {
 
       {/* Review Dialog */}
       <Dialog open={!!reviewReq} onOpenChange={() => setReviewReq(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" /> Review Force-Close Request
-            </DialogTitle>
-            <DialogDescription>
-              {reviewReq?.taskTitle} — requested by {reviewReq?.requestor}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+          <div className="px-6 pt-6 pb-2">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Shield className="h-5 w-5 text-primary" /> Review Force-Close Request
+              </DialogTitle>
+              <DialogDescription className="mt-1">
+                {reviewReq?.taskTitle} — requested by {reviewReq?.requestor}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
 
-          <div className="space-y-4 py-4">
-            <div className="rounded-xl border bg-muted/30 p-5 text-sm space-y-4">
-              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+          <div className="px-6 pb-6 space-y-5">
+            {/* Task Details Card */}
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-3">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Task</p>
-                  <p className="font-semibold text-sm">{reviewReq?.taskTitle}</p>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Task</p>
+                  <p className="font-semibold text-sm leading-snug">{reviewReq?.taskTitle}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Task Status</p>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Task Status</p>
                   <p className="font-semibold text-sm">{reviewReq ? STATUS_LABELS[reviewReq.taskStatusAtRequest as TaskStatus] || reviewReq.taskStatusAtRequest : ""}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Requestor</p>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Requestor</p>
                   <p className="font-semibold text-sm">{reviewReq?.requestor}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Acceptor</p>
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Acceptor</p>
                   <p className="font-semibold text-sm">{reviewReq?.acceptor}</p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground pt-1 border-t border-border">
-                Review the task details and activity before making a decision.
-              </p>
+              <div className="border-t border-border pt-2">
+                <p className="text-xs text-muted-foreground">
+                  Review the task details and activity before making a decision.
+                </p>
+              </div>
             </div>
 
-            <div>
-              <p className="text-sm font-semibold text-foreground mb-2">Admin Comment <span className="text-destructive">*</span></p>
+            {/* Admin Comment */}
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-foreground">
+                Admin Comment <span className="text-destructive">*</span>
+              </label>
               <Textarea
                 value={adminComment}
                 onChange={(e) => setAdminComment(e.target.value)}
                 placeholder="Enter your reasoning (mandatory)..."
-                className="min-h-[80px]"
+                className="min-h-[80px] resize-none"
               />
               {!adminComment.trim() && (
-                <p className="text-[11px] text-destructive mt-1.5 flex items-center gap-1">
+                <p className="text-[11px] text-destructive flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" /> Comment is required to approve or reject
                 </p>
               )}
             </div>
 
-            <div className="space-y-3 pt-1">
+            {/* Action Buttons */}
+            <div className="space-y-2.5">
               <Button
                 variant="outline"
-                className="w-full justify-start gap-3 h-auto py-3.5 px-4"
+                className="w-full justify-start gap-3 h-auto py-3 px-4 rounded-lg"
                 disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleApprove(reviewReq)}
               >
                 <CheckCircle2 className="h-5 w-5 text-[hsl(var(--success))] shrink-0" />
                 <div className="text-left">
                   <p className="font-semibold text-sm">Approve — Force Close</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Task moves to Force Closed. Reward refunded to requestor, trust deposit penalty applied.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Task moves to Force Closed. Reward refunded to requestor, trust deposit penalty applied.</p>
                 </div>
               </Button>
 
               <Button
                 variant="outline"
-                className="w-full justify-start gap-3 h-auto py-3.5 px-4"
+                className="w-full justify-start gap-3 h-auto py-3 px-4 rounded-lg"
                 disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleReject(reviewReq)}
               >
                 <XCircle className="h-5 w-5 text-destructive shrink-0" />
                 <div className="text-left">
                   <p className="font-semibold text-sm">Reject</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Task remains in its current status. Request dismissed.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Task remains in its current status. Request dismissed.</p>
                 </div>
               </Button>
             </div>
