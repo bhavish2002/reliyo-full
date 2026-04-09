@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Users, AlertTriangle, DollarSign,
-  BarChart3, Settings, LogOut, Menu, Clock, Bell, FileX,
+  BarChart3, Settings, LogOut, Menu, Clock, Bell, FileX, Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -21,6 +21,7 @@ const overviewItems = [
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
   { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
+  { label: "Support", icon: Ticket, path: "/admin/support" },
 ];
 
 const systemItems = [
