@@ -25,6 +25,13 @@ import AdminRevenue from "./pages/admin/AdminRevenue";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminNotifications from "./pages/admin/AdminNotifications";
+import AdminSupport from "./pages/admin/AdminSupport";
+import HelpSupport from "./pages/HelpSupport";
+import About from "./pages/About";
+import Leadership from "./pages/Leadership";
+import Contact from "./pages/Contact";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +54,12 @@ const App = () => (
           <Route path="/profile" element={<Profile />} />
           <Route path="/task/:id" element={<TaskDetail />} />
           <Route path="/payment" element={<PaymentGateway />} />
+          <Route path="/help-support" element={<HelpSupport />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/leadership" element={<Leadership />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           {/* Admin routes */}
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/tasks" element={<AdminAllTasks />} />
@@ -57,6 +70,7 @@ const App = () => (
           <Route path="/admin/analytics" element={<AdminAnalytics />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
           <Route path="/admin/notifications" element={<AdminNotifications />} />
+          <Route path="/admin/support" element={<AdminSupport />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
