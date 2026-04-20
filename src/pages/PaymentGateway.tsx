@@ -72,7 +72,7 @@ const PaymentGateway = () => {
 
           // *** CRITICAL: Also update reliyo_tasks so requestor sees committed status ***
           const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-          const idx = tasks.findIndex((t: any) => t.id === taskData.id);
+          const idx = tasks.findIndex((t: { id?: string }) => t.id === taskData.id);
           if (idx >= 0) {
             tasks[idx] = { ...tasks[idx], status: "committed", acceptedAt, acceptedBy: userName };
             localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));

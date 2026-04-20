@@ -23,6 +23,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { checkInactivity, sendStrikeNotifications } from "@/lib/inactivity";
 import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
 import { notifyTaskClosed } from "@/lib/notifications";
+import { readJson, writeJson, removeItem } from "@/lib/storage";
+import { env } from "@/lib/env";
+import { comparePolicyStatus, normalizePolicyStatus } from "@/lib/taskPolicy";
 
 // ── Demo browse tasks for lookup ─────────────────────────────────────────────
 const DEMO_BROWSE_TASKS: Task[] = [
@@ -127,6 +130,8 @@ const TaskDetail = () => {
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fromBrowse = location.state?.fromBrowse ?? false;
 
@@ -135,52 +140,62 @@ const TaskDetail = () => {
   const getUserRole = (t: Task): AuthorRole => {
     if (t.createdBy === CURRENT_USER) return "requestor";
     if (t.acceptedBy === CURRENT_USER) return "acceptor";
-    const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const accepted = readJson<Task[]>("reliyo_accepted_tasks", []);
     if (accepted.some((a) => a.id === t.id && (a.acceptedBy === CURRENT_USER || !a.acceptedBy))) return "acceptor";
     return "requestor";
   };
 
   useEffect(() => {
-    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
-    const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    
-    let found = storedTasks.find((t) => t.id === id);
-    if (!found) found = acceptedTasks.find((t) => t.id === id);
-    if (!found) found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
-    if (!found) found = DEMO_CREATED_TASKS.find((t) => t.id === id);
-    
-    if (found) {
-      const fromTasks = storedTasks.find((t) => t.id === id);
-      const fromAccepted = acceptedTasks.find((t) => t.id === id);
-      if (fromTasks && fromAccepted) {
-        found = { ...fromTasks, ...fromAccepted, status: fromTasks.status === fromAccepted.status ? fromTasks.status : fromAccepted.status };
-        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"];
-        const tasksIdx = statusOrder.indexOf(fromTasks.status as TaskStatus);
-        const acceptedIdx = statusOrder.indexOf(fromAccepted.status as TaskStatus);
-        found.status = acceptedIdx >= tasksIdx ? fromAccepted.status : fromTasks.status;
-      }
-      setTask(found);
-    }
+    try {
+      const storedTasks = readJson<Task[]>("reliyo_tasks", []);
+      const acceptedTasks = readJson<Task[]>("reliyo_accepted_tasks", []);
 
-    const storedTimeline = JSON.parse(localStorage.getItem(`reliyo_timeline_${id}`) || "null");
-    if (storedTimeline) {
-      setTimelineEntries(storedTimeline);
-    } else if (id && DEMO_TIMELINES[id]) {
-      setTimelineEntries(DEMO_TIMELINES[id]);
-    } else if (found) {
-      const initialEntries: TimelineEntry[] = [
-        {
-          id: `init-1-${id}`, taskId: found.id, author: "System", authorRole: "system",
-          message: "Task created and reward locked in escrow.",
-          timestamp: found.createdAt, systemGenerated: true, entryType: "escrow",
-        },
-        {
-          id: `init-2-${id}`, taskId: found.id, author: "System", authorRole: "system",
-          message: "Task published and visible to acceptors.",
-          timestamp: found.createdAt, systemGenerated: true, entryType: "status_change",
-        },
-      ];
-      setTimelineEntries(initialEntries);
+      let found = storedTasks.find((t) => t.id === id);
+      if (!found) found = acceptedTasks.find((t) => t.id === id);
+      if (!found && env.enableDemoData) found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
+      if (!found && env.enableDemoData) found = DEMO_CREATED_TASKS.find((t) => t.id === id);
+
+      if (found) {
+        const fromTasks = storedTasks.find((t) => t.id === id);
+        const fromAccepted = acceptedTasks.find((t) => t.id === id);
+        if (fromTasks && fromAccepted) {
+          found = {
+            ...fromTasks,
+            ...fromAccepted,
+            status:
+              comparePolicyStatus(fromAccepted.status, fromTasks.status) >= 0
+                ? fromAccepted.status
+                : fromTasks.status,
+          };
+        }
+        found.status = normalizePolicyStatus(found.status);
+        setTask(found);
+      }
+
+      const storedTimeline = readJson<TimelineEntry[] | null>(`reliyo_timeline_${id}`, null);
+      if (storedTimeline) {
+        setTimelineEntries(storedTimeline);
+      } else if (id && env.enableDemoData && DEMO_TIMELINES[id]) {
+        setTimelineEntries(DEMO_TIMELINES[id]);
+      } else if (found) {
+        const initialEntries: TimelineEntry[] = [
+          {
+            id: `init-1-${id}`, taskId: found.id, author: "System", authorRole: "system",
+            message: "Task created and reward locked in escrow.",
+            timestamp: found.createdAt, systemGenerated: true, entryType: "escrow",
+          },
+          {
+            id: `init-2-${id}`, taskId: found.id, author: "System", authorRole: "system",
+            message: "Task published and visible to acceptors.",
+            timestamp: found.createdAt, systemGenerated: true, entryType: "status_change",
+          },
+        ];
+        setTimelineEntries(initialEntries);
+      }
+    } catch {
+      setLoadError("We couldn't load this task. Please go back and retry.");
+    } finally {
+      setIsLoading(false);
     }
   }, [id]);
 
@@ -188,7 +203,7 @@ const TaskDetail = () => {
   const inactivityChecked = useRef(false);
   useEffect(() => {
     if (!task || inactivityChecked.current) return;
-    if (task.status !== "done" && task.status !== "completed") return;
+    if (task.status !== "done") return;
     inactivityChecked.current = true;
 
     const inactivity = checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries);
@@ -196,7 +211,7 @@ const TaskDetail = () => {
     if (inactivity.pendingEntries.length > 0) {
       const updated = [...timelineEntries, ...inactivity.pendingEntries];
       setTimelineEntries(updated);
-      localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(updated));
+      writeJson(`reliyo_timeline_${task.id}`, updated);
       sendStrikeNotifications(task, inactivity.pendingEntries, currentUser?.email);
     }
 
@@ -214,24 +229,44 @@ const TaskDetail = () => {
       };
       const allEntries = [...timelineEntries, ...inactivity.pendingEntries, closeEntry];
       setTimelineEntries(allEntries);
-      localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(allEntries));
+      writeJson(`reliyo_timeline_${task.id}`, allEntries);
 
       const closedTask: Task = { ...task, status: "closed" };
       setTask(closedTask);
 
-      const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+      const storedTasks = readJson<Task[]>("reliyo_tasks", []);
       const idx = storedTasks.findIndex((t) => t.id === task.id);
-      if (idx >= 0) { storedTasks[idx] = { ...storedTasks[idx], status: "closed" }; localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks)); }
-      const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+      if (idx >= 0) { storedTasks[idx] = { ...storedTasks[idx], status: "closed" }; writeJson("reliyo_tasks", storedTasks); }
+      const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
       const accIdx = storedAccepted.findIndex((t) => t.id === task.id);
-      if (accIdx >= 0) { storedAccepted[accIdx] = { ...storedAccepted[accIdx], status: "closed" }; localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(storedAccepted)); }
+      if (accIdx >= 0) { storedAccepted[accIdx] = { ...storedAccepted[accIdx], status: "closed" }; writeJson("reliyo_accepted_tasks", storedAccepted); }
 
       notifyTaskClosed(task);
       toast({ title: "Task Auto-Closed", description: "This task was closed due to requestor inactivity (3 strikes)." });
     }
-  }, [task?.id, task?.status]);
+  }, [currentUser?.email, task, timelineEntries]);
 
   const inactivityState = task ? checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries) : null;
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-20 text-muted-foreground">
+          <p>Loading task details...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-xl mx-auto mt-10 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {loadError}
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (!task) {
     return (
@@ -254,21 +289,21 @@ const TaskDetail = () => {
   const status = task.status as TaskStatus;
   const effectiveDeadline = getEffectiveDeadline(task);
 
-  const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
-  const isAlreadyAccepted = acceptedTasks.some((t: any) => t.id === task.id);
+  const acceptedTasks = readJson<Task[]>("reliyo_accepted_tasks", []);
+  const isAlreadyAccepted = acceptedTasks.some((t) => t.id === task.id);
 
   const canDelete = isOwner && status === "open" && !task.acceptedBy;
 
   // ── Delete task handler ─────────────────────────────────────────────────────
   const handleDeleteTask = () => {
-    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
     const updated = storedTasks.filter((t: Task) => t.id !== task.id);
-    localStorage.setItem("reliyo_tasks", JSON.stringify(updated));
-    localStorage.removeItem(`reliyo_timeline_${task.id}`);
+    writeJson("reliyo_tasks", updated);
+    removeItem(`reliyo_timeline_${task.id}`);
     setShowDeleteDialog(false);
     toast({
-      title: "Task Deleted",
-      description: "The task has been removed and your reward deposit will be refunded.",
+      title: "Task Cancelled",
+      description: "The task has been hidden and your reward deposit will be refunded.",
     });
     navigate("/my-tasks");
   };
@@ -276,7 +311,7 @@ const TaskDetail = () => {
   // ── Accept flow handlers ──────────────────────────────────────────────────
 
   const handleAcceptClick = () => {
-    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
     const demoAccepted: Task[] = [
       { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "" },
     ];
@@ -311,7 +346,7 @@ const TaskDetail = () => {
   // ── Timeline handlers ─────────────────────────────────────────────────────
 
   const saveTimeline = (entries: TimelineEntry[]) => {
-    localStorage.setItem(`reliyo_timeline_${task.id}`, JSON.stringify(entries));
+    writeJson(`reliyo_timeline_${task.id}`, entries);
   };
 
   const handleAddEntry = (newEntries: TimelineEntry[]) => {
@@ -337,18 +372,18 @@ const TaskDetail = () => {
     setTask(updatedTask);
 
     const persistData = { status: newStatus, statusEnteredAt: updatedTask.statusEnteredAt, disputeCount: updatedTask.disputeCount, disputes: updatedTask.disputes, dsp4ResolvedValid: updatedTask.dsp4ResolvedValid };
-    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
     const taskIdx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (taskIdx >= 0) {
       storedTasks[taskIdx] = { ...storedTasks[taskIdx], ...persistData };
-      localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks));
+      writeJson("reliyo_tasks", storedTasks);
     }
 
-    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
     const accIdx = storedAccepted.findIndex((t: Task) => t.id === task.id);
     if (accIdx >= 0) {
       storedAccepted[accIdx] = { ...storedAccepted[accIdx], ...persistData };
-      localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(storedAccepted));
+      writeJson("reliyo_accepted_tasks", storedAccepted);
     }
 
     toast({
@@ -370,13 +405,15 @@ const TaskDetail = () => {
     const stores = ["reliyo_tasks", "reliyo_accepted_tasks"];
     stores.forEach((key) => {
       try {
-        const tasks = JSON.parse(localStorage.getItem(key) || "[]") as Task[];
+        const tasks = readJson<Task[]>(key, []);
         const idx = tasks.findIndex((t) => t.id === task.id);
         if (idx >= 0) {
           tasks[idx] = { ...tasks[idx], extendedDeadline: newDeadline };
-          localStorage.setItem(key, JSON.stringify(tasks));
+          writeJson(key, tasks);
         }
-      } catch {}
+      } catch (error) {
+        void error;
+      }
     });
 
     toast({
@@ -391,17 +428,16 @@ const TaskDetail = () => {
     { label: "Task created", filled: true },
     { label: "Reward locked in escrow", filled: true },
     { label: "Task published", filled: status !== "open" || true },
-    { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status) },
-    { label: "Work in progress", filled: ["in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status) },
-    { label: "Work done", filled: ["done", "disputed", "completed", "closed"].includes(status) },
-    { label: "Completed & rated", filled: ["completed", "closed"].includes(status) },
+    { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "closed", "force_closed"].includes(status) },
+    { label: "Work in progress", filled: ["in_progress", "done", "disputed", "closed", "force_closed"].includes(status) },
+    { label: "Work done", filled: ["done", "disputed", "closed", "force_closed"].includes(status) },
     { label: "Closed", filled: status === "closed" },
     { label: "Force Closed", filled: status === "force_closed" },
   ];
 
   const showTimeline = isOwner
-    ? ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status)
-    : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(status);
+    ? ["committed", "in_progress", "done", "disputed", "closed", "force_closed"].includes(status)
+    : isAlreadyAccepted || ["committed", "in_progress", "done", "disputed", "closed", "force_closed"].includes(status);
 
   return (
     <DashboardLayout>
@@ -639,7 +675,7 @@ const TaskDetail = () => {
               <Trash2 className="h-5 w-5 text-destructive" /> Delete Task?
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete "{task.title}". Your reward deposit of {task.currencySymbol || "₹"}{task.reward.toLocaleString()} will be fully refunded. This action cannot be undone.
+              This will cancel and archive "{task.title}". Your reward deposit of {task.currencySymbol || "₹"}{task.reward.toLocaleString()} will be fully refunded.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
