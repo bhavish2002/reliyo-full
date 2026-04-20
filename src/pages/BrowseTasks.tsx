@@ -14,25 +14,9 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { ALL_COUNTRY_NAMES } from "@/lib/countriesStates";
 import { getCurrentUser } from "@/lib/auth";
-
-interface Task {
-  id: string;
-  taskId?: string;
-  title: string;
-  description: string;
-  status: string;
-  location: string;
-  country?: string;
-  reward: number;
-  deadline: string;
-  createdAt: string;
-  createdBy: string;
-  skills?: string[];
-  domain?: string;
-  workType?: string;
-  manpower?: number;
-  updateFrequency?: string;
-}
+import type { Task } from "@/lib/taskTypes";
+import { readJson } from "@/lib/storage";
+import { env } from "@/lib/env";
 
 const DOMAIN_OPTIONS = [
   "All", "Technology", "Design", "Marketing", "Writing",
@@ -105,21 +89,31 @@ const BrowseTasks = () => {
   const [domainFilter, setDomainFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load user-created tasks from localStorage + demo browse tasks
-    const stored = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
-    const openStored = stored.filter((t) => t.status === "open");
-    // Get accepted task IDs to exclude them
-    const acceptedTasks = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    const acceptedIds = new Set(acceptedTasks.map((t) => t.id));
-    // Merge with demo tasks, deduplicate by id, exclude accepted
-    const ids = new Set(openStored.map((t) => t.id));
-    const merged = [
-      ...openStored.filter((t) => !acceptedIds.has(t.id)),
-      ...DEMO_BROWSE_TASKS.filter((t) => !ids.has(t.id) && !acceptedIds.has(t.id)),
-    ];
-    setAllTasks(merged);
+    try {
+      // Load user-created tasks from localStorage + demo browse tasks
+      const stored = readJson<Task[]>("reliyo_tasks", []);
+      const openStored = stored.filter((t) => t.status === "open");
+      // Get accepted task IDs to exclude them
+      const acceptedTasks = readJson<Task[]>("reliyo_accepted_tasks", []);
+      const acceptedIds = new Set(acceptedTasks.map((t) => t.id));
+      // Merge with demo tasks, deduplicate by id, exclude accepted
+      const ids = new Set(openStored.map((t) => t.id));
+      const merged = [
+        ...openStored.filter((t) => !acceptedIds.has(t.id)),
+        ...(env.enableDemoData
+          ? DEMO_BROWSE_TASKS.filter((t) => !ids.has(t.id) && !acceptedIds.has(t.id))
+          : []),
+      ];
+      setAllTasks(merged);
+    } catch {
+      setLoadError("We couldn't load available tasks right now.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   const filtered = useMemo(() => {
@@ -135,8 +129,8 @@ const BrowseTasks = () => {
       if (domainFilter !== "All" && t.domain !== domainFilter) return false;
       return true;
 }).sort((a, b) => {
-      const dateA = new Date((a as any).acceptedAt || a.createdAt || 0).getTime();
-      const dateB = new Date((b as any).acceptedAt || b.createdAt || 0).getTime();
+      const dateA = new Date(a.acceptedAt || a.createdAt || 0).getTime();
+      const dateB = new Date(b.acceptedAt || b.createdAt || 0).getTime();
       return dateB - dateA;
     });
   }, [allTasks, searchQuery, countryFilter, domainFilter]);
@@ -210,6 +204,20 @@ const BrowseTasks = () => {
       </div>
 
       {/* Task list */}
+      {isLoading && (
+        <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+          Loading available tasks...
+        </div>
+      )}
+
+      {loadError && !isLoading && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
+
+      {!isLoading && !loadError && (
+      <>
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <Search className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -253,7 +261,7 @@ const BrowseTasks = () => {
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-primary">{(task as any).currencySymbol || "₹"}{task.reward.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-primary">{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span>
                     <StarRating rating={rating} />
                   </div>
                 </div>
@@ -261,6 +269,8 @@ const BrowseTasks = () => {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </DashboardLayout>
   );

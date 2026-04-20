@@ -10,12 +10,13 @@ export type TaskStatus =
   | "in_progress"
   | "done"
   | "disputed"
+  // Legacy local-demo value kept temporarily for backward compatibility.
   | "completed"
   | "closed"
   | "force_closed";
 
 export const TASK_STATUSES: TaskStatus[] = [
-  "open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed",
+  "open", "committed", "in_progress", "done", "disputed", "closed", "force_closed",
 ];
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -24,7 +25,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   in_progress: "In Progress",
   done: "Done",
   disputed: "Disputed",
-  completed: "Completed",
+  completed: "Closed (Legacy)",
   closed: "Closed",
   force_closed: "Force Closed",
 };
@@ -35,7 +36,7 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   in_progress: "bg-destructive text-destructive-foreground",
   done: "bg-[hsl(220,70%,50%)] text-white",
   disputed: "bg-[hsl(35,90%,50%)] text-white",
-  completed: "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))]",
+  completed: "bg-muted text-muted-foreground",
   closed: "bg-muted text-muted-foreground",
   force_closed: "bg-destructive/80 text-destructive-foreground",
 };
@@ -44,9 +45,10 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   open: ["committed", "closed"],
   committed: ["in_progress", "open", "force_closed"],
-  in_progress: ["done", "closed", "force_closed"],
-  done: ["completed", "disputed"],
+  in_progress: ["done", "force_closed"],
+  done: ["closed", "disputed"],
   disputed: ["done", "closed", "force_closed"],
+  // Legacy transition kept to avoid breaking pre-existing local demo data.
   completed: ["closed"],
   closed: [],
   force_closed: [],
@@ -206,13 +208,13 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
     case "completed":
       if (role === "requestor") {
         return {
-          message: "Rating required to close this task. Please submit your rating below.",
-          variant: "destructive",
+          message: "This task uses a legacy status and should be treated as closed.",
+          variant: "muted",
         };
       }
       return {
-        message: "Work accepted. Waiting for the requestor to submit a rating.",
-        variant: "success",
+        message: "This task uses a legacy status and should be treated as closed.",
+        variant: "muted",
       };
     case "closed":
       return {

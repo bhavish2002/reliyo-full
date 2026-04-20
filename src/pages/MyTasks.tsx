@@ -18,6 +18,8 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { notifyAcceptorQuit } from "@/lib/notifications";
 import { generateDisputeId, isEscalated } from "@/lib/disputeId";
+import { readJson, writeJson, removeItem } from "@/lib/storage";
+import { env } from "@/lib/env";
 
 const DEMO_TASKS: Task[] = [
   { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta", description: "", workType: "Physical", manpower: 1, skills: [], domain: "Delivery", updateFrequency: "Daily" },
@@ -32,10 +34,17 @@ const DEMO_ACCEPTED: Task[] = [
 const MyTasks = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get("tab") === "accepted" ? "accepted" : searchParams.get("tab") === "dispute" ? "dispute" : "created";
-  const [tab, setTab] = useState<"created" | "accepted" | "dispute">(initialTab as any);
+  const initialTab: "created" | "accepted" | "dispute" =
+    searchParams.get("tab") === "accepted"
+      ? "accepted"
+      : searchParams.get("tab") === "dispute"
+        ? "dispute"
+        : "created";
+  const [tab, setTab] = useState<"created" | "accepted" | "dispute">(initialTab);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [acceptedTasks, setAcceptedTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [quitDialog, setQuitDialog] = useState<Task | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<Task | null>(null);
 
@@ -43,23 +52,29 @@ const MyTasks = () => {
   const currentUserName = currentUser?.name || "";
 
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
-    if (stored.length === 0) {
-      localStorage.setItem("reliyo_tasks", JSON.stringify(DEMO_TASKS));
-      setTasks(DEMO_TASKS);
-    } else {
-      setTasks(stored);
-    }
+    try {
+      const stored = readJson<Task[]>("reliyo_tasks", []);
+      if (stored.length === 0 && env.enableDemoData) {
+        writeJson("reliyo_tasks", DEMO_TASKS);
+        setTasks(DEMO_TASKS);
+      } else {
+        setTasks(stored);
+      }
 
-    const storedAccepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
-    if (currentUser?.role === "acceptor" || currentUserName === "Priya Sharma") {
-      const ids = new Set(storedAccepted.map((t) => t.id));
-      const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
-      setAcceptedTasks(merged);
-    } else {
-      setAcceptedTasks(storedAccepted);
+      const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
+      if ((currentUser?.role === "acceptor" || currentUserName === "Priya Sharma") && env.enableDemoData) {
+        const ids = new Set(storedAccepted.map((t) => t.id));
+        const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
+        setAcceptedTasks(merged);
+      } else {
+        setAcceptedTasks(storedAccepted);
+      }
+    } catch {
+      setLoadError("We couldn't load your tasks. Please refresh and try again.");
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [currentUser?.role, currentUserName]);
 
   const sortByRecent = (a: Task, b: Task) => {
     const dateA = new Date(a.acceptedAt || a.createdAt || 0).getTime();
@@ -89,17 +104,17 @@ const MyTasks = () => {
   const handleQuitTask = (task: Task) => {
     const updatedAccepted = acceptedTasks.filter((t) => t.id !== task.id);
     setAcceptedTasks(updatedAccepted);
-    localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(updatedAccepted.filter((t) => t.id !== task.id)));
+    writeJson("reliyo_accepted_tasks", updatedAccepted.filter((t) => t.id !== task.id));
 
-    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
     const idx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (idx >= 0) {
       storedTasks[idx] = { ...storedTasks[idx], status: "open", acceptedBy: undefined, acceptedAt: undefined };
-      localStorage.setItem("reliyo_tasks", JSON.stringify(storedTasks));
+      writeJson("reliyo_tasks", storedTasks);
       setTasks(storedTasks);
     }
 
-    localStorage.removeItem(`reliyo_timeline_${task.id}`);
+    removeItem(`reliyo_timeline_${task.id}`);
     notifyAcceptorQuit(task);
 
     setQuitDialog(null);
@@ -110,16 +125,16 @@ const MyTasks = () => {
   };
 
   const handleDeleteTask = (task: Task) => {
-    const storedTasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
+    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
     const updated = storedTasks.filter((t: Task) => t.id !== task.id);
-    localStorage.setItem("reliyo_tasks", JSON.stringify(updated));
+    writeJson("reliyo_tasks", updated);
     setTasks(updated);
 
-    localStorage.removeItem(`reliyo_timeline_${task.id}`);
+    removeItem(`reliyo_timeline_${task.id}`);
     setDeleteDialog(null);
     toast({
-      title: "Task Deleted",
-      description: "The task has been removed and your reward deposit will be refunded.",
+      title: "Task Cancelled",
+      description: "The task has been hidden and your reward deposit will be refunded.",
     });
   };
 
@@ -133,6 +148,28 @@ const MyTasks = () => {
 
   // Check if any accepted task is in committed status
   const hasCommittedTasks = myAcceptedTasks.some(t => t.status === "committed");
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <h1 className="text-2xl font-bold text-foreground mb-4">My Tasks</h1>
+        <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+          Loading your tasks...
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <DashboardLayout>
+        <h1 className="text-2xl font-bold text-foreground mb-4">My Tasks</h1>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {loadError}
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -288,7 +325,7 @@ const MyTasks = () => {
               <Trash2 className="h-5 w-5 text-destructive" /> Delete Task?
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete the task "{deleteDialog?.title}". Your reward deposit of {deleteDialog?.currencySymbol || "₹"}{deleteDialog?.reward.toLocaleString() || 0} will be fully refunded. This action cannot be undone.
+              This will cancel and archive the task "{deleteDialog?.title}". Your reward deposit of {deleteDialog?.currencySymbol || "₹"}{deleteDialog?.reward.toLocaleString() || 0} will be fully refunded.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
