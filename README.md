@@ -42,3 +42,7 @@ Copy `.env.example` to `.env.local` and configure values before local developmen
 
 - This repo is frontend-only in the current phase.
 - Backend/API integration scaffolding is included for Sprint 1 readiness, but no backend business logic is implemented here.
+
+## Planning Specs
+
+- Sprint 0 policy-lock documents are available in `docs/sprint-0/`.
