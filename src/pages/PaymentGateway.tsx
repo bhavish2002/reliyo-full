@@ -302,7 +302,7 @@ const PaymentGateway = () => {
 
         <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-xs text-muted-foreground mb-6">
           <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
-          Your payment is secured with 256-bit SSL encryption. {isAcceptFlow ? "The trust deposit is held in escrow and refunded on task completion." : "The reward is held in escrow and released only on task completion."}
+          Your payment is secured with 256-bit SSL encryption. {isAcceptFlow ? "The trust deposit is held as platform-held funds and refunded on task completion per policy." : "The reward is held as platform-held funds and released only on task completion per policy."}
         </div>
 
         <Button

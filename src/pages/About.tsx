@@ -13,7 +13,7 @@ const About = () => (
       </Link>
       <h1 className="text-3xl font-bold text-foreground sm:text-4xl">About Reliyo</h1>
       <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-        Reliyo is a trust-driven task marketplace designed to connect people who need work done with reliable individuals who deliver results. Every interaction on Reliyo is backed by escrow-secured payments, transparent tracking, and a reputation system that rewards reliability.
+        Reliyo is a trust-driven task marketplace designed to connect people who need work done with reliable individuals who deliver results. Every interaction on Reliyo is backed by platform-held payments, transparent tracking, and a reputation system that rewards reliability.
       </p>
 
       <div className="mt-12 grid gap-6 sm:grid-cols-2">
@@ -48,7 +48,7 @@ const About = () => (
         <h2 className="text-xl font-semibold text-foreground">Why Reliyo?</h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
           {[
-            { icon: Shield, title: "Escrow-Secured Payments", desc: "Funds are locked until work is verified, protecting both parties." },
+            { icon: Shield, title: "Platform-held payments", desc: "Funds are held per policy until work is verified, protecting both parties." },
             { icon: Zap, title: "Trust Scores", desc: "Every user builds a reliability score based on their platform behavior." },
             { icon: Target, title: "Fair Dispute Resolution", desc: "Multi-level dispute system ensures conflicts are resolved equitably." },
           ].map((v, i) => (

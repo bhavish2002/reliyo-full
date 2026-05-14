@@ -1,0 +1,19 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Baseline table for migrations and future immutable audit stream (Sprint 4+).
+model AuditEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  requestId String?  @map("request_id")
+  action    String
+  payload   Json?
+
+  @@map("audit_events")
+}

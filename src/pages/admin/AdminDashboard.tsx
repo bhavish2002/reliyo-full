@@ -28,14 +28,12 @@ const STATUS_PIE_COLORS: Record<TaskStatus, string> = {
   in_progress: "hsl(45, 90%, 50%)",
   done: "hsl(200, 70%, 50%)",
   disputed: "hsl(var(--destructive))",
-  completed: "hsl(var(--success))",
   closed: "hsl(var(--muted-foreground))",
   force_closed: "hsl(0, 70%, 45%)",
 };
 
 const STATUS_BADGE_COLORS: Record<string, string> = {
   in_progress: "bg-primary text-primary-foreground",
-  completed: "bg-success text-success-foreground",
   committed: "bg-[hsl(220,70%,50%)] text-white",
   disputed: "bg-destructive text-destructive-foreground",
   open: "bg-success text-success-foreground",

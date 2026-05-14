@@ -1,6 +1,6 @@
 /**
  * 3-Strike inactivity engine for REQUESTOR deadlocks only.
- * Applies to tasks in "done" or "completed" status where the
+ * Applies to tasks in "done" status where the
  * requestor is the party who must act (review work or submit rating).
  * This rule does NOT apply to acceptor inactivity.
  *
@@ -47,7 +47,7 @@ export function checkInactivity(
     bannerMessage: null,
   };
 
-  if ((currentStatus !== "done" && currentStatus !== "completed") || !statusEnteredAt) {
+  if (currentStatus !== "done" || !statusEnteredAt) {
     return empty;
   }
 

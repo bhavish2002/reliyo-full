@@ -99,9 +99,11 @@ function isDuplicate(existing: AppNotification[], taskId: string, type: Notifica
 
 function isTaskClosed(taskId: string): boolean {
   try {
-    const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-    const task = tasks.find((t: any) => t.id === taskId);
-    return task?.status === "closed" || task?.status === "force_closed";
+    const created = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as { id: string; status: string }[];
+    const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as { id: string; status: string }[];
+    const task = [...created, ...accepted].find((t) => t.id === taskId);
+    const s = task?.status;
+    return s === "closed" || s === "force_closed";
   } catch {
     return false;
   }
@@ -321,7 +323,7 @@ export function notifyTaskClosed(task: { id: string; taskId?: string; title: str
     priority: "high",
     target: "requestor",
     title: "Task Closed",
-    message: `"${task.title}" has been closed. Escrow funds released.`,
+    message: `"${task.title}" has been closed. Platform-held funds released.`,
   });
   pushNotification({
     taskId: task.id,
@@ -331,7 +333,7 @@ export function notifyTaskClosed(task: { id: string; taskId?: string; title: str
     priority: "high",
     target: "acceptor",
     title: "Task Closed",
-    message: `"${task.title}" has been closed. Payment released.`,
+    message: `"${task.title}" has been closed. Settlement completed per task outcome.`,
   });
 }
 

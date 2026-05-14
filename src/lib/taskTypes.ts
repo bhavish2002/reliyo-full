@@ -10,8 +10,6 @@ export type TaskStatus =
   | "in_progress"
   | "done"
   | "disputed"
-  // Legacy local-demo value kept temporarily for backward compatibility.
-  | "completed"
   | "closed"
   | "force_closed";
 
@@ -25,7 +23,6 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   in_progress: "In Progress",
   done: "Done",
   disputed: "Disputed",
-  completed: "Closed (Legacy)",
   closed: "Closed",
   force_closed: "Force Closed",
 };
@@ -36,7 +33,6 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   in_progress: "bg-destructive text-destructive-foreground",
   done: "bg-[hsl(220,70%,50%)] text-white",
   disputed: "bg-[hsl(35,90%,50%)] text-white",
-  completed: "bg-muted text-muted-foreground",
   closed: "bg-muted text-muted-foreground",
   force_closed: "bg-destructive/80 text-destructive-foreground",
 };
@@ -48,8 +44,6 @@ export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   in_progress: ["done", "force_closed"],
   done: ["closed", "disputed"],
   disputed: ["done", "closed", "force_closed"],
-  // Legacy transition kept to avoid breaking pre-existing local demo data.
-  completed: ["closed"],
   closed: [],
   force_closed: [],
 };
@@ -142,8 +136,6 @@ export function canComment(status: TaskStatus, role: AuthorRole): boolean {
       return role === "requestor" || role === "acceptor";
     case "disputed":
       return role === "requestor" || role === "acceptor" || role === "admin";
-    case "completed":
-      return false;
     case "closed":
     case "force_closed":
       return false;
@@ -205,17 +197,6 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
         message: "This task is currently under dispute.",
         variant: "warning",
       };
-    case "completed":
-      if (role === "requestor") {
-        return {
-          message: "This task uses a legacy status and should be treated as closed.",
-          variant: "muted",
-        };
-      }
-      return {
-        message: "This task uses a legacy status and should be treated as closed.",
-        variant: "muted",
-      };
     case "closed":
       return {
         message: "This task is closed and cannot be modified.",
@@ -223,7 +204,7 @@ export function getStatusBanner(status: TaskStatus, role: AuthorRole): {
       };
     case "force_closed":
       return {
-        message: "This task was force-closed by admin. Escrow funds have been settled.",
+        message: "This task was force-closed by admin. Platform-held funds have been settled.",
         variant: "destructive",
       };
     default:

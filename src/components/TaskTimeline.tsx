@@ -153,6 +153,8 @@ const TaskTimeline = ({
   const [showDisputeDialog, setShowDisputeDialog] = useState(false);
   const [showAlertDialog, setShowAlertDialog] = useState(false);
   const [showRatingDialog, setShowRatingDialog] = useState(false);
+  /** After "Accept work", requestor must rate before `Closed` (Sprint-0 contract; no `completed` state). */
+  const [ratingMandatory, setRatingMandatory] = useState(false);
   const [ratingValue, setRatingValue] = useState(0);
   const [ratingFeedback, setRatingFeedback] = useState("");
   const [showForceCloseDialog, setShowForceCloseDialog] = useState(false);
@@ -247,12 +249,8 @@ const TaskTimeline = ({
     return () => window.clearInterval(timer);
   }, [canShowRequestorDisputeAction, lastDisputeTimestamp, lastForceCloseTimestamp, currentUserRole]);
 
-  // Mandatory rating
-  const isMandatoryRating = status === "completed" && currentUserRole === "requestor";
-
-  useEffect(() => {
-    if (isMandatoryRating) setShowRatingDialog(true);
-  }, [isMandatoryRating]);
+  const isMandatoryRating =
+    ratingMandatory && currentUserRole === "requestor" && status === "done";
 
   useEffect(() => {
     if (isMandatoryRating) {
@@ -373,15 +371,10 @@ const TaskTimeline = ({
   // ── Requestor accepts work ─────────────────────────────────────────────
 
   const handleAcceptWork = () => {
-    if (!canTransition(status, "completed")) return;
-    const sysEntry = createSystemEntry(
-      task.id,
-      `${currentUserName} has accepted the work. Task moved to Completed. Rating required to close.`,
-      "status_change",
-      { fromStatus: "done", toStatus: "completed" }
-    );
+    if (status !== "done" || currentUserRole !== "requestor") return;
     notifyRatingRequired(task);
-    onStatusChange("completed", [sysEntry]);
+    setRatingMandatory(true);
+    setShowRatingDialog(true);
   };
 
   // ── Requestor raises dispute ───────────────────────────────────────────
@@ -520,13 +513,13 @@ const TaskTimeline = ({
   const handleAdminForceClose = () => {
     const closeEntry = createSystemEntry(
       task.id,
-      `Task force-closed by Admin (${currentUserName}). Escalated dispute resolved. Escrow funds released.`,
+      `Task force-closed by Admin (${currentUserName}). Escalated dispute resolved. Platform-held funds settled.`,
       "admin_action",
-      { fromStatus: "disputed" as TaskStatus, toStatus: "closed" }
+      { fromStatus: "disputed" as TaskStatus, toStatus: "force_closed" }
     );
     setShowForceCloseDialog(false);
     notifyTaskClosed(task);
-    onStatusChange("closed", [closeEntry]);
+    onStatusChange("force_closed", [closeEntry]);
   };
 
   // ── Deadline extension ────────────────────────────────────────────────
@@ -548,7 +541,7 @@ const TaskTimeline = ({
   // ── Rating submission ──────────────────────────────────────────────────
 
   const handleSubmitRating = () => {
-    if (ratingValue === 0) return;
+    if (ratingValue === 0 || !canTransition(status, "closed")) return;
     const ratingEntry = createSystemEntry(
       task.id,
       `${currentUserName} rated the acceptor ${ratingValue}/5. ${ratingFeedback ? `Feedback: "${ratingFeedback}"` : ""}`,
@@ -557,11 +550,12 @@ const TaskTimeline = ({
     );
     const closeEntry = createSystemEntry(
       task.id,
-      "Task closed. Escrow funds released. Reliability scores updated.",
+      "Task closed. Platform-held funds released. Reliability scores updated.",
       "escrow",
-      { fromStatus: "completed", toStatus: "closed" }
+      { fromStatus: "done", toStatus: "closed" }
     );
     setShowRatingDialog(false);
+    setRatingMandatory(false);
     onRatingSubmit?.(ratingValue, ratingFeedback);
     notifyTaskClosed(task);
     onStatusChange("closed", [ratingEntry, closeEntry]);
@@ -854,15 +848,6 @@ const TaskTimeline = ({
       );
     }
 
-    // Completed: requestor must rate
-    if (status === "completed" && currentUserRole === "requestor") {
-      actions.push(
-        <Button key="rate" size="sm" onClick={() => setShowRatingDialog(true)} className="gap-1.5">
-          <Star className="h-3.5 w-3.5" /> Submit Rating to Close
-        </Button>
-      );
-    }
-
     if (actions.length === 0) return null;
     return <div className="flex flex-wrap gap-2 py-3 border-t border-border">{actions}</div>;
   };
@@ -883,7 +868,7 @@ const TaskTimeline = ({
       </div>
 
       {/* Deadline banner for acceptor */}
-      {currentUserRole === "acceptor" && effectiveDeadline && !["closed", "force_closed", "completed"].includes(status) && (
+      {currentUserRole === "acceptor" && effectiveDeadline && !["closed", "force_closed"].includes(status) && (
         <div className={cn(
           "flex items-center gap-2 mx-4 mt-3 rounded-lg border p-3 text-sm font-medium",
           deadlinePassed
@@ -984,7 +969,7 @@ const TaskTimeline = ({
       <div className="px-4">{renderActions()}</div>
 
       {/* Comment composer */}
-      {status !== "closed" && status !== "force_closed" && status !== "completed" && status !== "open" && (
+      {status !== "closed" && status !== "force_closed" && status !== "open" && (
         <div className="border-t border-border p-4">
           {attachedFiles.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-3">
@@ -1062,17 +1047,17 @@ const TaskTimeline = ({
         </div>
       )}
 
-      {/* Closed / completed footer */}
+      {/* Closed footer */}
       {(status === "closed" || status === "force_closed") && (
         <div className="border-t border-border px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground bg-muted/30">
           <Lock className="h-4 w-4" />
           This task is {status === "force_closed" ? "force closed" : "closed"} and cannot be modified.
         </div>
       )}
-      {status === "completed" && currentUserRole !== "requestor" && (
+      {status === "done" && currentUserRole !== "requestor" && (
         <div className="border-t border-border px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground bg-muted/30">
           <Clock className="h-4 w-4" />
-          Waiting for requestor to submit a rating.
+          Waiting for the requestor to accept the work and submit a rating.
         </div>
       )}
 
@@ -1127,7 +1112,7 @@ const TaskTimeline = ({
             </DialogTitle>
             <DialogDescription>
               {isEscalated(task.disputeCount || 0) && currentUserRole === "admin"
-                ? "This will immediately close the escalated task and release escrow funds. This action is irreversible."
+                ? "This will immediately close the escalated task and settle platform-held funds. This action is irreversible."
                 : "This will send a force-close request to the admin for review. The task will not be closed until an admin approves it."}
             </DialogDescription>
           </DialogHeader>
@@ -1184,7 +1169,7 @@ const TaskTimeline = ({
         </DialogContent>
       </Dialog>
 
-      {/* Rating dialog — mandatory & non-dismissable when completed+requestor */}
+      {/* Rating dialog — mandatory after Accept work while task is Done */}
       <Dialog
         open={showRatingDialog}
         onOpenChange={(open) => { if (!isMandatoryRating) setShowRatingDialog(open); }}
@@ -1205,7 +1190,7 @@ const TaskTimeline = ({
               <Star className="h-5 w-5 text-primary" /> Rate the Acceptor
             </DialogTitle>
             <DialogDescription>
-              Your rating is mandatory to close this task. Escrow funds will be released upon submission.
+              Your rating is mandatory to close this task. Platform-held funds will be released upon submission.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">

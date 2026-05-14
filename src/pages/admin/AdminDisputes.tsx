@@ -99,7 +99,7 @@ const AdminDisputes = () => {
   const handleResolveInvalid = (d: AdminDispute) => {
     if (!validateComment()) return;
     const comment = adminComment.trim();
-    adminAddTimelineEntry(d.taskId, `✅ ADMIN RESOLUTION (${d.disputeId}): RESOLVED INVALID — ${comment}. Escrow released: reward - ${PLATFORM_FEE_PERCENT}% PL fee to acceptor + full trust deposit refunded.`, "admin_action", {
+    adminAddTimelineEntry(d.taskId, `✅ ADMIN RESOLUTION (${d.disputeId}): RESOLVED INVALID — ${comment}. Platform-held funds: reward minus ${PLATFORM_FEE_PERCENT}% platform fee to acceptor; full trust deposit refunded.`, "admin_action", {
       fromStatus: "disputed", toStatus: "closed",
     });
     adminUpdateTaskStatus(d.taskId, "closed");
@@ -108,13 +108,13 @@ const AdminDisputes = () => {
     setReviewDispute(null);
     setAdminComment("");
     reload();
-    toast({ title: "Dispute Resolved Invalid", description: "Task closed. Escrow released normally to acceptor." });
+    toast({ title: "Dispute Resolved Invalid", description: "Task closed. Settlement completed per policy." });
   };
 
   const handleAdminClose = (d: AdminDispute) => {
     if (!validateComment()) return;
     const comment = adminComment.trim();
-    adminAddTimelineEntry(d.taskId, `🚫 ADMIN RESOLUTION (${d.disputeId}): ADMIN CLOSED — ${comment}. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation.`, "admin_action", {
+    adminAddTimelineEntry(d.taskId, `🚫 ADMIN RESOLUTION (${d.disputeId}): ADMIN CLOSED — ${comment}. Platform-held funds settled per force-close policy (requestor reward refund; acceptor deposit less applicable fee).`, "admin_action", {
       fromStatus: "disputed", toStatus: "force_closed",
     });
     adminUpdateTaskStatus(d.taskId, "force_closed");
@@ -368,7 +368,7 @@ const AdminDisputes = () => {
                 <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
                 <div className="text-left">
                   <p className="font-medium">Resolved Invalid</p>
-                  <p className="text-xs text-muted-foreground">No actual work pending. Close task, release escrow normally.</p>
+                  <p className="text-xs text-muted-foreground">No actual work pending. Close task; settle platform-held funds per policy.</p>
                 </div>
               </Button>
 
