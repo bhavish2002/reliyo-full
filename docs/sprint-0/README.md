@@ -28,6 +28,10 @@ Sprint 0 is complete only when all items below are true:
 
 All Sprint 0 decisions are now locked and versioned as `v1.0`.
 
+## Execution tracking
+
+Ongoing MVP sprint status: `docs/EXECUTION-TRACKER.md`.
+
 ## How To Use
 
 1. Review each file in order.

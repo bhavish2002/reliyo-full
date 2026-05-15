@@ -1,10 +1,18 @@
 import type { Task, TaskStatus } from "@/lib/taskTypes";
 
-export interface ApiErrorResponse {
+/**
+ * Canonical error body per `docs/sprint-0/api-error-contract.md`.
+ * Some environments may return the body at the top level; the client accepts both.
+ */
+export interface ApiErrorBody {
   code: string;
   message: string;
   requestId?: string;
   details?: Record<string, unknown>;
+}
+
+export interface ApiErrorEnvelope {
+  error: ApiErrorBody;
 }
 
 export interface ApiSuccessResponse<T> {

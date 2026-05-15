@@ -15,8 +15,8 @@ const HeroSection = () => {
       </h1>
 
       <p className="mx-auto mt-6 max-w-xl text-lg text-muted-foreground">
-        A marketplace where reliability is rewarded, payments are secured in
-        escrow, and every action is auditable.
+        A marketplace where reliability is rewarded, payments are held as
+        platform-held funds, and every action is auditable.
       </p>
 
       <Button size="lg" className="mt-8 gap-2 px-8 text-base" asChild>

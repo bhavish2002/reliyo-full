@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { reportUiError } from "@/lib/observability";
+import { reportUiError, getClientTraceId } from "@/lib/observability";
 
 interface Props {
   children: ReactNode;
@@ -8,15 +8,17 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  traceId: string | null;
 }
 
 class AppErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
+    traceId: null,
   };
 
   public static getDerivedStateFromError(): State {
-    return { hasError: true };
+    return { hasError: true, traceId: getClientTraceId() };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
@@ -36,6 +38,9 @@ class AppErrorBoundary extends Component<Props, State> {
             <h1 className="text-lg font-semibold text-foreground">Something went wrong</h1>
             <p className="text-sm text-muted-foreground">
               The screen failed to load. Please refresh and try again.
+            </p>
+            <p className="text-xs text-muted-foreground font-mono break-all">
+              Reference: {this.state.traceId}
             </p>
             <Button onClick={this.handleReload} className="w-full">
               Reload app

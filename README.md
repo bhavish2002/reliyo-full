@@ -1,6 +1,6 @@
-# Reliyo Frontend
+# Reliyo
 
-This repository contains the frontend application for Reliyo's task marketplace experience.
+Monorepo for Reliyo's task marketplace: React frontend (`/`) and NestJS API (`backend/`).
 
 ## Tech stack
 
@@ -9,20 +9,37 @@ This repository contains the frontend application for Reliyo's task marketplace 
 - Tailwind CSS
 - shadcn/ui
 - Vitest + Testing Library
+- NestJS + Prisma (API in `backend/`)
 
-## Getting started
+## Getting started (frontend)
 
 Requirements:
 
 - Node.js 20+
 - npm 10+
 
-Install and run:
+From the repository root:
 
 ```sh
 npm install
 npm run dev
 ```
+
+## Backend API
+
+See `backend/README.md`. Quick local stack:
+
+```sh
+docker compose up -d postgres
+cd backend
+cp .env.example .env.local
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run start:dev
+```
+
+Sprint 2 notes: `docs/sprint-2/README.md`.
 
 ## Scripts
 
@@ -40,9 +57,11 @@ Copy `.env.example` to `.env.local` and configure values before local developmen
 
 ## Notes
 
-- This repo is frontend-only in the current phase.
-- Backend/API integration scaffolding is included for Sprint 1 readiness, but no backend business logic is implemented here.
+- The API is a Sprint 2 foundation (health, Prisma baseline, shared envelopes). Domain routes are added in later sprints.
 
 ## Planning Specs
 
+- **MVP execution tracker (status):** `docs/EXECUTION-TRACKER.md`
 - Sprint 0 policy-lock documents are available in `docs/sprint-0/`.
+- Sprint 1 execution notes and checklist: `docs/sprint-1/README.md`.
+- Sprint 2 backend foundation: `docs/sprint-2/README.md`.

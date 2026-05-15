@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS } from "@/lib/taskTypes";
+import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { getUserSettings } from "@/lib/userSettings";
 import { format, parseISO, subMonths, startOfMonth, isAfter, isBefore, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -34,8 +35,8 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 function getAllTasks(): Task[] {
   try {
-    const created = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
-    const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const created = migrateLegacyTaskList(JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[]);
+    const accepted = migrateLegacyTaskList(JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[]);
     const map = new Map<string, Task>();
     [...created, ...accepted].forEach((t) => map.set(t.id, t));
     return Array.from(map.values());
@@ -99,7 +100,6 @@ const STATUS_PIE_COLORS: Record<TaskStatus, string> = {
   in_progress: "hsl(45, 90%, 50%)",
   done: "hsl(200, 70%, 50%)",
   disputed: "hsl(var(--destructive))",
-  completed: "hsl(var(--success))",
   closed: "hsl(var(--muted-foreground))",
   force_closed: "hsl(0, 70%, 45%)",
 };

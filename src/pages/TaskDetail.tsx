@@ -25,7 +25,8 @@ import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
 import { notifyTaskClosed } from "@/lib/notifications";
 import { readJson, writeJson, removeItem } from "@/lib/storage";
 import { env } from "@/lib/env";
-import { comparePolicyStatus, normalizePolicyStatus } from "@/lib/taskPolicy";
+import { comparePolicyStatus } from "@/lib/taskPolicy";
+import { migrateLegacyTask, migrateLegacyTaskList } from "@/lib/taskMigration";
 
 // ── Demo browse tasks for lookup ─────────────────────────────────────────────
 const DEMO_BROWSE_TASKS: Task[] = [
@@ -97,7 +98,7 @@ const DEMO_CREATED_TASKS: Task[] = [
 
 const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
   demo2: [
-    { id: "tl1", taskId: "demo2", author: "System", authorRole: "system", message: "Task created and reward locked in escrow.", timestamp: "2026-02-08T10:00:00Z", systemGenerated: true, entryType: "escrow" },
+    { id: "tl1", taskId: "demo2", author: "System", authorRole: "system", message: "Task created and reward locked as platform-held funds.", timestamp: "2026-02-08T10:00:00Z", systemGenerated: true, entryType: "escrow" },
     { id: "tl2", taskId: "demo2", author: "System", authorRole: "system", message: "Task published and visible to acceptors.", timestamp: "2026-02-08T10:01:00Z", systemGenerated: true, entryType: "status_change" },
     { id: "tl3", taskId: "demo2", author: "System", authorRole: "system", message: "Priya Sharma has accepted the task. Trust deposit locked. Status: Committed.", timestamp: "2026-02-09T14:30:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "open", toStatus: "committed" } },
     { id: "tl4", taskId: "demo2", author: "Priya Sharma", authorRole: "acceptor", message: "Hi! I've started working on the logo. Will share initial concepts by tomorrow.", timestamp: "2026-02-09T15:00:00Z", systemGenerated: false, entryType: "comment" },
@@ -106,7 +107,7 @@ const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
     { id: "tl7", taskId: "demo2", author: "Priya Sharma", authorRole: "acceptor", message: "Here are 3 initial concepts. Let me know which direction you prefer.", timestamp: "2026-02-10T11:00:00Z", systemGenerated: false, entryType: "comment" },
   ],
   demo3: [
-    { id: "tl10", taskId: "demo3", author: "System", authorRole: "system", message: "Task created and reward locked in escrow.", timestamp: "2026-02-05T10:00:00Z", systemGenerated: true, entryType: "escrow" },
+    { id: "tl10", taskId: "demo3", author: "System", authorRole: "system", message: "Task created and reward locked as platform-held funds.", timestamp: "2026-02-05T10:00:00Z", systemGenerated: true, entryType: "escrow" },
     { id: "tl11", taskId: "demo3", author: "System", authorRole: "system", message: "Sanjay Patel has accepted the task. Trust deposit locked.", timestamp: "2026-02-06T09:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "open", toStatus: "committed" } },
     { id: "tl12", taskId: "demo3", author: "Sanjay Patel", authorRole: "acceptor", message: "Starting translation. Will maintain original formatting.", timestamp: "2026-02-06T10:00:00Z", systemGenerated: false, entryType: "comment" },
     { id: "tl13", taskId: "demo3", author: "System", authorRole: "system", message: "Task moved to In Progress.", timestamp: "2026-02-06T10:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "committed", toStatus: "in_progress" } },
@@ -114,7 +115,7 @@ const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
     { id: "tl15", taskId: "demo3", author: "System", authorRole: "system", message: "Sanjay Patel has marked this task as Done. Awaiting requestor review.", timestamp: "2026-02-10T16:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "in_progress", toStatus: "done" } },
   ],
   accepted1: [
-    { id: "tl20", taskId: "accepted1", author: "System", authorRole: "system", message: "Task created and reward locked in escrow.", timestamp: "2026-02-12T10:00:00Z", systemGenerated: true, entryType: "escrow" },
+    { id: "tl20", taskId: "accepted1", author: "System", authorRole: "system", message: "Task created and reward locked as platform-held funds.", timestamp: "2026-02-12T10:00:00Z", systemGenerated: true, entryType: "escrow" },
     { id: "tl21", taskId: "accepted1", author: "System", authorRole: "system", message: "Arjun Mehta has accepted the task. Trust deposit locked.", timestamp: "2026-02-13T09:00:00Z", systemGenerated: true, entryType: "status_change", metadata: { fromStatus: "open", toStatus: "committed" } },
   ],
 };
@@ -140,15 +141,15 @@ const TaskDetail = () => {
   const getUserRole = (t: Task): AuthorRole => {
     if (t.createdBy === CURRENT_USER) return "requestor";
     if (t.acceptedBy === CURRENT_USER) return "acceptor";
-    const accepted = readJson<Task[]>("reliyo_accepted_tasks", []);
+    const accepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
     if (accepted.some((a) => a.id === t.id && (a.acceptedBy === CURRENT_USER || !a.acceptedBy))) return "acceptor";
     return "requestor";
   };
 
   useEffect(() => {
     try {
-      const storedTasks = readJson<Task[]>("reliyo_tasks", []);
-      const acceptedTasks = readJson<Task[]>("reliyo_accepted_tasks", []);
+      const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
+      const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
 
       let found = storedTasks.find((t) => t.id === id);
       if (!found) found = acceptedTasks.find((t) => t.id === id);
@@ -168,7 +169,7 @@ const TaskDetail = () => {
                 : fromTasks.status,
           };
         }
-        found.status = normalizePolicyStatus(found.status);
+        found = migrateLegacyTask(found);
         setTask(found);
       }
 
@@ -181,7 +182,7 @@ const TaskDetail = () => {
         const initialEntries: TimelineEntry[] = [
           {
             id: `init-1-${id}`, taskId: found.id, author: "System", authorRole: "system",
-            message: "Task created and reward locked in escrow.",
+            message: "Task created and reward locked as platform-held funds.",
             timestamp: found.createdAt, systemGenerated: true, entryType: "escrow",
           },
           {
@@ -221,7 +222,7 @@ const TaskDetail = () => {
         taskId: task.id,
         author: "System",
         authorRole: "system",
-        message: "Task closed automatically. Escrow funds released.",
+        message: "Task closed automatically. Platform-held funds released.",
         timestamp: new Date().toISOString(),
         systemGenerated: true,
         entryType: "escrow",
@@ -234,10 +235,10 @@ const TaskDetail = () => {
       const closedTask: Task = { ...task, status: "closed" };
       setTask(closedTask);
 
-      const storedTasks = readJson<Task[]>("reliyo_tasks", []);
+      const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
       const idx = storedTasks.findIndex((t) => t.id === task.id);
       if (idx >= 0) { storedTasks[idx] = { ...storedTasks[idx], status: "closed" }; writeJson("reliyo_tasks", storedTasks); }
-      const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
+      const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
       const accIdx = storedAccepted.findIndex((t) => t.id === task.id);
       if (accIdx >= 0) { storedAccepted[accIdx] = { ...storedAccepted[accIdx], status: "closed" }; writeJson("reliyo_accepted_tasks", storedAccepted); }
 
@@ -289,14 +290,14 @@ const TaskDetail = () => {
   const status = task.status as TaskStatus;
   const effectiveDeadline = getEffectiveDeadline(task);
 
-  const acceptedTasks = readJson<Task[]>("reliyo_accepted_tasks", []);
+  const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
   const isAlreadyAccepted = acceptedTasks.some((t) => t.id === task.id);
 
   const canDelete = isOwner && status === "open" && !task.acceptedBy;
 
   // ── Delete task handler ─────────────────────────────────────────────────────
   const handleDeleteTask = () => {
-    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
+    const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
     const updated = storedTasks.filter((t: Task) => t.id !== task.id);
     writeJson("reliyo_tasks", updated);
     removeItem(`reliyo_timeline_${task.id}`);
@@ -311,7 +312,7 @@ const TaskDetail = () => {
   // ── Accept flow handlers ──────────────────────────────────────────────────
 
   const handleAcceptClick = () => {
-    const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
+    const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
     const demoAccepted: Task[] = [
       { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "" },
     ];
@@ -372,14 +373,14 @@ const TaskDetail = () => {
     setTask(updatedTask);
 
     const persistData = { status: newStatus, statusEnteredAt: updatedTask.statusEnteredAt, disputeCount: updatedTask.disputeCount, disputes: updatedTask.disputes, dsp4ResolvedValid: updatedTask.dsp4ResolvedValid };
-    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
+    const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
     const taskIdx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (taskIdx >= 0) {
       storedTasks[taskIdx] = { ...storedTasks[taskIdx], ...persistData };
       writeJson("reliyo_tasks", storedTasks);
     }
 
-    const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
+    const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
     const accIdx = storedAccepted.findIndex((t: Task) => t.id === task.id);
     if (accIdx >= 0) {
       storedAccepted[accIdx] = { ...storedAccepted[accIdx], ...persistData };
@@ -405,7 +406,7 @@ const TaskDetail = () => {
     const stores = ["reliyo_tasks", "reliyo_accepted_tasks"];
     stores.forEach((key) => {
       try {
-        const tasks = readJson<Task[]>(key, []);
+        const tasks = migrateLegacyTaskList(readJson<Task[]>(key, []));
         const idx = tasks.findIndex((t) => t.id === task.id);
         if (idx >= 0) {
           tasks[idx] = { ...tasks[idx], extendedDeadline: newDeadline };
@@ -426,7 +427,7 @@ const TaskDetail = () => {
 
   const lifecycleSteps = [
     { label: "Task created", filled: true },
-    { label: "Reward locked in escrow", filled: true },
+    { label: "Reward locked (platform-held funds)", filled: true },
     { label: "Task published", filled: status !== "open" || true },
     { label: "Acceptor committed", filled: ["committed", "in_progress", "done", "disputed", "closed", "force_closed"].includes(status) },
     { label: "Work in progress", filled: ["in_progress", "done", "disputed", "closed", "force_closed"].includes(status) },

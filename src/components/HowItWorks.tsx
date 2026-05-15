@@ -32,7 +32,7 @@ const HowItWorks = () => {
           How It Works
         </h2>
         <p className="mx-auto mt-3 max-w-lg text-center text-muted-foreground">
-          Three simple steps for requestors and acceptors — secured by escrow at
+          Three simple steps for requestors and acceptors — with platform-held funds at
           every stage.
         </p>
 

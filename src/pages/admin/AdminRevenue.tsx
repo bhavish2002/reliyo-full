@@ -74,8 +74,8 @@ const AdminRevenue = () => {
     { label: "Total Revenue", value: `₹${revenue.totalRevenue.toLocaleString()}`, icon: DollarSign, sub: "Platform Fee + Commission Fee" },
     { label: "Platform Fee", value: `₹${revenue.platformFeeEarnings.toLocaleString()}`, icon: DollarSign, sub: "5% fee from closed tasks" },
     { label: "Commission Fee", value: `₹${revenue.commissionFeeEarnings.toLocaleString()}`, icon: Coins, sub: "3% penalty from force-closures" },
-    { label: "Escrow Locked", value: `₹${revenue.totalEscrowLocked.toLocaleString()}`, icon: Wallet, sub: "Currently held in escrow" },
-    { label: "Escrow Released", value: `₹${revenue.totalEscrowReleased.toLocaleString()}`, icon: TrendingUp, sub: "Total released from escrow" },
+  { label: "Platform-held (locked)", value: `₹${revenue.totalEscrowLocked.toLocaleString()}`, icon: Wallet, sub: "Currently held by the platform" },
+  { label: "Platform-held (released)", value: `₹${revenue.totalEscrowReleased.toLocaleString()}`, icon: TrendingUp, sub: "Total released per settlements" },
   ];
 
   const maxCustomFrom = subMonths(new Date(), 6);
@@ -86,7 +86,7 @@ const AdminRevenue = () => {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Revenue</h1>
-          <p className="text-sm text-muted-foreground">Live platform revenue and escrow tracking</p>
+          <p className="text-sm text-muted-foreground">Live platform revenue and platform-held funds tracking</p>
         </div>
         <div className="flex items-center gap-2">
           <Select value={filterMode} onValueChange={(v) => {
@@ -172,10 +172,10 @@ const AdminRevenue = () => {
         </Card>
 
         <Card className="rounded-xl">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Escrow Flow</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Held funds flow</CardTitle></CardHeader>
           <CardContent className="h-64">
             {filteredMonthlyEscrow.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No escrow data yet</div>
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No held-funds data yet</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={filteredMonthlyEscrow}>

@@ -5,6 +5,7 @@
  */
 
 import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS, PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT } from "@/lib/taskTypes";
+import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { type AppNotification, getNotifications, notifyTaskForceClosed as _notifyForceClosed } from "@/lib/notifications";
 import { isEscalated } from "@/lib/disputeId";
 import { TEST_CREDENTIALS } from "@/lib/auth";
@@ -13,15 +14,15 @@ import { TEST_CREDENTIALS } from "@/lib/auth";
 
 export function getAllPlatformTasks(): Task[] {
   try {
-    const created = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[];
-    const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[];
+    const created = migrateLegacyTaskList(JSON.parse(localStorage.getItem("reliyo_tasks") || "[]") as Task[]);
+    const accepted = migrateLegacyTaskList(JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]") as Task[]);
     const map = new Map<string, Task>();
     [...created, ...accepted].forEach((t) => {
       const existing = map.get(t.id);
       if (!existing) {
         map.set(t.id, t);
       } else {
-    const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"];
+        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "closed", "force_closed"];
         const existingIdx = statusOrder.indexOf(existing.status);
         const newIdx = statusOrder.indexOf(t.status);
         if (newIdx >= existingIdx) {
@@ -146,7 +147,9 @@ export function suspendUserWithPhone(userId: string, reason: string, phone?: str
         phones.push(phone);
         localStorage.setItem("reliyo_suspended_phones", JSON.stringify(phones));
       }
-    } catch {}
+    } catch {
+      /* ignore invalid suspended_phones JSON */
+    }
   }
 }
 
@@ -276,7 +279,7 @@ export function getRevenueStats(): RevenueStats {
 
     const bucket = monthMap.get(createdMonth) || { revenue: 0, fees: 0, locked: 0, released: 0 };
 
-    if (["committed", "in_progress", "done", "disputed", "completed", "closed", "force_closed"].includes(t.status)) {
+    if (["committed", "in_progress", "done", "disputed", "closed", "force_closed"].includes(t.status)) {
       bucket.locked += reward + trustDep;
       totalEscrowLocked += reward + trustDep;
     }
@@ -361,7 +364,7 @@ export function adminUpdateTaskStatus(taskId: string, newStatus: TaskStatus, ext
 }
 
 /** Add a system timeline entry to a task from admin */
-export function adminAddTimelineEntry(taskId: string, message: string, entryType: string = "admin_action", metadata?: any): void {
+export function adminAddTimelineEntry(taskId: string, message: string, entryType: string = "admin_action", metadata?: Record<string, unknown>): void {
   const key = `reliyo_timeline_${taskId}`;
   try {
     const entries = JSON.parse(localStorage.getItem(key) || "[]");
@@ -435,7 +438,7 @@ export function resolveForceCloseRequest(requestId: string, resolution: "approve
       adminUpdateTaskStatus(req.taskId, "force_closed");
       adminAddTimelineEntry(
         req.taskId,
-        `🚫 ADMIN: Force-close request APPROVED. Task moved to Force Closed. Escrow: full reward refunded to requestor + trust deposit - 3% PL fee as compensation. ${comment || ""}`,
+        `🚫 ADMIN: Force-close request APPROVED. Task moved to Force Closed. Platform-held funds: full reward refunded to requestor; acceptor trust deposit per policy (including 3% platform fee on deposit where applicable). ${comment || ""}`,
         "admin_action",
         { fromStatus: req.taskStatusAtRequest, toStatus: "force_closed" }
       );

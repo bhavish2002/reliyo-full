@@ -16,6 +16,7 @@ import { ALL_COUNTRY_NAMES } from "@/lib/countriesStates";
 import { getCurrentUser } from "@/lib/auth";
 import type { Task } from "@/lib/taskTypes";
 import { readJson } from "@/lib/storage";
+import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { env } from "@/lib/env";
 
 const DOMAIN_OPTIONS = [
@@ -95,10 +96,10 @@ const BrowseTasks = () => {
   useEffect(() => {
     try {
       // Load user-created tasks from localStorage + demo browse tasks
-      const stored = readJson<Task[]>("reliyo_tasks", []);
+      const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
       const openStored = stored.filter((t) => t.status === "open");
       // Get accepted task IDs to exclude them
-      const acceptedTasks = readJson<Task[]>("reliyo_accepted_tasks", []);
+      const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
       const acceptedIds = new Set(acceptedTasks.map((t) => t.id));
       // Merge with demo tasks, deduplicate by id, exclude accepted
       const ids = new Set(openStored.map((t) => t.id));

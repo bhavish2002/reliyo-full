@@ -19,6 +19,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { notifyAcceptorQuit } from "@/lib/notifications";
 import { generateDisputeId, isEscalated } from "@/lib/disputeId";
 import { readJson, writeJson, removeItem } from "@/lib/storage";
+import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { env } from "@/lib/env";
 
 const DEMO_TASKS: Task[] = [
@@ -53,7 +54,7 @@ const MyTasks = () => {
 
   useEffect(() => {
     try {
-      const stored = readJson<Task[]>("reliyo_tasks", []);
+      const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
       if (stored.length === 0 && env.enableDemoData) {
         writeJson("reliyo_tasks", DEMO_TASKS);
         setTasks(DEMO_TASKS);
@@ -61,7 +62,7 @@ const MyTasks = () => {
         setTasks(stored);
       }
 
-      const storedAccepted = readJson<Task[]>("reliyo_accepted_tasks", []);
+      const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
       if ((currentUser?.role === "acceptor" || currentUserName === "Priya Sharma") && env.enableDemoData) {
         const ids = new Set(storedAccepted.map((t) => t.id));
         const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
@@ -106,7 +107,7 @@ const MyTasks = () => {
     setAcceptedTasks(updatedAccepted);
     writeJson("reliyo_accepted_tasks", updatedAccepted.filter((t) => t.id !== task.id));
 
-    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
+    const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
     const idx = storedTasks.findIndex((t: Task) => t.id === task.id);
     if (idx >= 0) {
       storedTasks[idx] = { ...storedTasks[idx], status: "open", acceptedBy: undefined, acceptedAt: undefined };
@@ -125,7 +126,7 @@ const MyTasks = () => {
   };
 
   const handleDeleteTask = (task: Task) => {
-    const storedTasks = readJson<Task[]>("reliyo_tasks", []);
+    const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
     const updated = storedTasks.filter((t: Task) => t.id !== task.id);
     writeJson("reliyo_tasks", updated);
     setTasks(updated);

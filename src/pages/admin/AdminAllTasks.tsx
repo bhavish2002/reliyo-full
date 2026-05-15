@@ -15,8 +15,7 @@ import { Search, Eye } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus, type Task } from "@/lib/taskTypes";
 import { getAllPlatformTasks } from "@/lib/adminData";
 
-// Filter out "completed" from dropdown (deprecated)
-const DROPDOWN_STATUSES = TASK_STATUSES.filter(s => s !== "completed");
+const DROPDOWN_STATUSES = TASK_STATUSES;
 
 const AdminAllTasks = () => {
   const [search, setSearch] = useState("");
