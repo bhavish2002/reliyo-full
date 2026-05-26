@@ -5,8 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Shield, Phone, Loader2, CheckCircle2, Info, AlertCircle } from "lucide-react";
-import { authenticateByPhone, setCurrentUser, getRedirectForRole } from "@/lib/auth";
-import { isPhoneSuspended } from "@/lib/adminData";
+import { sendOtp } from "@/lib/auth/api";
+import { ApiClientError } from "@/lib/api/client";
 import { toast } from "@/hooks/use-toast";
 import CountryCodeSelect from "@/components/CountryCodeSelect";
 import { getCountryByCode } from "@/lib/countries";
@@ -65,40 +65,38 @@ const SignIn = () => {
     setAccountError(null);
     setIsSubmitting(true);
     try {
-      // Check if phone is suspended
-      if (isPhoneSuspended(data.phone)) {
-        setAccountError("This account has been suspended due to policy violations. Contact support for details.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Check hardcoded test credentials first
-      const testUser = authenticateByPhone(data.phone);
-      if (testUser) {
-        await new Promise((r) => setTimeout(r, 800));
-        setCurrentUser(testUser);
-        toast({ title: `Welcome, ${testUser.name}!`, description: `Signed in as ${testUser.role}.` });
-        navigate(getRedirectForRole(testUser.role), { replace: true });
-        return;
-      }
-
-      // Simulated account existence check for non-test users
-      const registered: string[] = JSON.parse(localStorage.getItem("registered_phones") || "[]");
-      if (!registered.includes(data.phone)) {
-        setAccountError("No account found for this phone number.");
-        setIsSubmitting(false);
-        return;
-      }
-      console.log("SignIn payload:", {
-        ...data,
-        dialCode: selectedCountry?.dialCode || "+91",
+      const dialCode = selectedCountry?.dialCode || "+91";
+      await sendOtp({
+        phone: data.phone,
+        dialCode,
+        purpose: "login",
       });
-      await new Promise((r) => setTimeout(r, 1200));
       toast({ title: "OTP Sent!", description: "Check your phone for the verification code." });
       navigate("/verify-otp", {
-        state: { phone: data.phone, dialCode: selectedCountry?.dialCode || "+91", from: "sign-in" },
+        state: { phone: data.phone, dialCode, from: "sign-in" },
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        const code = err.body?.code;
+        if (code === "AUTH_USER_NOT_FOUND") {
+          setAccountError("No account found for this phone number.");
+          return;
+        }
+        if (code === "AUTH_SUSPENDED") {
+          setAccountError(
+            "This account has been suspended due to policy violations. Contact support for details.",
+          );
+          return;
+        }
+        if (code === "AUTH_OTP_RATE_LIMIT") {
+          toast({
+            title: "Too many requests",
+            description: err.body?.message || "Please try again later.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
       toast({
         title: "Something went wrong",
         description: "Please try again.",

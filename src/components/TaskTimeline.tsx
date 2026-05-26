@@ -28,6 +28,17 @@ import { format, addDays, differenceInDays, isAfter, isBefore } from "date-fns";
 import { generateDisputeId, MAX_DISPUTES, isEscalated } from "@/lib/disputeId";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { ApiClientError } from "@/lib/api/client";
+import type { TaskActionSummary } from "@/lib/api/contracts";
+import {
+  type TaskDetailApi,
+  addTaskComment,
+  acceptWorkTask,
+  extendDeadlineTask,
+  markDoneTask,
+  raiseDisputeTask,
+} from "@/lib/tasks/api";
+import { notifyTasksChanged } from "@/lib/tasks/events";
 
 // ── File attachment constants ────────────────────────────────────────────────
 const MAX_FILE_SIZE_MB = 25;
@@ -134,6 +145,10 @@ interface TaskTimelineProps {
   onStatusChange: (newStatus: TaskStatus, entries: TimelineEntry[]) => void;
   onRatingSubmit?: (rating: number, feedback: string) => void;
   onDeadlineExtend?: (newDeadline: string) => void;
+  /** When set, lifecycle actions call the API and refresh via this callback. */
+  onServerDetail?: (detail: TaskDetailApi) => void;
+  availableActions?: TaskActionSummary;
+  apiCooldowns?: TaskDetailApi["cooldowns"];
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -147,7 +162,11 @@ const TaskTimeline = ({
   onStatusChange,
   onRatingSubmit,
   onDeadlineExtend,
+  onServerDetail,
+  availableActions,
+  apiCooldowns,
 }: TaskTimelineProps) => {
+  const useServer = Boolean(onServerDetail);
   const [commentText, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showDisputeDialog, setShowDisputeDialog] = useState(false);
@@ -167,8 +186,39 @@ const TaskTimeline = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const status = task.status as TaskStatus;
-  const allowed = canComment(status, currentUserRole);
+  const allowed =
+    availableActions?.canComment !== undefined
+      ? availableActions.canComment
+      : canComment(status, currentUserRole);
   const banner = getStatusBanner(status, currentUserRole);
+
+  const runServerAction = async (
+    action: () => Promise<TaskDetailApi>,
+    successTitle?: string,
+    successDescription?: string,
+  ) => {
+    if (!onServerDetail) return;
+    setSubmitting(true);
+    try {
+      const detail = await action();
+      onServerDetail(detail);
+      notifyTasksChanged();
+      if (successTitle) {
+        toast({
+          title: successTitle,
+          description: successDescription,
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Action failed",
+        description: err instanceof ApiClientError ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
   const placeholder = getCommentPlaceholder(status, currentUserRole);
   const effectiveDeadline = getEffectiveDeadline(task);
   const canShowRequestorDisputeAction =
@@ -212,8 +262,13 @@ const TaskTimeline = ({
     return Math.max(0, DISPUTE_COOLDOWN_MS - (referenceTime - disputeTime));
   };
   const disputeCooldownRemaining = getDisputeCooldownRemaining(currentTime);
-  const isDisputeOnCooldown = disputeCooldownRemaining > 0;
-  const disputeCooldownMessage = `Next dispute available in ${formatDisputeCooldown(disputeCooldownRemaining)}.`;
+  const serverDisputeCooldown =
+    useServer && apiCooldowns?.disputeAfter
+      ? Math.max(0, new Date(apiCooldowns.disputeAfter).getTime() - currentTime)
+      : 0;
+  const effectiveDisputeCooldown = useServer ? serverDisputeCooldown : disputeCooldownRemaining;
+  const isDisputeOnCooldown = effectiveDisputeCooldown > 0;
+  const disputeCooldownMessage = `Next dispute available in ${formatDisputeCooldown(effectiveDisputeCooldown)}.`;
 
   // Force close cooldown logic (24h)
   const lastForceCloseEntry = [...sortedEntries].reverse().find(
@@ -228,8 +283,15 @@ const TaskTimeline = ({
     return Math.max(0, FORCE_CLOSE_COOLDOWN_MS - (referenceTime - fcTime));
   };
   const forceCloseCooldownRemaining = getForceCloseCooldownRemaining(currentTime);
-  const isForceCloseOnCooldown = forceCloseCooldownRemaining > 0;
-  const forceCloseCooldownMessage = `Next request available in ${formatCooldown(forceCloseCooldownRemaining)}.`;
+  const serverForceCloseCooldown =
+    useServer && apiCooldowns?.forceCloseAfter
+      ? Math.max(0, new Date(apiCooldowns.forceCloseAfter).getTime() - currentTime)
+      : 0;
+  const effectiveForceCloseCooldown = useServer
+    ? serverForceCloseCooldown
+    : forceCloseCooldownRemaining;
+  const isForceCloseOnCooldown = effectiveForceCloseCooldown > 0;
+  const forceCloseCooldownMessage = `Next request available in ${formatCooldown(effectiveForceCloseCooldown)}.`;
 
   const deadlinePassed = effectiveDeadline ? isAfter(new Date(), new Date(effectiveDeadline)) : false;
   const daysUntilDeadline = effectiveDeadline ? differenceInDays(new Date(effectiveDeadline), new Date()) : null;
@@ -308,7 +370,6 @@ const TaskTimeline = ({
 
   const handleSubmit = () => {
     if ((!commentText.trim() && attachedFiles.length === 0) || !allowed || submitting) return;
-    setSubmitting(true);
 
     let message = commentText.trim();
     if (attachedFiles.length > 0) {
@@ -333,6 +394,25 @@ const TaskTimeline = ({
       metadata: attachmentData.length > 0 ? { attachments: attachmentData } : undefined,
     };
 
+    if (useServer) {
+      void runServerAction(
+        () =>
+          addTaskComment(task.id, message || "Shared an update.", {
+            entryType: "comment",
+            attachments: attachmentData.length > 0 ? attachmentData : undefined,
+          }),
+        status === "committed" && currentUserRole === "acceptor"
+          ? "Work started"
+          : "Comment posted",
+        status === "committed" && currentUserRole === "acceptor"
+          ? "Task is now In Progress."
+          : undefined,
+      );
+      setCommentText("");
+      setAttachedFiles([]);
+      return;
+    }
+
     const newEntries = [newEntry];
 
     if (status === "committed" && currentUserRole === "acceptor") {
@@ -351,12 +431,20 @@ const TaskTimeline = ({
 
     setCommentText("");
     setAttachedFiles([]);
-    setSubmitting(false);
   };
 
   // ── Acceptor marks task done ────────────────────────────────────────────
 
   const handleMarkDone = () => {
+    if (useServer) {
+      if (!availableActions?.canMarkDone) return;
+      void runServerAction(
+        () => markDoneTask(task.id),
+        "Marked as Done",
+        "Awaiting requestor review.",
+      );
+      return;
+    }
     if (!canTransition(status, "done")) return;
     const sysEntry = createSystemEntry(
       task.id,
@@ -372,6 +460,7 @@ const TaskTimeline = ({
 
   const handleAcceptWork = () => {
     if (status !== "done" || currentUserRole !== "requestor") return;
+    if (useServer && !availableActions?.canAcceptWork) return;
     notifyRatingRequired(task);
     setRatingMandatory(true);
     setShowRatingDialog(true);
@@ -380,7 +469,9 @@ const TaskTimeline = ({
   // ── Requestor raises dispute ───────────────────────────────────────────
 
   const handleOpenDisputeDialog = () => {
-    const liveCooldownRemaining = getDisputeCooldownRemaining(Date.now());
+    const liveCooldownRemaining = useServer
+      ? serverDisputeCooldown
+      : getDisputeCooldownRemaining(Date.now());
     if (liveCooldownRemaining > 0) {
       toast({
         title: "Dispute cooldown active",
@@ -393,10 +484,11 @@ const TaskTimeline = ({
 
   const handleRaiseDispute = () => {
     if (status !== "done" && status !== "disputed") return;
-    if (status === "done" && !canTransition(status, "disputed")) return;
     const disputeNumber = (task.disputeCount || 0) + 1;
     if (disputeNumber > MAX_DISPUTES) return;
-    const liveCooldownRemaining = getDisputeCooldownRemaining(Date.now());
+    const liveCooldownRemaining = useServer
+      ? serverDisputeCooldown
+      : getDisputeCooldownRemaining(Date.now());
     if (liveCooldownRemaining > 0) {
       toast({
         title: "Dispute cooldown active",
@@ -404,6 +496,20 @@ const TaskTimeline = ({
       });
       return;
     }
+
+    if (useServer) {
+      if (!availableActions?.canRaiseDispute && status === "done") return;
+      setShowDisputeDialog(false);
+      void runServerAction(
+        () => raiseDisputeTask(task.id, "Requestor raised a dispute."),
+        "Dispute raised",
+        `Dispute #${disputeNumber}/${MAX_DISPUTES} recorded.`,
+      );
+      notifyDisputeRaised(task);
+      return;
+    }
+
+    if (status === "done" && !canTransition(status, "disputed")) return;
     const disputeId = generateDisputeId(task.taskId, disputeNumber);
     const escalated = isEscalated(disputeNumber);
     const escalationNote = escalated ? " ⚠️ ESCALATED — Admin review required." : "";
@@ -422,7 +528,33 @@ const TaskTimeline = ({
   // ── Acceptor resubmits fix (disputed → done) ──────────────────────────
 
   const handleResubmitFix = () => {
-    if (!canTransition(status, "done") || !commentText.trim()) return;
+    if (!commentText.trim()) return;
+    if (useServer) {
+      if (!availableActions?.canMarkDone) return;
+      const fixMessage = commentText.trim();
+      void (async () => {
+        setSubmitting(true);
+        try {
+          await addTaskComment(task.id, fixMessage);
+          const detail = await markDoneTask(task.id);
+          onServerDetail?.(detail);
+          notifyTasksChanged();
+          setCommentText("");
+          notifyFixResubmitted(task);
+          toast({ title: "Fix submitted", description: "Task moved back to Done for requestor review." });
+        } catch (err) {
+          toast({
+            title: "Action failed",
+            description: err instanceof ApiClientError ? err.message : "Please try again.",
+            variant: "destructive",
+          });
+        } finally {
+          setSubmitting(false);
+        }
+      })();
+      return;
+    }
+    if (!canTransition(status, "done")) return;
     const fixEntry: TimelineEntry = {
       id: generateEntryId(),
       taskId: task.id,
@@ -447,21 +579,36 @@ const TaskTimeline = ({
   // ── Requestor sends alert ─────────────────────────────────────────────
 
   const handleSendAlert = () => {
+    setShowAlertDialog(false);
+    notifyAlertRaised(task);
+    if (useServer) {
+      void runServerAction(
+        () =>
+          addTaskComment(
+            task.id,
+            `⚠️ Alert from Requestor (${currentUserName}): Progress update requested. Please share your current status.`,
+            { entryType: "alert", alertType: "progress_reminder" },
+          ),
+        "Alert sent",
+        "The acceptor has been notified in the timeline.",
+      );
+      return;
+    }
     const alertEntry = createSystemEntry(
       task.id,
       `⚠️ Alert from Requestor (${currentUserName}): Progress update requested. Please share your current status.`,
       "alert",
-      { alertType: "progress_reminder" }
+      { alertType: "progress_reminder" },
     );
-    setShowAlertDialog(false);
-    notifyAlertRaised(task);
     onAddEntry([alertEntry]);
   };
 
   // ── Requestor requests force-close ─────────────────────────────────────
 
   const handleOpenForceCloseDialog = () => {
-    const liveCooldown = getForceCloseCooldownRemaining(Date.now());
+    const liveCooldown = useServer
+      ? serverForceCloseCooldown
+      : getForceCloseCooldownRemaining(Date.now());
     if (liveCooldown > 0) {
       toast({
         title: "Force close cooldown active",
@@ -473,13 +620,28 @@ const TaskTimeline = ({
   };
 
   const handleForceCloseRequest = () => {
+    setShowForceCloseDialog(false);
+    notifyForceCloseRequested(task);
+
+    if (useServer) {
+      void runServerAction(
+        () =>
+          addTaskComment(
+            task.id,
+            `Force-close requested by Requestor (${currentUserName}). Pending admin review.`,
+            { entryType: "alert", alertType: "force_close_request" },
+          ),
+        "Force-close requested",
+        "An admin will review your request.",
+      );
+      return;
+    }
+
     const entry = createSystemEntry(
       task.id,
       `Force-close requested by Requestor (${currentUserName}). Pending admin review.`,
-      "admin_action"
+      "admin_action",
     );
-    setShowForceCloseDialog(false);
-    notifyForceCloseRequested(task);
 
     saveForceCloseRequest({
       id: `fcr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -527,6 +689,17 @@ const TaskTimeline = ({
   const handleExtendDeadline = () => {
     if (!extendDate) return;
     const newDeadline = format(extendDate, "yyyy-MM-dd");
+    if (useServer) {
+      setShowExtendDialog(false);
+      setExtendDate(undefined);
+      void runServerAction(
+        () => extendDeadlineTask(task.id, newDeadline),
+        "Deadline extended",
+        `New deadline: ${format(extendDate, "MMMM do, yyyy")}`,
+      );
+      onDeadlineExtend?.(newDeadline);
+      return;
+    }
     const entry = createSystemEntry(
       task.id,
       `📅 Deadline extended by Requestor (${currentUserName}) to ${format(extendDate, "MMMM do, yyyy")}`,
@@ -541,7 +714,24 @@ const TaskTimeline = ({
   // ── Rating submission ──────────────────────────────────────────────────
 
   const handleSubmitRating = () => {
-    if (ratingValue === 0 || !canTransition(status, "closed")) return;
+    if (ratingValue === 0) return;
+    if (useServer) {
+      void runServerAction(
+        () =>
+          acceptWorkTask(task.id, {
+            rating: ratingValue,
+            feedback: ratingFeedback.trim() || undefined,
+          }),
+        "Work accepted",
+        "Task closed. Platform-held funds will be settled per policy.",
+      );
+      setShowRatingDialog(false);
+      setRatingMandatory(false);
+      onRatingSubmit?.(ratingValue, ratingFeedback);
+      notifyTaskClosed(task);
+      return;
+    }
+    if (!canTransition(status, "closed")) return;
     const ratingEntry = createSystemEntry(
       task.id,
       `${currentUserName} rated the acceptor ${ratingValue}/5. ${ratingFeedback ? `Feedback: "${ratingFeedback}"` : ""}`,
@@ -719,7 +909,7 @@ const TaskTimeline = ({
 
     // In Progress: acceptor can mark done; requestor can alert or request force-close
     if (status === "in_progress") {
-      if (currentUserRole === "acceptor") {
+      if (currentUserRole === "acceptor" && (!useServer || availableActions?.canMarkDone)) {
         actions.push(
           <Button key="mark-done" size="sm" onClick={handleMarkDone} className="gap-1.5">
             <CheckCircle2 className="h-3.5 w-3.5" /> Mark as Done
@@ -758,7 +948,7 @@ const TaskTimeline = ({
     }
 
     // Done: requestor can accept work
-    if (status === "done" && currentUserRole === "requestor") {
+    if (status === "done" && currentUserRole === "requestor" && (!useServer || availableActions?.canAcceptWork)) {
       actions.push(
         <Button key="accept-work" size="sm" onClick={handleAcceptWork} className="gap-1.5">
           <CheckCircle2 className="h-3.5 w-3.5" /> Accept Work
@@ -768,6 +958,9 @@ const TaskTimeline = ({
 
     // Requestor can keep escalating disputes until DSP4, with a 48-hour cooldown between raises
     if (canShowRequestorDisputeAction) {
+      const disputeDisabled =
+        isDisputeOnCooldown ||
+        (useServer && status === "done" && availableActions?.canRaiseDispute === false);
       actions.push(
         <div key="dispute-wrapper" className="relative group">
           <Button
@@ -775,7 +968,7 @@ const TaskTimeline = ({
             variant="outline"
             size="sm"
             onClick={handleOpenDisputeDialog}
-            aria-disabled={isDisputeOnCooldown}
+            aria-disabled={disputeDisabled}
             title={isDisputeOnCooldown ? disputeCooldownMessage : undefined}
             className={cn(
               "gap-1.5",
@@ -800,7 +993,7 @@ const TaskTimeline = ({
 
     if (status === "disputed" && currentUserRole === "acceptor") {
       // Allow if not escalated, OR if DSP4 resolved valid
-      if (!disputeIsEscalated || task.dsp4ResolvedValid) {
+      if ((!disputeIsEscalated || task.dsp4ResolvedValid) && (!useServer || availableActions?.canMarkDone)) {
         actions.push(
           <Button
             key="resubmit"

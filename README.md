@@ -59,9 +59,12 @@ Copy `.env.example` to `.env.local` and configure values before local developmen
 
 - The API is a Sprint 2 foundation (health, Prisma baseline, shared envelopes). Domain routes are added in later sprints.
 
-## Planning Specs
+## Planning & architecture
 
-- **MVP execution tracker (status):** `docs/EXECUTION-TRACKER.md`
+- **MVP execution tracker (status):** [`docs/EXECUTION-TRACKER.md`](docs/EXECUTION-TRACKER.md)
+- **Project overview (architecture, gaps, roadmap):** [`docs/PROJECT-OVERVIEW.md`](docs/PROJECT-OVERVIEW.md)
+
+## Planning Specs
 - Sprint 0 policy-lock documents are available in `docs/sprint-0/`.
 - Sprint 1 execution notes and checklist: `docs/sprint-1/README.md`.
 - Sprint 2 backend foundation: `docs/sprint-2/README.md`.

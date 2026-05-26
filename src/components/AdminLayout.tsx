@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
 import { getUnreadCount } from "@/lib/notifications";
 import { getAllDisputes, getPendingForceCloseCount } from "@/lib/adminData";
 
@@ -156,6 +157,7 @@ interface AdminLayoutProps {
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminNotifCount, setAdminNotifCount] = useState(0);
   const [disputeBadgeCount, setDisputeBadgeCount] = useState(0);
@@ -173,8 +175,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogout = () => {
-    clearCurrentUser();
+  const handleLogout = async () => {
+    await signOut();
     navigate("/sign-in", { replace: true });
   };
   const handleNav = (path: string) => {

@@ -36,6 +36,7 @@ export interface TaskActionSummary {
   canRaiseDispute: boolean;
   canMarkDone: boolean;
   canAcceptWork: boolean;
+  canComment?: boolean;
 }
 
 export interface TaskDetailResponse {

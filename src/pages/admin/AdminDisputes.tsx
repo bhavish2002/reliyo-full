@@ -17,7 +17,10 @@ import { toast } from "@/hooks/use-toast";
 import {
   type AdminDispute, type Dsp4Status, DSP4_STATUS_LABELS,
   getAllDisputes, saveDsp4Status, adminUpdateTaskStatus, adminAddTimelineEntry,
+  getDsp4StatusForDispute,
 } from "@/lib/adminData";
+import { listAdminDisputes } from "@/lib/admin/api";
+import { mapApiTaskToTask, type ApiTask } from "@/lib/tasks/api";
 import { notifyTaskForceClosed, notifyTaskClosed } from "@/lib/notifications";
 import { PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, DSP4_COMPLETION_DAYS } from "@/lib/taskTypes";
 import { addDays, format, isAfter, differenceInDays } from "date-fns";
@@ -36,10 +39,35 @@ const AdminDisputes = () => {
   const [adminComment, setAdminComment] = useState("");
   const [tab, setTab] = useState("disputes");
 
-  const reload = () => setDisputes(getAllDisputes());
-  useEffect(() => { reload(); }, []);
+  const reload = async () => {
+    try {
+      const rows = await listAdminDisputes();
+      setDisputes(
+        rows.map((r) => ({
+          disputeId: r.disputeId,
+          disputeNumber: r.disputeNumber,
+          taskId: r.taskId,
+          taskDisplayId: r.taskDisplayId,
+          taskTitle: r.taskTitle,
+          requestor: r.requestor,
+          acceptor: r.acceptor,
+          escalated: r.escalated,
+          createdAt: r.raised,
+          dsp4Status: r.escalated
+            ? getDsp4StatusForDispute(r.disputeId)
+            : "open",
+          task: mapApiTaskToTask(r.task as ApiTask),
+        })),
+      );
+    } catch {
+      setDisputes(getAllDisputes());
+    }
+  };
   useEffect(() => {
-    const interval = setInterval(reload, 3000);
+    void reload();
+  }, []);
+  useEffect(() => {
+    const interval = setInterval(() => void reload(), 10000);
     return () => clearInterval(interval);
   }, []);
 

@@ -13,26 +13,59 @@ import AdminLayout from "@/components/AdminLayout";
 import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
 import { Search, Eye } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS, TASK_STATUSES, type TaskStatus, type Task } from "@/lib/taskTypes";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
+import { listTasks, mapApiTaskToTask } from "@/lib/tasks/api";
 import { getAllPlatformTasks } from "@/lib/adminData";
+import { env } from "@/lib/env";
 
 const DROPDOWN_STATUSES = TASK_STATUSES;
 
 const AdminAllTasks = () => {
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const refreshKey = useTasksListRefresh();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [tasks, setTasks] = useState(() => getAllPlatformTasks());
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [viewTask, setViewTask] = useState<Task | null>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => setTasks(getAllPlatformTasks()), 3000);
-    return () => clearInterval(interval);
-  }, []);
+    if (authLoading || !isAuthenticated || user?.role !== "admin") return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listTasks({
+          scope: "admin",
+          page: 1,
+          pageSize: 100,
+          ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+        });
+        if (!cancelled) {
+          setTasks(res.items.map(mapApiTaskToTask));
+          setLoadError(null);
+        }
+      } catch {
+        if (cancelled) return;
+        if (env.enableDemoData) {
+          setTasks(getAllPlatformTasks());
+        } else {
+          setTasks([]);
+          setLoadError("Could not load tasks from the server.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, user?.role, refreshKey, statusFilter]);
 
   const filtered = tasks.filter((t) => {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !(t.taskId || "").toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
     return true;
-}).sort((a, b) => {
+  }).sort((a, b) => {
     const dateA = new Date(a.acceptedAt || a.createdAt || 0).getTime();
     const dateB = new Date(b.acceptedAt || b.createdAt || 0).getTime();
     return dateB - dateA;
@@ -44,6 +77,12 @@ const AdminAllTasks = () => {
         <h1 className="text-2xl font-bold text-foreground">All Tasks</h1>
         <p className="text-sm text-muted-foreground">Live view of all platform tasks</p>
       </div>
+
+      {loadError && (
+        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px]">

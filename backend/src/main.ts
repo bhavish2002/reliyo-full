@@ -3,10 +3,16 @@ import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 
+// CommonJS package — `import cookieParser from 'cookie-parser'` breaks at runtime (no default export).
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const cookieParser = require('cookie-parser');
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
+
+  app.use(cookieParser());
 
   const config = app.get(ConfigService);
   const globalPrefix = config.get<string>('API_PREFIX', 'api/v1');

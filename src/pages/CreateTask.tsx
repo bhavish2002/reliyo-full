@@ -18,13 +18,12 @@ import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { countriesWithStates, ALL_COUNTRY_NAMES, getStatesByCountry } from "@/lib/countriesStates";
-import { generateTaskId } from "@/lib/taskId";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserSettings } from "@/lib/userSettings";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const WORK_TYPES = ["Virtual", "Physical", "Hybrid"];
-const UPDATE_FREQUENCIES = ["Daily", "Weekly", "Bi-weekly", "Monthly"];
+const UPDATE_FREQUENCIES = ["Daily", "Weekly", "Biweekly", "Monthly"];
 const DOMAINS = [
   "Technology", "Design", "Marketing", "Writing", "Translation",
   "Delivery", "Cleaning", "Other",
@@ -205,22 +204,30 @@ const CreateTask = () => {
     form.deadline !== undefined &&
     (form.domain !== "Other" || (form.domainOther.trim() !== "" && domainOtherWords <= DOMAIN_OTHER_MAX_WORDS));
 
-  const handlePublish = () => {
-    // Navigate to payment page — task is NOT saved yet
-    const taskId = generateTaskId();
-    const taskData = {
-      id: taskId,
-      taskId,
-      ...form,
-      reward: rewardNum,
-      currency: currency.code,
-      currencySymbol: cs,
-      domain: effectiveDomain,
-      deadline: form.deadline ? form.deadline.toISOString() : "",
-      location: [form.city, form.state, form.country].filter(Boolean).join(", "),
-    };
+  const handleProceedToPayment = () => {
+    if (!agreedTerms || !form.deadline) return;
     navigate("/payment", {
-      state: { taskData, amount: rewardNum, platformFee },
+      state: {
+        amount: rewardNum,
+        platformFee,
+        currencySymbol: cs,
+        currency: currency.code,
+        taskDraft: {
+          title: form.title.trim(),
+          description: form.description.trim(),
+          workType: form.workType,
+          manpower: form.manpower,
+          location: [form.city, form.state, form.country].filter(Boolean).join(", "),
+          country: form.country,
+          deadline: form.deadline.toISOString(),
+          updateFrequency: form.updateFrequency,
+          skills: form.skills,
+          domain: effectiveDomain,
+          reward: rewardNum,
+          currency: currency.code,
+          currencySymbol: cs,
+        },
+      },
     });
   };
 
@@ -567,8 +574,8 @@ const CreateTask = () => {
             <Button variant="ghost" onClick={() => setStep(2)} className="gap-2">
               <ArrowLeft className="h-4 w-4" /> Previous
             </Button>
-            <Button disabled={!agreedTerms} onClick={handlePublish} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" /> Confirm &amp; Publish Task
+            <Button disabled={!agreedTerms} onClick={handleProceedToPayment} className="gap-2">
+              <CheckCircle2 className="h-4 w-4" /> Proceed to Payment
             </Button>
           </div>
         </div>

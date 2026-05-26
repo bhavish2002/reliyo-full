@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard,
   Smartphone, Building2, Lock, ShieldCheck,
@@ -10,6 +10,10 @@ import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { getCurrentUser } from "@/lib/auth";
 import { notifyTaskAccepted } from "@/lib/notifications";
+import { createFundHold } from "@/lib/payments/api";
+import { acceptTask, createTask, type CreateTaskPayload } from "@/lib/tasks/api";
+import { notifyTasksChanged } from "@/lib/tasks/events";
+import { ApiClientError } from "@/lib/api/client";
 
 type PaymentStatus = "idle" | "processing" | "success" | "failed" | "pending";
 
@@ -33,85 +37,125 @@ const PaymentGateway = () => {
   const location = useLocation();
 
   const taskData = location.state?.taskData ?? null;
+  const taskDraft = location.state?.taskDraft as Omit<CreateTaskPayload, "fundHoldId"> | null;
   const amount: number = location.state?.amount ?? 0;
   const platformFee: number = location.state?.platformFee ?? 0;
   const isAcceptFlow: boolean = location.state?.isAcceptFlow ?? false;
-  const currencySymbol: string = taskData?.currencySymbol || "₹";
+  const currency: string = location.state?.currency ?? taskDraft?.currency ?? "INR";
+  const currencySymbol: string = taskData?.currencySymbol || taskDraft?.currencySymbol || "₹";
 
   const [selectedMethod, setSelectedMethod] = useState<string>("");
   const [status, setStatus] = useState<PaymentStatus>("idle");
+  const [publishError, setPublishError] = useState<string | null>(null);
+
+  if (isAcceptFlow && !taskData?.id) {
+    return <Navigate to="/browse-tasks" replace />;
+  }
+  if (!isAcceptFlow && !taskDraft) {
+    return <Navigate to="/create-task" replace />;
+  }
 
   const handlePay = () => {
     if (!selectedMethod) return;
     setStatus("processing");
+    setPublishError(null);
 
-    setTimeout(() => {
+    void (async () => {
+      await new Promise((r) => setTimeout(r, 2000));
+
       const outcomeMap: Record<string, PaymentStatus> = {
         upi: "success",
         card: "pending",
         netbanking: "failed",
       };
-      const outcome = outcomeMap[selectedMethod] ?? "success";
+      const outcome = outcomeMap[selectedMethod] ?? "failed";
       setStatus(outcome);
 
       const user = getCurrentUser();
       const userName = user?.name || "Unknown User";
 
-      if (outcome === "success") {
-        if (isAcceptFlow) {
-          const acceptedAt = new Date().toISOString();
-          // Save to accepted tasks with committed status
-          const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
-          accepted.push({
-            ...taskData,
-            status: "committed",
-            acceptedAt,
-            acceptedBy: userName,
+      if (isAcceptFlow) {
+        try {
+          const hold = await createFundHold({
+            purpose: "trust_deposit",
+            amount,
+            currency,
+            paymentMethod: selectedMethod,
+            taskId: taskData.id,
           });
-          localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
 
-          // *** CRITICAL: Also update reliyo_tasks so requestor sees committed status ***
-          const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-          const idx = tasks.findIndex((t: { id?: string }) => t.id === taskData.id);
-          if (idx >= 0) {
-            tasks[idx] = { ...tasks[idx], status: "committed", acceptedAt, acceptedBy: userName };
-            localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
+          if (hold.status === "confirmed") {
+            await acceptTask(taskData.id, hold.id);
+            notifyTasksChanged();
+            notifyTaskAccepted(taskData);
+            toast({
+              title: "Task Accepted!",
+              description: "Trust deposit locked. You can now start working on this task.",
+            });
+            navigate(`/task/${taskData.id}`, { replace: true });
+            return;
           }
 
-          // Notify requestor that their task has been accepted
-          notifyTaskAccepted(taskData);
+          if (hold.status === "pending") {
+            setStatus("pending");
+            toast({
+              title: "Payment Under Processing",
+              description: "Your acceptance will complete once payment is confirmed.",
+            });
+            return;
+          }
 
-          toast({ title: "Task Accepted!", description: "Trust deposit locked. You can now start working on this task." });
-        } else {
-          const tasks = JSON.parse(localStorage.getItem("reliyo_tasks") || "[]");
-          const newTask = {
-            ...taskData,
-            status: "open",
-            paymentStatus: "paid",
-            createdAt: new Date().toISOString(),
-            createdBy: userName,
-          };
-          tasks.push(newTask);
-          localStorage.setItem("reliyo_tasks", JSON.stringify(tasks));
-          toast({ title: "Payment Successful!", description: "Your reward has been locked. Task is now live." });
+          setStatus("failed");
+        } catch (err) {
+          setStatus("failed");
+          const message =
+            err instanceof ApiClientError ? err.message : "Payment or accept failed.";
+          setPublishError(message);
+          toast({ title: "Accept failed", description: message, variant: "destructive" });
         }
+        return;
       }
 
-      if (outcome === "pending") {
-        if (isAcceptFlow) {
-          const accepted = JSON.parse(localStorage.getItem("reliyo_accepted_tasks") || "[]");
-          accepted.push({
-            ...taskData,
-            status: "committed",
-            acceptedAt: new Date().toISOString(),
-            acceptedBy: userName,
-            paymentStatus: "pending",
+      // Create-task flow: fund hold must confirm before POST /tasks (Rule Zero)
+      try {
+        const hold = await createFundHold({
+          purpose: "task_reward",
+          amount,
+          currency,
+          paymentMethod: selectedMethod,
+        });
+
+        if (hold.status === "confirmed" && taskDraft) {
+          const created = await createTask({
+            ...taskDraft,
+            fundHoldId: hold.id,
           });
-          localStorage.setItem("reliyo_accepted_tasks", JSON.stringify(accepted));
+          toast({
+            title: "Payment Successful!",
+            description: "Your reward has been locked. Your task is now live.",
+          });
+          notifyTasksChanged();
+          navigate(`/task/${created.id}`, { replace: true });
+          return;
         }
-        toast({ title: "Payment Under Processing", description: "We'll update your task status once confirmed." });
+
+        if (hold.status === "pending") {
+          toast({
+            title: "Payment Under Processing",
+            description: "Your task will be published once payment is confirmed.",
+          });
+          return;
+        }
+
+        setStatus("failed");
+      } catch (err) {
+        setStatus("failed");
+        const message =
+          err instanceof ApiClientError ? err.message : "Payment or task publish failed.";
+        setPublishError(message);
+        toast({ title: "Could not publish task", description: message, variant: "destructive" });
       }
-    }, 2000);
+    })();
   };
 
   const handleRetry = () => {
@@ -123,7 +167,7 @@ const PaymentGateway = () => {
     if (isAcceptFlow) {
       navigate("/my-tasks?tab=accepted");
     } else {
-      navigate("/my-tasks");
+      navigate("/my-tasks?tab=created");
     }
   };
 
@@ -169,7 +213,7 @@ const PaymentGateway = () => {
             )}
           </div>
           <Button className="w-full" onClick={handleGoToTasks}>
-            {isAcceptFlow ? "View Accepted Tasks" : "View My Tasks"}
+            {isAcceptFlow ? "View Accepted Tasks" : "Back to Create Task"}
           </Button>
         </div>
       </DashboardLayout>
@@ -188,7 +232,11 @@ const PaymentGateway = () => {
             <h2 className="text-2xl font-bold text-foreground">Payment Failed</h2>
             <p className="text-muted-foreground mt-2">
               We were unable to process your payment of {currencySymbol}{fmtMoney(amount)}. No amount has been deducted.
+              {!isAcceptFlow && " Your task was not created."}
             </p>
+            {publishError && (
+              <p className="text-sm text-destructive">{publishError}</p>
+            )}
           </div>
           <div className="w-full space-y-3">
             <Button className="w-full" onClick={handleRetry}>Retry Payment</Button>

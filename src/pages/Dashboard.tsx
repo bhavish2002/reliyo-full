@@ -18,6 +18,9 @@ import {
   RefreshCw, Clock, FileText, UserCheck, AlertTriangle, DollarSign, CalendarIcon,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
+import { listTasks, mapApiTaskToTask } from "@/lib/tasks/api";
 import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS } from "@/lib/taskTypes";
 import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { getUserSettings } from "@/lib/userSettings";
@@ -156,10 +159,12 @@ type FilterMode = "6" | "3" | "custom";
 // ── Dashboard ───────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
+  const { user: authUser, isAuthenticated, isLoading: authLoading } = useAuth();
+  const tasksRefreshKey = useTasksListRefresh();
   const currentUser = getCurrentUser();
   const userName = currentUser?.name?.split(" ")[0] || "User";
   const fullName = currentUser?.name || "User";
-  const userId = currentUser?.id || "guest";
+  const userId = currentUser?.id || authUser?.id || "guest";
   const settings = getUserSettings(userId);
   const currencySymbol = CURRENCY_SYMBOLS[settings.preferredCurrency] || "₹";
 
@@ -173,16 +178,41 @@ const Dashboard = () => {
     all: [], created: [], accepted: [],
   });
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
+    if (!isAuthenticated || !authUser) {
+      setUserTasks({ all: [], created: [], accepted: [] });
+      setLoading(false);
+      return;
+    }
+    try {
+      const res = await listTasks({ scope: "mine", page: 1, pageSize: 100 });
+      const mapped = res.items.map(mapApiTaskToTask);
+      const created = mapped.filter(
+        (t) =>
+          t.createdById === authUser.id ||
+          (!t.createdById && t.createdBy === (authUser.name ?? "")),
+      );
+      const accepted = mapped.filter(
+        (t) =>
+          t.acceptedById === authUser.id ||
+          (!t.acceptedById && t.acceptedBy === (authUser.name ?? "")),
+      );
+      const allMap = new Map<string, Task>();
+      [...created, ...accepted].forEach((t) => allMap.set(t.id, t));
+      setUserTasks({ all: Array.from(allMap.values()), created, accepted });
+    } catch {
       const all = getAllTasks();
       setUserTasks(getUserTasks(all, fullName));
+    } finally {
       setLoading(false);
-    }, 300);
-  }, [fullName]);
+    }
+  }, [authUser, fullName, isAuthenticated]);
 
-  useEffect(() => { loadData(); }, [loadData, refreshKey]);
+  useEffect(() => {
+    if (authLoading) return;
+    void loadData();
+  }, [loadData, refreshKey, tasksRefreshKey, authLoading]);
 
   const handleRefresh = () => setRefreshKey((k) => k + 1);
 

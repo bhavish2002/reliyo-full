@@ -1,0 +1,30 @@
+---
+description: Validate all feature work against canonical product workflow before implementing
+alwaysApply: true
+---
+
+# Product workflow gate (mandatory)
+
+Before **planning, coding, or reviewing** any feature that touches tasks, payments, disputes, admin, authz, or user-facing flows:
+
+1. Open [`docs/PRODUCT-WORKFLOW.md`](../../docs/PRODUCT-WORKFLOW.md) and complete **Pre-implementation validation** (all applicable checkboxes).
+2. Cross-check transitions against [`docs/sprint-0/state-machine-spec.md`](../../docs/sprint-0/state-machine-spec.md).
+3. If money moves, also read [`docs/sprint-0/financial-settlement-spec.md`](../../docs/sprint-0/financial-settlement-spec.md).
+4. If disputes/admin, read [`docs/sprint-0/dispute-ops-spec.md`](../../docs/sprint-0/dispute-ops-spec.md).
+
+## In every implementation response
+
+- State briefly which checklist items apply and how the change satisfies them.
+- Call out **deviations** (e.g. D1–D9 in PRODUCT-WORKFLOW §16) if the change does not fully align yet.
+- After shipping, update [`docs/EXECUTION-TRACKER.md`](../../docs/EXECUTION-TRACKER.md) (task status, blockers, changelog).
+
+## Non-negotiables
+
+- **Rule Zero:** No `open` task without confirmed reward escrow.
+- **Seven statuses only:** `open`, `committed`, `in_progress`, `done`, `disputed`, `closed`, `force_closed`.
+- **Cooldowns server-side:** quit 2h, dispute 48h, force-close request 24h.
+- **No client-trusted roles** for authorization.
+
+## Current priority (Sprint 4 polish)
+
+Wire `TaskTimeline` and remaining pages to task APIs — do not add new localStorage lifecycle writes (blocker B1).

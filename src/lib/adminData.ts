@@ -8,8 +8,6 @@ import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS, PLATFORM_FEE_
 import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { type AppNotification, getNotifications, notifyTaskForceClosed as _notifyForceClosed } from "@/lib/notifications";
 import { isEscalated } from "@/lib/disputeId";
-import { TEST_CREDENTIALS } from "@/lib/auth";
-
 // ── Read all tasks from both stores ─────────────────────────────────────────
 
 export function getAllPlatformTasks(): Task[] {
@@ -53,22 +51,6 @@ export function getAllPlatformUsers(): PlatformUser[] {
   const tasks = getAllPlatformTasks();
   const userMap = new Map<string, PlatformUser>();
   const suspendedMap = getSuspendedUsers();
-
-  // Seed from test credentials
-  TEST_CREDENTIALS.forEach((c) => {
-    if (c.user.role !== "admin") {
-      userMap.set(c.user.name, {
-        id: c.user.id,
-        name: c.user.name,
-        email: c.user.email,
-        role: c.user.role === "requestor" ? "Requestor" : "Acceptor",
-        tasksCreated: 0,
-        tasksAccepted: 0,
-        status: suspendedMap[c.user.id] ? "suspended" : "active",
-        flagged: false,
-      });
-    }
-  });
 
   // Derive from tasks
   tasks.forEach((t) => {
