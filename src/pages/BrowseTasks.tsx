@@ -14,10 +14,13 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { ALL_COUNTRY_NAMES } from "@/lib/countriesStates";
 import { getCurrentUser } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
 import type { Task } from "@/lib/taskTypes";
 import { readJson } from "@/lib/storage";
 import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { env } from "@/lib/env";
+import { listTasks, mapApiTaskToTask } from "@/lib/tasks/api";
 
 const DOMAIN_OPTIONS = [
   "All", "Technology", "Design", "Marketing", "Writing",
@@ -85,6 +88,8 @@ const StarRating = ({ rating }: { rating: number }) => (
 
 const BrowseTasks = () => {
   const navigate = useNavigate();
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const refreshKey = useTasksListRefresh();
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("All");
   const [domainFilter, setDomainFilter] = useState("All");
@@ -94,33 +99,55 @@ const BrowseTasks = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      // Load user-created tasks from localStorage + demo browse tasks
-      const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-      const openStored = stored.filter((t) => t.status === "open");
-      // Get accepted task IDs to exclude them
-      const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
-      const acceptedIds = new Set(acceptedTasks.map((t) => t.id));
-      // Merge with demo tasks, deduplicate by id, exclude accepted
-      const ids = new Set(openStored.map((t) => t.id));
-      const merged = [
-        ...openStored.filter((t) => !acceptedIds.has(t.id)),
-        ...(env.enableDemoData
-          ? DEMO_BROWSE_TASKS.filter((t) => !ids.has(t.id) && !acceptedIds.has(t.id))
-          : []),
-      ];
-      setAllTasks(merged);
-    } catch {
-      setLoadError("We couldn't load available tasks right now.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    if (authLoading || !isAuthenticated) return;
+
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const res = await listTasks({
+          scope: "browse",
+          status: "open",
+          page: 1,
+          pageSize: 100,
+        });
+        if (!cancelled) {
+          setAllTasks(res.items.map(mapApiTaskToTask));
+        }
+      } catch {
+        if (cancelled) return;
+        if (!env.enableDemoData) {
+          setLoadError("We couldn't load available tasks right now.");
+          setAllTasks([]);
+        } else {
+          try {
+            const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
+            const openStored = stored.filter((t) => t.status === "open");
+            const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
+            const acceptedIds = new Set(acceptedTasks.map((t) => t.id));
+            const ids = new Set(openStored.map((t) => t.id));
+            setAllTasks([
+              ...openStored.filter((t) => !acceptedIds.has(t.id)),
+              ...DEMO_BROWSE_TASKS.filter((t) => !ids.has(t.id) && !acceptedIds.has(t.id)),
+            ]);
+          } catch {
+            setLoadError("We couldn't load available tasks right now.");
+          }
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAuthenticated, refreshKey]);
 
   const filtered = useMemo(() => {
     return allTasks.filter((t) => {
       const currentUser = getCurrentUser();
-      if (currentUser && t.createdBy === currentUser.name) return false;
+      if (currentUser && (t.createdById === currentUser.id || t.createdBy === currentUser.name)) return false;
       if (t.status !== "open") return false;
       if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (countryFilter !== "All") {

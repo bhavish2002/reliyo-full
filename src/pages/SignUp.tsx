@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Shield, Phone, User, MapPin, Mail, Loader2, CheckCircle2, MapPinned, Info } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { sendOtp } from "@/lib/auth/api";
+import { ApiClientError } from "@/lib/api/client";
 import CountryCodeSelect from "@/components/CountryCodeSelect";
 import { countries, getCountryByCode } from "@/lib/countries";
 import {
@@ -143,19 +145,33 @@ const SignUp = () => {
         fullName: capitalizeWords(data.fullName),
         dialCode: selectedCountry?.dialCode || "+91",
       };
-      console.log("SignUp payload:", formatted);
-      // Store phone as "registered" for simulated account check
-      const registered = JSON.parse(localStorage.getItem("registered_phones") || "[]");
-      if (!registered.includes(data.phone)) {
-        registered.push(data.phone);
-        localStorage.setItem("registered_phones", JSON.stringify(registered));
-      }
-      await new Promise((r) => setTimeout(r, 1200));
+      const dialCode = selectedCountry?.dialCode || "+91";
+      await sendOtp({
+        phone: data.phone,
+        dialCode,
+        purpose: "signup",
+        name: formatted.fullName,
+        email: data.email || undefined,
+        preferredRole: "requestor",
+      });
       toast({ title: "OTP Sent!", description: "Verify your phone to complete registration." });
       navigate("/verify-otp", {
-        state: { phone: data.phone, dialCode: selectedCountry?.dialCode || "+91", from: "sign-up" },
+        state: {
+          phone: data.phone,
+          dialCode,
+          from: "sign-up",
+          signupMeta: { name: formatted.fullName, email: data.email },
+        },
       });
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiClientError && err.body?.code === "AUTH_OTP_RATE_LIMIT") {
+        toast({
+          title: "Too many requests",
+          description: err.body.message,
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: "Something went wrong",
         description: "Please try again.",

@@ -23,4 +23,7 @@
 - [x] Request ID middleware
 - [x] Docker Compose for Postgres
 - [x] GitHub Actions backend CI
-- [ ] BullMQ job modules (next sprint or spike)
+- [x] Domain module scaffolds (Auth, Users, Tasks, …) — wired in Sprint 3
+- [x] Frontend CI workflow
+- [x] Structured logging convention (`LOG_FORMAT=json`)
+- [ ] BullMQ job modules (deferred to Sprint 5+)

@@ -7,7 +7,186 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Baseline table for migrations and future immutable audit stream (Sprint 4+).
+enum PlatformRole {
+  user
+  admin
+}
+
+enum OtpPurpose {
+  login
+  signup
+}
+
+enum PreferredRole {
+  requestor
+  acceptor
+}
+
+enum TaskStatus {
+  open
+  committed
+  in_progress
+  done
+  disputed
+  closed
+  force_closed
+}
+
+enum FundHoldPurpose {
+  task_reward
+  trust_deposit
+}
+
+enum FundHoldStatus {
+  pending
+  confirmed
+  failed
+}
+
+model User {
+  id            String         @id @default(cuid())
+  phoneE164     String         @unique @map("phone_e164")
+  name          String?
+  email         String?
+  platformRole  PlatformRole   @default(user) @map("platform_role")
+  preferredRole PreferredRole? @map("preferred_role")
+  suspendedAt   DateTime?      @map("suspended_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  refreshSessions RefreshSession[]
+  otpChallenges   OtpChallenge[]
+  tasksCreated    Task[]         @relation("TaskRequestor")
+  tasksAccepted   Task[]         @relation("TaskAcceptor")
+  taskEvents      TaskEvent[]
+  fundHolds       FundHold[]
+
+  @@map("users")
+}
+
+model OtpChallenge {
+  id           String     @id @default(cuid())
+  phoneE164    String     @map("phone_e164")
+  purpose      OtpPurpose
+  codeHash     String     @map("code_hash")
+  expiresAt    DateTime   @map("expires_at")
+  attemptCount Int        @default(0) @map("attempt_count")
+  consumedAt   DateTime?  @map("consumed_at")
+  metadata     Json?
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  userId String? @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([phoneE164, createdAt])
+  @@map("otp_challenges")
+}
+
+model RefreshSession {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  tokenHash     String    @unique @map("token_hash")
+  expiresAt     DateTime  @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  rotatedFromId String?   @map("rotated_from_id")
+  userAgent     String?   @map("user_agent")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_sessions")
+}
+
+model Task {
+  id                 String     @id @default(cuid())
+  publicId           String     @unique @map("public_id")
+  title              String
+  description        String
+  status             TaskStatus @default(open)
+  workType           String     @map("work_type")
+  manpower           Int        @default(1)
+  location           String
+  country            String?
+  deadline           DateTime
+  extendedDeadline   DateTime?  @map("extended_deadline")
+  updateFrequency    String     @map("update_frequency")
+  skills             String[]
+  domain             String
+  reward             Decimal    @db.Decimal(12, 2)
+  currency           String     @default("INR")
+  currencySymbol     String?    @map("currency_symbol")
+  requestorId        String     @map("requestor_id")
+  acceptorId         String?    @map("acceptor_id")
+  acceptedAt         DateTime?  @map("accepted_at")
+  rewardFundedAt     DateTime?  @map("reward_funded_at")
+  trustDepositFundedAt DateTime? @map("trust_deposit_funded_at")
+  statusEnteredAt    DateTime   @default(now()) @map("status_entered_at")
+  disputeCount       Int        @default(0) @map("dispute_count")
+  rating             Decimal?   @db.Decimal(3, 2)
+  ratingFeedback     String?    @map("rating_feedback")
+  dsp4ResolvedValid  Boolean    @default(false) @map("dsp4_resolved_valid")
+  cancelledAt        DateTime?  @map("cancelled_at")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  rewardFundHoldId   String?   @unique @map("reward_fund_hold_id")
+  trustFundHoldId    String?   @unique @map("trust_fund_hold_id")
+  requestor User  @relation("TaskRequestor", fields: [requestorId], references: [id])
+  acceptor  User? @relation("TaskAcceptor", fields: [acceptorId], references: [id])
+  events    TaskEvent[]
+  rewardFundHold FundHold? @relation("RewardFundHold", fields: [rewardFundHoldId], references: [id])
+  trustFundHold  FundHold? @relation("TrustFundHold", fields: [trustFundHoldId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([requestorId])
+  @@index([acceptorId])
+  @@map("tasks")
+}
+
+model TaskEvent {
+  id              String   @id @default(cuid())
+  taskId          String   @map("task_id")
+  authorUserId    String?  @map("author_user_id")
+  authorName      String   @map("author_name")
+  authorRole      String   @map("author_role")
+  message         String
+  entryType       String   @map("entry_type")
+  systemGenerated Boolean  @default(false) @map("system_generated")
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@map("task_events")
+}
+
+/// Platform-held funds authorization (Rule Zero: task exists only after reward hold is confirmed).
+model FundHold {
+  id            String          @id @default(cuid())
+  userId        String          @map("user_id")
+  purpose       FundHoldPurpose
+  amount        Decimal         @db.Decimal(12, 2)
+  currency      String          @default("INR")
+  status        FundHoldStatus  @default(pending)
+  paymentMethod String?         @map("payment_method")
+  confirmedAt   DateTime?       @map("confirmed_at")
+  failedAt      DateTime?       @map("failed_at")
+  targetTaskId  String?         @map("target_task_id")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rewardLinkedTask Task? @relation("RewardFundHold")
+  trustLinkedTask  Task? @relation("TrustFundHold")
+
+  @@index([userId, status])
+  @@index([targetTaskId])
+  @@map("fund_holds")
+}
+
+/// Baseline table for migrations and future immutable audit stream.
 model AuditEvent {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")

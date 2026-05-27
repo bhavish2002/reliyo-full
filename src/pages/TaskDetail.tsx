@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2, Clock, CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import {
   getEffectiveDeadline,
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
 import { checkInactivity, sendStrikeNotifications } from "@/lib/inactivity";
 import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
 import { notifyTaskClosed } from "@/lib/notifications";
@@ -27,6 +28,16 @@ import { readJson, writeJson, removeItem } from "@/lib/storage";
 import { env } from "@/lib/env";
 import { comparePolicyStatus } from "@/lib/taskPolicy";
 import { migrateLegacyTask, migrateLegacyTaskList } from "@/lib/taskMigration";
+import {
+  getTaskDetail,
+  mapApiTaskToTask,
+  cancelTask,
+  parseTaskDetail,
+  type TaskDetailApi,
+} from "@/lib/tasks/api";
+import type { TaskActionSummary } from "@/lib/api/contracts";
+import { notifyTasksChanged } from "@/lib/tasks/events";
+import { ApiClientError } from "@/lib/api/client";
 
 // ── Demo browse tasks for lookup ─────────────────────────────────────────────
 const DEMO_BROWSE_TASKS: Task[] = [
@@ -121,6 +132,7 @@ const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
 };
 
 const TaskDetail = () => {
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
   const currentUser = getCurrentUser();
   const { id } = useParams();
   const navigate = useNavigate();
@@ -130,6 +142,9 @@ const TaskDetail = () => {
   const [conflictTask, setConflictTask] = useState<Task | null>(null);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
+  const [availableActions, setAvailableActions] = useState<TaskActionSummary | null>(null);
+  const [apiCooldowns, setApiCooldowns] = useState<TaskDetailApi["cooldowns"]>({});
+  const [serverTimeline, setServerTimeline] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -139,71 +154,122 @@ const TaskDetail = () => {
   const CURRENT_USER = currentUser?.name || "Guest";
 
   const getUserRole = (t: Task): AuthorRole => {
+    if (currentUser?.id && t.createdById === currentUser.id) return "requestor";
+    if (currentUser?.id && t.acceptedById === currentUser.id) return "acceptor";
     if (t.createdBy === CURRENT_USER) return "requestor";
     if (t.acceptedBy === CURRENT_USER) return "acceptor";
-    const accepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
-    if (accepted.some((a) => a.id === t.id && (a.acceptedBy === CURRENT_USER || !a.acceptedBy))) return "acceptor";
     return "requestor";
   };
 
+  const applyServerDetail = useCallback((detail: TaskDetailApi) => {
+    const parsed = parseTaskDetail(detail);
+    setTask(parsed.task);
+    setTimelineEntries(parsed.timeline);
+    setAvailableActions(parsed.availableActions);
+    setApiCooldowns(parsed.cooldowns);
+    setServerTimeline(true);
+  }, []);
+
   useEffect(() => {
-    try {
-      const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-      const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
+    if (!id || authLoading) return;
 
-      let found = storedTasks.find((t) => t.id === id);
-      if (!found) found = acceptedTasks.find((t) => t.id === id);
-      if (!found && env.enableDemoData) found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
-      if (!found && env.enableDemoData) found = DEMO_CREATED_TASKS.find((t) => t.id === id);
-
-      if (found) {
-        const fromTasks = storedTasks.find((t) => t.id === id);
-        const fromAccepted = acceptedTasks.find((t) => t.id === id);
-        if (fromTasks && fromAccepted) {
-          found = {
-            ...fromTasks,
-            ...fromAccepted,
-            status:
-              comparePolicyStatus(fromAccepted.status, fromTasks.status) >= 0
-                ? fromAccepted.status
-                : fromTasks.status,
-          };
-        }
-        found = migrateLegacyTask(found);
-        setTask(found);
-      }
-
-      const storedTimeline = readJson<TimelineEntry[] | null>(`reliyo_timeline_${id}`, null);
-      if (storedTimeline) {
-        setTimelineEntries(storedTimeline);
-      } else if (id && env.enableDemoData && DEMO_TIMELINES[id]) {
-        setTimelineEntries(DEMO_TIMELINES[id]);
-      } else if (found) {
-        const initialEntries: TimelineEntry[] = [
-          {
-            id: `init-1-${id}`, taskId: found.id, author: "System", authorRole: "system",
-            message: "Task created and reward locked as platform-held funds.",
-            timestamp: found.createdAt, systemGenerated: true, entryType: "escrow",
-          },
-          {
-            id: `init-2-${id}`, taskId: found.id, author: "System", authorRole: "system",
-            message: "Task published and visible to acceptors.",
-            timestamp: found.createdAt, systemGenerated: true, entryType: "status_change",
-          },
-        ];
-        setTimelineEntries(initialEntries);
-      }
-    } catch {
-      setLoadError("We couldn't load this task. Please go back and retry.");
-    } finally {
+    if (!isAuthenticated) {
       setIsLoading(false);
+      setLoadError("Sign in to view this task.");
+      setTask(null);
+      return;
     }
-  }, [id]);
+
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const detail = await getTaskDetail(id);
+        if (cancelled) return;
+        applyServerDetail(detail);
+      } catch (err) {
+        if (cancelled) return;
+
+        let found: Task | undefined;
+        try {
+          const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
+          const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
+
+          found = storedTasks.find((t) => t.id === id);
+          if (!found) found = acceptedTasks.find((t) => t.id === id);
+          if (!found && env.enableDemoData) found = DEMO_BROWSE_TASKS.find((t) => t.id === id);
+          if (!found && env.enableDemoData) found = DEMO_CREATED_TASKS.find((t) => t.id === id);
+
+          if (found) {
+            const fromTasks = storedTasks.find((t) => t.id === id);
+            const fromAccepted = acceptedTasks.find((t) => t.id === id);
+            if (fromTasks && fromAccepted) {
+              found = {
+                ...fromTasks,
+                ...fromAccepted,
+                status:
+                  comparePolicyStatus(fromAccepted.status, fromTasks.status) >= 0
+                    ? fromAccepted.status
+                    : fromTasks.status,
+              };
+            }
+            found = migrateLegacyTask(found);
+            setTask(found);
+          }
+
+          const storedTimeline = readJson<TimelineEntry[] | null>(`reliyo_timeline_${id}`, null);
+          if (storedTimeline) {
+            setTimelineEntries(storedTimeline);
+          } else if (id && env.enableDemoData && DEMO_TIMELINES[id]) {
+            setTimelineEntries(DEMO_TIMELINES[id]);
+          } else if (found) {
+            const initialEntries: TimelineEntry[] = [
+              {
+                id: `init-1-${id}`, taskId: found.id, author: "System", authorRole: "system",
+                message: "Task created and reward locked as platform-held funds.",
+                timestamp: found.createdAt, systemGenerated: true, entryType: "funds",
+              },
+              {
+                id: `init-2-${id}`, taskId: found.id, author: "System", authorRole: "system",
+                message: "Task published and visible to acceptors.",
+                timestamp: found.createdAt, systemGenerated: true, entryType: "status_change",
+              },
+            ];
+            setTimelineEntries(initialEntries);
+          }
+        } catch {
+          setLoadError("We couldn't load this task. Please go back and retry.");
+        }
+
+        if (!found) {
+          if (err instanceof ApiClientError) {
+            if (err.status === 401) {
+              setLoadError("Your session expired. Please sign in again.");
+            } else if (err.status === 403) {
+              setLoadError("You don't have access to view this task.");
+            } else if (err.status === 404) {
+              setLoadError(null);
+            } else {
+              setLoadError(err.message || "We couldn't load this task. Please try again.");
+            }
+          } else {
+            setLoadError("We couldn't load this task. Please go back and retry.");
+          }
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, authLoading, isAuthenticated]);
 
   // 3-strike inactivity check
   const inactivityChecked = useRef(false);
   useEffect(() => {
-    if (!task || inactivityChecked.current) return;
+    if (!task || inactivityChecked.current || serverTimeline) return;
     if (task.status !== "done") return;
     inactivityChecked.current = true;
 
@@ -245,7 +311,7 @@ const TaskDetail = () => {
       notifyTaskClosed(task);
       toast({ title: "Task Auto-Closed", description: "This task was closed due to requestor inactivity (3 strikes)." });
     }
-  }, [currentUser?.email, task, timelineEntries]);
+  }, [currentUser?.email, serverTimeline, task, timelineEntries]);
 
   const inactivityState = task ? checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries) : null;
 
@@ -285,7 +351,8 @@ const TaskDetail = () => {
   const fee = parseFloat((task.reward * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
   const acceptorPayout = parseFloat((task.reward - fee).toFixed(2));
   const trustDeposit = parseFloat((task.reward * (TRUST_DEPOSIT_PERCENT / 100)).toFixed(2));
-  const isOwner = task.createdBy === CURRENT_USER;
+  const isOwner =
+    task.createdById === currentUser?.id || task.createdBy === CURRENT_USER;
   const userRole = getUserRole(task);
   const status = task.status as TaskStatus;
   const effectiveDeadline = getEffectiveDeadline(task);
@@ -293,20 +360,29 @@ const TaskDetail = () => {
   const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
   const isAlreadyAccepted = acceptedTasks.some((t) => t.id === task.id);
 
-  const canDelete = isOwner && status === "open" && !task.acceptedBy;
+  const canDelete =
+    serverTimeline && availableActions
+      ? availableActions.canDelete
+      : isOwner && status === "open" && !task.acceptedBy;
 
   // ── Delete task handler ─────────────────────────────────────────────────────
-  const handleDeleteTask = () => {
-    const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-    const updated = storedTasks.filter((t: Task) => t.id !== task.id);
-    writeJson("reliyo_tasks", updated);
-    removeItem(`reliyo_timeline_${task.id}`);
-    setShowDeleteDialog(false);
-    toast({
-      title: "Task Cancelled",
-      description: "The task has been hidden and your reward deposit will be refunded.",
-    });
-    navigate("/my-tasks");
+  const handleDeleteTask = async () => {
+    try {
+      await cancelTask(task.id);
+      notifyTasksChanged();
+      setShowDeleteDialog(false);
+      toast({
+        title: "Task Cancelled",
+        description: "The task has been cancelled and your reward will be refunded per policy.",
+      });
+      navigate("/my-tasks");
+    } catch (err) {
+      toast({
+        title: "Cancel failed",
+        description: err instanceof ApiClientError ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // ── Accept flow handlers ──────────────────────────────────────────────────
@@ -333,13 +409,25 @@ const TaskDetail = () => {
     setAcceptStep("deposit");
   };
 
-  const confirmAccept = () => {
+  const proceedToAcceptPayment = () => {
+    if (!agreedTerms) return;
+    setAcceptStep("none");
     navigate("/payment", {
       state: {
-        taskData: task,
-        amount: trustDeposit,
-        platformFee: 0,
         isAcceptFlow: true,
+        amount: trustDeposit,
+        currency: task.currency ?? "INR",
+        currencySymbol: task.currencySymbol || "₹",
+        taskData: {
+          id: task.id,
+          taskId: task.taskId,
+          title: task.title,
+          reward: task.reward,
+          currency: task.currency,
+          currencySymbol: task.currencySymbol,
+          createdBy: task.createdBy,
+          deadline: task.deadline,
+        },
       },
     });
   };
@@ -554,6 +642,9 @@ const TaskDetail = () => {
                 onStatusChange={handleStatusChange}
                 onRatingSubmit={handleRatingSubmit}
                 onDeadlineExtend={handleDeadlineExtend}
+                onServerDetail={serverTimeline ? applyServerDetail : undefined}
+                availableActions={availableActions ?? undefined}
+                apiCooldowns={apiCooldowns}
               />
             )}
           </div>
@@ -751,8 +842,8 @@ const TaskDetail = () => {
             <Button variant="outline" onClick={() => setAcceptStep("none")}>
               ← Previous
             </Button>
-            <Button disabled={!agreedTerms} onClick={confirmAccept} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" /> Confirm & Accept Task
+            <Button disabled={!agreedTerms} onClick={proceedToAcceptPayment} className="gap-2">
+              <CheckCircle2 className="h-4 w-4" /> Proceed to Payment
             </Button>
           </DialogFooter>
         </DialogContent>

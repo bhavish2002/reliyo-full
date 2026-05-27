@@ -3,6 +3,9 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Shield, Loader2, ArrowLeft } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { verifyOtp, sendOtp, getRedirectForRole } from "@/lib/auth/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { ApiClientError } from "@/lib/api/client";
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 30;
@@ -10,7 +13,13 @@ const RESEND_COOLDOWN = 30;
 const VerifyOtp = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { phone, dialCode, from } = (location.state as { phone?: string; dialCode?: string; from?: string }) || {};
+  const { setSession } = useAuth();
+  const { phone, dialCode, from, signupMeta } = (location.state as {
+    phone?: string;
+    dialCode?: string;
+    from?: string;
+    signupMeta?: { name: string; email?: string };
+  }) || {};
 
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [isVerifying, setIsVerifying] = useState(false);
@@ -64,15 +73,25 @@ const VerifyOtp = () => {
     if (!isComplete) return;
     setIsVerifying(true);
     try {
-      // Simulate OTP verification
-      console.log("Verifying OTP:", otpValue, "for", dialCode, phone);
-      await new Promise((r) => setTimeout(r, 1500));
-
-      // Simulate success (accept any 6-digit code for now)
-      toast({ title: "Verified!", description: "Phone number verified successfully." });
-      navigate("/dashboard", { replace: true });
-    } catch {
-      toast({ title: "Verification failed", description: "Invalid OTP. Please try again.", variant: "destructive" });
+      const tokens = await verifyOtp({
+        phone: phone!,
+        dialCode: dialCode || "+91",
+        code: otpValue,
+      });
+      setSession(tokens.accessToken, tokens.user);
+      toast({
+        title: "Verified!",
+        description: signupMeta?.name
+          ? `Welcome, ${signupMeta.name}!`
+          : `Welcome back${tokens.user.name ? `, ${tokens.user.name}` : ""}!`,
+      });
+      navigate(getRedirectForRole(tokens.user.role), { replace: true });
+    } catch (err) {
+      const message =
+        err instanceof ApiClientError
+          ? err.body?.message || "Invalid OTP. Please try again."
+          : "Invalid OTP. Please try again.";
+      toast({ title: "Verification failed", description: message, variant: "destructive" });
       setOtp(Array(OTP_LENGTH).fill(""));
       inputRefs.current[0]?.focus();
     } finally {
@@ -83,7 +102,18 @@ const VerifyOtp = () => {
   const handleResend = async () => {
     setIsResending(true);
     try {
-      await new Promise((r) => setTimeout(r, 1000));
+      await sendOtp({
+        phone: phone!,
+        dialCode: dialCode || "+91",
+        purpose: from === "sign-up" ? "signup" : "login",
+        ...(from === "sign-up" && signupMeta
+          ? {
+              name: signupMeta.name,
+              email: signupMeta.email,
+              preferredRole: "requestor" as const,
+            }
+          : {}),
+      });
       toast({ title: "OTP Resent", description: "A new code has been sent to your phone." });
       setResendTimer(RESEND_COOLDOWN);
       setOtp(Array(OTP_LENGTH).fill(""));

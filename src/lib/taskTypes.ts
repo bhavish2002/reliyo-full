@@ -71,7 +71,7 @@ export interface TimelineEntry {
   message: string;
   timestamp: string; // ISO
   systemGenerated: boolean;
-  entryType: "comment" | "status_change" | "alert" | "admin_action" | "rating" | "escrow";
+  entryType: "comment" | "status_change" | "alert" | "admin_action" | "rating" | "escrow" | "funds";
   metadata?: {
     fromStatus?: TaskStatus;
     toStatus?: TaskStatus;
@@ -111,8 +111,11 @@ export interface Task {
   currencySymbol?: string;
   createdAt: string;
   createdBy: string;
+  /** Server user id when loaded from API (Sprint 4+) */
+  createdById?: string;
   acceptedAt?: string;
   acceptedBy?: string;
+  acceptedById?: string;
   paymentStatus?: string;
   disputeCount?: number;
   rating?: number;

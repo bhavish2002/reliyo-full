@@ -14,9 +14,15 @@ import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
 import { Eye, CheckCircle2, XCircle, FileX, Shield, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
-  getAllForceCloseRequests, resolveForceCloseRequest,
+  getAllForceCloseRequests,
   type ForceCloseRequest,
 } from "@/lib/adminData";
+import {
+  listAdminCloseRequests,
+  resolveAdminCloseRequest,
+} from "@/lib/admin/api";
+import { mapApiTaskToTask, type ApiTask } from "@/lib/tasks/api";
+import { ApiClientError } from "@/lib/api/client";
 import { STATUS_LABELS, STATUS_COLORS, type TaskStatus } from "@/lib/taskTypes";
 
 const AdminCloseRequests = () => {
@@ -25,38 +31,76 @@ const AdminCloseRequests = () => {
   const [viewTask, setViewTask] = useState<ForceCloseRequest | null>(null);
   const [adminComment, setAdminComment] = useState("");
 
-  const reload = () => setRequests(getAllForceCloseRequests());
-  useEffect(() => { reload(); }, []);
+  const reload = async () => {
+    try {
+      const rows = await listAdminCloseRequests();
+      setRequests(
+        rows.map((r) => ({
+          id: r.id,
+          taskId: r.taskId,
+          taskDisplayId: r.taskDisplayId,
+          taskTitle: r.taskTitle,
+          requestor: r.requestor,
+          acceptor: r.acceptor,
+          taskStatusAtRequest: r.taskStatusAtRequest,
+          status: r.status === "pending" ? "pending" : "approved",
+          createdAt: r.createdAt,
+          task: mapApiTaskToTask(r.task as ApiTask),
+        })),
+      );
+    } catch {
+      setRequests(getAllForceCloseRequests());
+    }
+  };
   useEffect(() => {
-    const interval = setInterval(reload, 3000);
+    void reload();
+  }, []);
+  useEffect(() => {
+    const interval = setInterval(() => void reload(), 10000);
     return () => clearInterval(interval);
   }, []);
 
   const pending = requests.filter((r) => r.status === "pending");
   const resolved = requests.filter((r) => r.status !== "pending");
 
-  const handleApprove = (r: ForceCloseRequest) => {
+  const handleApprove = async (r: ForceCloseRequest) => {
     if (!adminComment.trim()) {
       toast({ title: "Comment Required", description: "Admin comment is mandatory for approving force-close requests.", variant: "destructive" });
       return;
     }
-    resolveForceCloseRequest(r.id, "approved", adminComment.trim());
-    setReviewReq(null);
-    setAdminComment("");
-    reload();
-    toast({ title: "Request Approved", description: `Task "${r.taskTitle}" has been force-closed.` });
+    try {
+      await resolveAdminCloseRequest(r.taskId, "approved", adminComment.trim());
+      setReviewReq(null);
+      setAdminComment("");
+      await reload();
+      toast({ title: "Request Approved", description: `Task "${r.taskTitle}" has been force-closed.` });
+    } catch (err) {
+      toast({
+        title: "Approve failed",
+        description: err instanceof ApiClientError ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleReject = (r: ForceCloseRequest) => {
+  const handleReject = async (r: ForceCloseRequest) => {
     if (!adminComment.trim()) {
       toast({ title: "Comment Required", description: "Admin comment is mandatory for rejecting force-close requests.", variant: "destructive" });
       return;
     }
-    resolveForceCloseRequest(r.id, "rejected", adminComment.trim());
-    setReviewReq(null);
-    setAdminComment("");
-    reload();
-    toast({ title: "Request Rejected", description: `Task remains in its current status.` });
+    try {
+      await resolveAdminCloseRequest(r.taskId, "rejected", adminComment.trim());
+      setReviewReq(null);
+      setAdminComment("");
+      await reload();
+      toast({ title: "Request Rejected", description: `Task remains in its current status.` });
+    } catch (err) {
+      toast({
+        title: "Reject failed",
+        description: err instanceof ApiClientError ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (

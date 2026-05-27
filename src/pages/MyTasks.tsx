@@ -16,11 +16,16 @@ import {
   QUIT_GRACE_HOURS,
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
 import { notifyAcceptorQuit } from "@/lib/notifications";
 import { generateDisputeId, isEscalated } from "@/lib/disputeId";
 import { readJson, writeJson, removeItem } from "@/lib/storage";
 import { migrateLegacyTaskList } from "@/lib/taskMigration";
 import { env } from "@/lib/env";
+import { listTasks, mapApiTaskToTask, cancelTask, quitTask } from "@/lib/tasks/api";
+import { notifyTasksChanged } from "@/lib/tasks/events";
+import { ApiClientError } from "@/lib/api/client";
 
 const DEMO_TASKS: Task[] = [
   { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta", description: "", workType: "Physical", manpower: 1, skills: [], domain: "Delivery", updateFrequency: "Daily" },
@@ -34,6 +39,8 @@ const DEMO_ACCEPTED: Task[] = [
 
 const MyTasks = () => {
   const navigate = useNavigate();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const refreshKey = useTasksListRefresh();
   const [searchParams] = useSearchParams();
   const initialTab: "created" | "accepted" | "dispute" =
     searchParams.get("tab") === "accepted"
@@ -52,30 +59,55 @@ const MyTasks = () => {
   const currentUser = getCurrentUser();
   const currentUserName = currentUser?.name || "";
 
-  useEffect(() => {
+  const loadTasks = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    setLoadError(null);
     try {
-      const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-      if (stored.length === 0 && env.enableDemoData) {
-        writeJson("reliyo_tasks", DEMO_TASKS);
-        setTasks(DEMO_TASKS);
-      } else {
-        setTasks(stored);
-      }
-
-      const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
-      if ((currentUser?.role === "acceptor" || currentUserName === "Priya Sharma") && env.enableDemoData) {
-        const ids = new Set(storedAccepted.map((t) => t.id));
-        const merged = [...storedAccepted, ...DEMO_ACCEPTED.filter((t) => !ids.has(t.id))];
-        setAcceptedTasks(merged);
-      } else {
-        setAcceptedTasks(storedAccepted);
-      }
+      const res = await listTasks({ scope: "mine", page: 1, pageSize: 100 });
+      const mapped = res.items.map(mapApiTaskToTask);
+      setTasks(
+        mapped.filter(
+          (t) => t.createdById === user.id || (!t.createdById && t.createdBy === (user.name ?? "")),
+        ),
+      );
+      setAcceptedTasks(
+        mapped.filter(
+          (t) =>
+            t.acceptedById === user.id ||
+            (!t.acceptedById && t.acceptedBy === (user.name ?? "")),
+        ),
+      );
     } catch {
-      setLoadError("We couldn't load your tasks. Please refresh and try again.");
+      try {
+        const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
+        if (stored.length === 0 && env.enableDemoData) {
+          writeJson("reliyo_tasks", DEMO_TASKS);
+          setTasks(DEMO_TASKS);
+        } else {
+          setTasks(stored.filter((t) => t.createdBy === currentUserName));
+        }
+        const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
+        setAcceptedTasks(storedAccepted.filter((t) => t.acceptedBy === currentUserName));
+      } catch {
+        setLoadError("We couldn't load your tasks. Please refresh and try again.");
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser?.role, currentUserName]);
+  };
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated || !user) {
+      setIsLoading(false);
+      setTasks([]);
+      setAcceptedTasks([]);
+      return;
+    }
+    void loadTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey triggers refetch
+  }, [authLoading, isAuthenticated, user?.id, refreshKey]);
 
   const sortByRecent = (a: Task, b: Task) => {
     const dateA = new Date(a.acceptedAt || a.createdAt || 0).getTime();
@@ -83,12 +115,8 @@ const MyTasks = () => {
     return dateB - dateA;
   };
 
-  const createdTasks = tasks.filter((t) => t.createdBy === currentUserName).sort(sortByRecent);
-  
-  const myAcceptedTasks = acceptedTasks.filter((t) => 
-    t.acceptedBy === currentUserName || 
-    (currentUser?.role === "acceptor" && !t.acceptedBy)
-  ).sort(sortByRecent);
+  const createdTasks = tasks.sort(sortByRecent);
+  const myAcceptedTasks = acceptedTasks.sort(sortByRecent);
 
   const disputeTasks = [
     ...createdTasks.filter((t) => t.status === "disputed"),
@@ -99,44 +127,47 @@ const MyTasks = () => {
     if (!task.acceptedAt) return false;
     if (task.status !== "committed") return false;
     const hoursSinceAccepted = differenceInHours(new Date(), new Date(task.acceptedAt));
-    return hoursSinceAccepted <= QUIT_GRACE_HOURS;
+    return hoursSinceAccepted < QUIT_GRACE_HOURS;
   };
 
-  const handleQuitTask = (task: Task) => {
-    const updatedAccepted = acceptedTasks.filter((t) => t.id !== task.id);
-    setAcceptedTasks(updatedAccepted);
-    writeJson("reliyo_accepted_tasks", updatedAccepted.filter((t) => t.id !== task.id));
-
-    const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-    const idx = storedTasks.findIndex((t: Task) => t.id === task.id);
-    if (idx >= 0) {
-      storedTasks[idx] = { ...storedTasks[idx], status: "open", acceptedBy: undefined, acceptedAt: undefined };
-      writeJson("reliyo_tasks", storedTasks);
-      setTasks(storedTasks);
+  const handleQuitTask = async (task: Task) => {
+    try {
+      await quitTask(task.id);
+      notifyAcceptorQuit(task);
+      notifyTasksChanged();
+      setQuitDialog(null);
+      await loadTasks();
+      toast({
+        title: "Task Quit Successfully",
+        description: "Your trust deposit will be refunded. The task is back on Browse Tasks.",
+      });
+    } catch (err) {
+      toast({
+        title: "Quit failed",
+        description: err instanceof ApiClientError ? err.message : "Try again.",
+        variant: "destructive",
+      });
     }
-
-    removeItem(`reliyo_timeline_${task.id}`);
-    notifyAcceptorQuit(task);
-
-    setQuitDialog(null);
-    toast({
-      title: "Task Quit Successfully",
-      description: "Your trust deposit will be refunded. The task is back on Browse Tasks.",
-    });
   };
 
-  const handleDeleteTask = (task: Task) => {
-    const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-    const updated = storedTasks.filter((t: Task) => t.id !== task.id);
-    writeJson("reliyo_tasks", updated);
-    setTasks(updated);
-
-    removeItem(`reliyo_timeline_${task.id}`);
-    setDeleteDialog(null);
-    toast({
-      title: "Task Cancelled",
-      description: "The task has been hidden and your reward deposit will be refunded.",
-    });
+  const handleDeleteTask = async (task: Task) => {
+    try {
+      await cancelTask(task.id);
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      removeItem(`reliyo_timeline_${task.id}`);
+      notifyTasksChanged();
+      setDeleteDialog(null);
+      toast({
+        title: "Task Cancelled",
+        description: "The task has been cancelled and your reward will be refunded per policy.",
+      });
+    } catch (err) {
+      toast({
+        title: "Cancel failed",
+        description: err instanceof ApiClientError ? err.message : "Try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const tabs = [

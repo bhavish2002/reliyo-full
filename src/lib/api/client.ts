@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { getAccessToken } from "@/lib/auth/session";
 import { traceEvent, getClientTraceId } from "@/lib/observability";
 import type { ApiErrorBody, ApiErrorEnvelope, ApiSuccessResponse } from "@/lib/api/contracts";
 
@@ -45,11 +46,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const traceId = getClientTraceId();
 
   try {
+    const token = getAccessToken();
     const response = await fetch(url, {
       ...init,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         "X-Client-Trace-Id": traceId,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers || {}),
       },
     });
@@ -70,8 +74,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new ApiClientError(body?.message || "Request failed", response.status, body);
     }
 
-    const data = (await response.json()) as ApiSuccessResponse<T>;
-    return data.data;
+    if (response.status === 204) {
+      return undefined as T;
+    }
+    const text = await response.text();
+    if (!text) {
+      return undefined as T;
+    }
+    let parsed: ApiSuccessResponse<T>;
+    try {
+      parsed = JSON.parse(text) as ApiSuccessResponse<T>;
+    } catch {
+      throw new ApiClientError("Invalid response from server", response.status);
+    }
+    return parsed.data;
   } catch (error) {
     if (error instanceof ApiClientError) throw error;
     throw new ApiClientError("Network request failed", 0);
@@ -80,8 +96,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const apiClient = {
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
-  post: <T>(path: string, body: unknown) =>
-    request<T>(path, { method: "POST", body: JSON.stringify(body) }),
+  post: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: "POST",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };

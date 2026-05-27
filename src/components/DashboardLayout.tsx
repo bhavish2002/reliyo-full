@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { getCurrentUser, clearCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
 import { getUnreadCount, type NotificationTarget } from "@/lib/notifications";
 import { getUserSettings, applyTheme } from "@/lib/userSettings";
 
@@ -146,6 +147,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { signOut } = useAuth();
   const currentUser = getCurrentUser();
   const userName = currentUser?.name?.split(" ")[0] || "User";
 
@@ -165,8 +167,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return () => clearInterval(interval);
   }, [target]);
 
-  const handleLogout = () => {
-    clearCurrentUser();
+  const handleLogout = async () => {
+    await signOut();
     navigate("/sign-in", { replace: true });
   };
   const handleNav = (path: string) => {
