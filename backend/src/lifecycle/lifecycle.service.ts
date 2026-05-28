@@ -57,7 +57,18 @@ export class LifecycleService {
           (e.metadata as { alertType?: string } | null)?.alertType ===
             'dispute_raised',
       );
+    const lastDone = [...events]
+      .reverse()
+      .find(
+        (e) =>
+          e.entryType === 'status_change' &&
+          (e.metadata as { toStatus?: TaskStatus } | null)?.toStatus === 'done',
+      );
     if (lastDispute) {
+      // Cooldown resets after a disputed -> done cycle.
+      if (lastDone && lastDone.createdAt > lastDispute.createdAt) {
+        return meta;
+      }
       const disputeAfter = new Date(
         lastDispute.createdAt.getTime() + DISPUTE_COOLDOWN_MS,
       );
@@ -151,7 +162,7 @@ export class LifecycleService {
 
     const canRaiseDispute =
       role === 'requestor' &&
-      (status === 'done' || status === 'disputed') &&
+      status === 'done' &&
       task.disputeCount < 4 &&
       !cooldowns.disputeAfter;
 

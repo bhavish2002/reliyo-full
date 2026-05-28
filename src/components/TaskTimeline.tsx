@@ -223,7 +223,7 @@ const TaskTimeline = ({
   const effectiveDeadline = getEffectiveDeadline(task);
   const canShowRequestorDisputeAction =
     currentUserRole === "requestor" &&
-    (status === "done" || status === "disputed") &&
+    status === "done" &&
     (task.disputeCount || 0) < MAX_DISPUTES;
 
   // Find the most recent dispute and done-after-dispute entries for cooldown logic
@@ -483,7 +483,7 @@ const TaskTimeline = ({
   };
 
   const handleRaiseDispute = () => {
-    if (status !== "done" && status !== "disputed") return;
+    if (status !== "done") return;
     const disputeNumber = (task.disputeCount || 0) + 1;
     if (disputeNumber > MAX_DISPUTES) return;
     const liveCooldownRemaining = useServer
@@ -498,7 +498,7 @@ const TaskTimeline = ({
     }
 
     if (useServer) {
-      if (!availableActions?.canRaiseDispute && status === "done") return;
+      if (!availableActions?.canRaiseDispute) return;
       setShowDisputeDialog(false);
       void runServerAction(
         () => raiseDisputeTask(task.id, "Requestor raised a dispute."),
@@ -509,11 +509,11 @@ const TaskTimeline = ({
       return;
     }
 
-    if (status === "done" && !canTransition(status, "disputed")) return;
+    if (!canTransition(status, "disputed")) return;
     const disputeId = generateDisputeId(task.taskId, disputeNumber);
     const escalated = isEscalated(disputeNumber);
     const escalationNote = escalated ? " ⚠️ ESCALATED — Admin review required." : "";
-    const disputeActionLabel = status === "disputed" ? "Dispute escalated" : "Dispute raised";
+    const disputeActionLabel = "Dispute raised";
     const sysEntry = createSystemEntry(
       task.id,
       `${disputeActionLabel} by Requestor (${currentUserName}). ${disputeId} (Dispute #${disputeNumber}/${MAX_DISPUTES}).${escalationNote}`,

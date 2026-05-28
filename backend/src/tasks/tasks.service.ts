@@ -289,7 +289,7 @@ export class TasksService {
       });
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    const cancelledTask = await this.prisma.$transaction(async (tx) => {
       await this.transition(
         tx,
         task,
@@ -306,9 +306,39 @@ export class TasksService {
         where: { id: task.id },
         data: { cancelledAt: new Date() },
       });
+
+      return tx.task.findUniqueOrThrow({
+        where: { id: task.id },
+        include: { requestor: true, acceptor: true },
+      });
     });
 
-    return this.getDetail(id, actor);
+    const refreshedEvents = await this.prisma.taskEvent.findMany({
+      where: { taskId: cancelledTask.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    const refreshedRole = this.lifecycle.resolveContextRole(
+      cancelledTask,
+      actor.sub,
+      actor.platformRole,
+    );
+    const refreshedCooldowns = this.lifecycle.computeCooldowns(
+      cancelledTask,
+      refreshedEvents,
+    );
+    const refreshedActions = this.lifecycle.computeAvailableActions(
+      cancelledTask,
+      refreshedRole,
+      actor.sub,
+      refreshedCooldowns,
+    );
+
+    return {
+      task: toTaskDto(cancelledTask),
+      timeline: refreshedEvents.map(toTimelineEntryDto),
+      availableActions: refreshedActions,
+      cooldowns: refreshedCooldowns,
+    };
   }
 
   async accept(
