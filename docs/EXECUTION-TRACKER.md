@@ -12,11 +12,11 @@
 |--------|--------|
 | **Plan** | 8 sprints (0 → 8) |
 | **Completed** | Sprints **0, 1, 2, 3** ✅ |
-| **In progress** | **Sprint 4 polish** (~92% — run `validate:lifecycle` to close) |
-| **Next sprint** | **Sprint 5** — real payments + webhooks (after 4 polish) |
+| **In progress** | **Sprint 5 closeout (95%)** — live smoke script ready; Razorpay test keys needed for final S5-M01 |
+| **Next sprint** | **Sprint 6** — Ledger + settlement |
 | **Workflow doc** | [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) v1.0 (2026-05-25) |
-| **Production readiness** | **Pre-production** (~52% of MVP build) |
-| **Last verified** | 2026-05-25 — health + OTP OK; backend unit tests pass; fund-hold + task flows manual |
+| **Production readiness** | **Pre-production** (~60% of MVP build) |
+| **Last verified** | 2026-06-10 — `validate:sprint5-suite` 8/8; live smoke skipped (no Razorpay keys) |
 
 ### Progress bar (implementation)
 
@@ -25,8 +25,8 @@ Sprint 0 ██████████ 100%  Policy lock
 Sprint 1 ██████████ 100%  Frontend hardening
 Sprint 2 ██████████  98%  Backend foundation (BullMQ deferred)
 Sprint 3 █████████░  95%  Auth + guards on task/admin routes
-Sprint 4 █████████░  92%  Task APIs + timeline API + dashboard/admin polish
-Sprint 5 ░░░░░░░░░░   5%  Mock fund holds exist; PSP/webhooks not started
+Sprint 4 ██████████  96%  Task APIs + timeline API + cooldown/cancel fixes
+Sprint 5 █████████░  95%  B5 host + live smoke script; keys needed for S5-M01
 Sprint 6 ░░░░░░░░░░   0%  Ledger + settlement
 Sprint 7 ░░░░░░░░░░   0%  Disputes + admin ops APIs
 Sprint 8 ░░░░░░░░░░   0%  E2E + deploy
@@ -46,11 +46,11 @@ Sprint 8 ░░░░░░░░░░   0%  E2E + deploy
 
 ## Current project status (executive summary)
 
-Reliyo is a **task marketplace MVP** (NestJS + React + PostgreSQL) with **locked business policy** (Sprint 0) and **server-authoritative identity** (Sprint 3). **Task lifecycle logic lives on the backend** (Sprint 4), but the **frontend is still hybrid**: create, browse, list, detail load, accept, and cancel use the API; **timeline mutations** (mark done, dispute, accept work, force close, alerts) often still write **localStorage**.
+Reliyo is a **task marketplace MVP** (NestJS + React + PostgreSQL) with **locked business policy** (Sprint 0) and **server-authoritative identity** (Sprint 3). **Task lifecycle logic is backend-authoritative** (Sprint 4) and timeline actions are API-wired for core flows. Recent Sprint 4 fixes also include: dispute cooldown reset after `disputed -> done`, duplicate-dispute prevention while already `disputed`, attachment persistence in timeline metadata, and cancel response consistency.
 
-**Money:** Reward and trust deposits use **`fund_holds`** with a mock payment gateway (UPI confirms, card pending, net banking fails). **No ledger settlement** yet — closing a task does not move real balances (Sprint 6).
+**Money:** Reward and trust deposits use **`fund_holds`** with mock mode (dev) or **Razorpay Orders + Checkout + webhooks** (live). Payment status is **server-authoritative** — UI polls `GET /payments/fund-holds/:id` after checkout. **No ledger settlement** yet (Sprint 6).
 
-**Admin:** Suspend-user API exists; most admin screens (disputes, close requests, revenue, support) are **UI + demo data**.
+**Admin:** Suspend-user API exists; disputes/close-requests list APIs are being wired. DSP4 resolution workflows still partial.
 
 **Canonical workflow:** [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) §15–16 lists every gap vs the product spec.
 
@@ -68,16 +68,20 @@ Reliyo is a **task marketplace MVP** (NestJS + React + PostgreSQL) with **locked
 | 4 | ~~My Tasks In Dispute tab~~ | FE | ✅ (API `status=disputed`) | — |
 | 5 | ~~Admin Users suspend API~~ | FE | ✅ 2026-05-26 | — |
 | 6 | ~~Normalize Biweekly~~ | FE | ✅ 2026-05-26 | — |
-| 7 | **Run `npm run validate:lifecycle`** before Sprint 5 | BE/QA | Manual with OTP from logs | CI confidence |
+| 7 | ✅ `validate:lifecycle` script + manual dispute/cancel verification | BE/QA | 2026-05-28 checks | Sprint 4 confidence |
 
-### Sprint 5 (after polish)
+### Sprint 5 (current — closeout)
 
 | # | Action | Notes |
 |---|--------|-------|
-| 1 | Choose PSP (Razorpay/Stripe/etc.) + staging env (B5) | Webhook tunnel |
-| 2 | Payment intents replacing mock `confirm` | Real auth/capture |
-| 3 | Webhook handler + idempotency + BullMQ retry | ⏸️ Redis from Sprint 2 |
-| 4 | Map webhook → `fund_holds` confirmed/failed | Rule Zero + trust on accept |
+| 1 | ✅ PSP selected: **Razorpay**; env contract added | `PAYMENT_PSP`, webhook secrets |
+| 2 | ✅ Payment intent flow (`provider_intent_id`, pending-first) | `RazorpayPaymentProvider` Orders API |
+| 3 | ✅ Webhook endpoint + raw-body signature + idempotent events | `rawBody: true`, `X-Razorpay-Signature` |
+| 4 | ✅ Webhook-driven fund hold updates + retry-due endpoint | `payment_webhook_events` |
+| 5 | ✅ B5 staging runbook + tunnel script + env template | `docs/sprint-5/`, `npm run tunnel:webhooks` |
+| 6 | ✅ `GET /payments/config` + checkout payload on fund holds | `PaymentsConfigService` |
+| 7 | ✅ Frontend Razorpay Checkout + poll until confirmed | `PaymentGateway`, `lib/payments/flow.ts` |
+| 8 | 🟡 Live Razorpay smoke | `npm run validate:live-razorpay-smoke` — needs `.env.staging.local` keys |
 
 ### Sprint 6–8 (sequential)
 
@@ -95,31 +99,31 @@ Reliyo is a **task marketplace MVP** (NestJS + React + PostgreSQL) with **locked
 |-------|--------|-------|
 | **Policy / specs** | ✅ Locked v1.0 | Sprint 0 |
 | **Product workflow doc** | ✅ v1.0 | `PRODUCT-WORKFLOW.md` + Cursor rule |
-| **Frontend UI** | 🟡 Hybrid | API for lists/create/accept/cancel; timeline local |
-| **Frontend ↔ API** | 🟡 ~60% | `lib/tasks/api.ts`; `TaskTimeline` not fully wired |
-| **Backend API** | 🟡 Tasks + auth + payments holds | No webhooks, no admin task ops |
+| **Frontend UI** | 🟡 Hybrid | Core task/timeline actions API-backed; some admin flows still local |
+| **Frontend ↔ API** | 🟡 ~75% | TaskTimeline wired; remaining admin/dispute ops pending |
+| **Backend API** | 🟡 Tasks + auth + payments/webhooks | Live PSP callback integration pending staging |
 | **Database** | 🟡 | `users`, `tasks`, `task_events`, `fund_holds` |
-| **Payments** | 🟡 Mock | `FundHoldsService`, not production PSP |
+| **Payments** | 🟡 Mock + live path | Mock dev default; Razorpay Orders/Checkout/webhooks in live mode |
 | **Ledger** | ⬜ | Module scaffold only |
 | **CI** | ✅ | `backend-ci.yml`, `frontend-ci.yml` |
 | **Local dev** | 🟡 | Postgres **5433**; `npm run start:dev:clean` for port conflicts |
-| **Staging / prod** | ⬜ | No deploy IaC (B5) |
+| **Staging / prod** | 🟡 | B5 ✅ Neon+Render; deploy via `render.yaml` when ready |
 
 ### Active blockers
 
 | ID | Blocker | Affects | Mitigation | Target |
 |----|---------|---------|------------|--------|
 | B1 | ~~`TaskTimeline` mutations use localStorage~~ | — | ✅ Wired to task APIs (2026-05-26) | — |
-| B2 | No payment webhooks / real PSP | Sprint 5–6 | Sprint 5 after B1 | Sprint 5 |
+| B2 | Live Razorpay smoke execution | Sprint 5 | Add test keys → `validate:live-razorpay-smoke` | User keys in `.env.staging.local` |
 | B3 | ~~Admin suspend UI not wired~~ | — | ✅ `AdminUsers` + `GET /admin/users` (2026-05-26) | — |
 | B4 | ~~Guards not wired~~ | — | ✅ Resolved | — |
-| B5 | Staging environment undefined | Sprint 5+ | Pick host + managed Postgres | Before Sprint 5 |
+| B5 | ~~Staging host undefined~~ | — | ✅ **Neon + Render** — [`STAGING-HOST.md`](sprint-5/STAGING-HOST.md), [`render.yaml`](../render.yaml) | Deploy when ready |
 | B6 | No server 3-strike inactivity job | Done → closed auto path | Cron/BullMQ + API transition | Sprint 7 |
 | B7 | Force-close + DSP4 admin APIs missing | Admin ops | Sprint 7 endpoints | Sprint 7 |
 
 ### Workflow deviations (tracked)
 
-See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical-debt) — key IDs: **D1** timeline local, **D2** cancel→`closed` not hard delete, **D4** inactivity client-only, **D5** force-close UI-only.
+See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical-debt) — active key IDs: **D2** cancel→`closed` not hard delete, **D4** inactivity client-only, **D5** force-close UI-only.
 
 ---
 
@@ -131,8 +135,8 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | **1** | Frontend + repo hardening | ✅ Done | 100% | Sprint 0 |
 | **2** | Backend foundation | ✅ Done | 98% | Sprint 1 |
 | **3** | Auth + authorization | ✅ Done | 95% | Sprint 2 |
-| **4** | Task APIs + lifecycle | 🟡 Core done | 80% | Sprint 3 |
-| **5** | Payments + webhooks | ⬜ Started | 5% | Sprint 4 polish |
+| **4** | Task APIs + lifecycle | 🟡 Polishing | 96% | Sprint 3 |
+| **5** | Payments + webhooks | 🟡 Closeout | 95% | Sprint 4 polish |
 | **6** | Ledger + settlement | ⬜ Not started | 0% | Sprint 5 |
 | **7** | Disputes + admin ops | ⬜ Not started | 0% | Sprint 4, 6 |
 | **8** | E2E + hardening + deploy | ⬜ Not started | 0% | Sprint 7 |
@@ -242,7 +246,7 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 
 ---
 
-## Sprint 4 — Task APIs + lifecycle 🟡 (80% — **current focus**)
+## Sprint 4 — Task APIs + lifecycle 🟡 (96% — **closeout**)
 
 **Goal:** Task truth on server; lifecycle engine; `availableActions`; Rule Zero + trust deposit.
 
@@ -263,7 +267,7 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | TaskContextGuard + SuspensionGuard | ✅ | Task routes |
 | Admin suspend API | ✅ | `admin.controller.ts` |
 | extend-deadline API | ✅ | Requestor only |
-| Lifecycle unit tests | 🟡 | `lifecycle.service.spec.ts` |
+| Lifecycle unit tests | ✅ | includes cooldown reset + disputed guard |
 
 ### Frontend — partial
 
@@ -289,25 +293,38 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 - [x] B1 resolved — all lifecycle actions via API
 - [x] Dashboard + dispute tab API-backed
 - [x] B3 admin suspend UI wired
-- [ ] Manual E2E: `npm run validate:lifecycle` (OTP from dev logs)
+- [x] Manual lifecycle validation (create/accept/in-progress/disputed/done/closed) + targeted bug checks
 
 ---
 
-## Sprint 5 — Payments + webhooks ⬜ (5%)
+## Sprint 5 — Payments + webhooks 🟡 (95%)
 
 **Goal:** Production payment authority; webhooks update fund holds.
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Fund hold schema + mock confirm | ✅ | Sprint 4 — not Sprint 5 done |
-| Payment intents (PSP) | ⬜ | Replace mock confirm |
-| Webhook ingestion + signature verify | ⬜ | |
-| Idempotent webhook processing | ⬜ | |
-| Rule Zero via webhook-confirmed holds | 🟡 | Logic exists; needs real PSP |
-| BullMQ for webhook retry | ⬜ | ⏸️ Redis |
-| Staging + webhook tunnel | 🚫 | B5 |
+| PSP selection | ✅ | Razorpay selected for Sprint 5 |
+| Payment intents (PSP) | ✅ | `RazorpayPaymentProvider` (Orders API) in live mode |
+| Razorpay webhook payload mapper | ✅ | `razorpay-webhook.mapper.ts` |
+| Webhook ingestion + raw-body signature | ✅ | `rawBody: true`; `X-Razorpay-Signature` (live) |
+| Idempotent webhook processing | ✅ | `payment_webhook_events` |
+| Retry processing | 🟡 | DB `retry-due`; BullMQ optional |
+| Rule Zero via webhook-confirmed holds | ✅ | Mock UPI auto-confirm; live via webhook |
+| Sprint 5 regression + suite | ✅ | `validate:sprint5-suite` (8 checks) |
+| B5 staging host | ✅ | **Neon + Render** — `docs/sprint-5/STAGING-HOST.md`, `render.yaml` |
+| B5 tunnel + runbook | ✅ | `tunnel:webhooks`, `staging-webhooks.md` |
+| `GET /payments/config` | ✅ | Mode, PSP, publishable Razorpay key |
+| Frontend Razorpay Checkout | ✅ | `PaymentGateway` + `settleFundHold` poll |
+| Live smoke automation (S5-M01) | ✅ | `validate:live-razorpay-smoke` |
+| Live smoke executed | 🟡 | Requires Razorpay test keys in `.env.staging.local` |
 
-**Depends on:** Sprint 4 polish complete
+**Exit criteria (to mark ✅):**
+
+- [x] Mock mode regression passes
+- [x] Raw-body webhook verification
+- [x] Checkout UI opens Razorpay when `checkout` returned
+- [x] B5 staging host selected (Neon + Render) + `render.yaml`
+- [ ] One end-to-end live payment — run `validate:live-razorpay-smoke` after adding Razorpay test keys to `.env.staging.local`
 
 ---
 
@@ -372,8 +389,14 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | Postgres up | `docker compose ps` | healthy, port **5433** | Manual |
 | Migrations | `cd backend && npm run prisma:deploy` | All applied (incl. fund_holds) | Manual |
 | Seed | `npm run prisma:seed` | 3 users | Manual |
-| Backend build | `cd backend && npm run build` | 0 errors | 2026-05-25 ✅ |
-| Backend tests | `cd backend && npm run test` | Pass | 2026-05-25 ✅ |
+| Backend build | `cd backend && npm run build` | 0 errors | 2026-05-28 ✅ |
+| Payments tests | `cd backend && npm run test -- --testPathPattern=payments` | Pass (20) | 2026-05-28 ✅ |
+| Staging env template | `cd backend && npm run validate:staging-env` | Pass | 2026-05-28 ✅ |
+| Frontend payment tests | `npm test -- src/lib/payments/api.test.ts` | Pass | 2026-05-28 ✅ |
+| Staging host decision | Neon + Render — `docs/sprint-5/STAGING-HOST.md` | Documented | 2026-05-28 ✅ |
+| Sprint 5 suite | `npm run validate:sprint5-suite -- 111111` | 8/8 pass | 2026-06-10 ✅ |
+| Sprint 5 E2E only | `npm run validate:sprint5-payments -- <otp>` | Pass | 2026-05-28 ✅ |
+| Lifecycle smoke | `npm run validate:lifecycle -- <otp>` | Pass | 2026-05-28 ✅ |
 | Health API | `GET http://localhost:4000/api/v1/health` | `ok` | 2026-05-25 ✅ |
 | OTP send | `POST .../auth/otp/send` | `expiresInSeconds` | 2026-05-25 ✅ |
 | Rule Zero script | `node backend/scripts/validate-rule-zero.mjs` | Pass | Manual |
@@ -394,6 +417,13 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | 2026-05-25 | 4 | Fund holds (reward + trust), Rule Zero + 10% trust on accept; migrations `fund_holds`. |
 | 2026-05-25 | — | **`PRODUCT-WORKFLOW.md`** canonical workflow + gap matrix; Cursor rule `product-workflow-validation.mdc`; tracker expanded with next-action plan, B6–B7, per-sprint % and exit criteria. |
 | 2026-05-26 | 4 polish | TaskTimeline → API; `availableActions`/cooldowns; Dashboard API; Admin users list+suspend; Biweekly; fix `canQuit`; `validate-lifecycle.mjs`. |
+| 2026-05-28 | 4 polish | Fixed dispute cooldown reset after `disputed->done`; blocked duplicate raise while `disputed`; fixed cancel response false `TASK_NOT_FOUND`; attachment metadata persisted via API comments. |
+| 2026-05-28 | 5 | Added payment intent + webhook foundation: `provider_intent_id`, signed webhook endpoint, idempotent `payment_webhook_events`, DB retry-due processor, mock flow updated to webhook-driven status updates. |
+| 2026-05-28 | 5 | Live Razorpay adapter (`RazorpayPaymentProvider`), webhook payload mapper + `verifyRazorpaySignature`, fund-hold lookup by `providerIntentId`, `validate:sprint5-payments` E2E (reward → task → card trust webhook → accept). |
+| 2026-05-28 | 5 | B5 staging runbook (`docs/sprint-5/`), tunnel script, raw-body webhooks, `GET /payments/config`, checkout DTO on fund holds, frontend Razorpay Checkout + server poll (`PaymentGateway`, `settleFundHold`). |
+| 2026-05-28 | 5 | Sprint 5 test matrix (`docs/sprint-5/TEST-CASES.md`) + `validate:sprint5-suite` (8 checks: health, config, Rule Zero, webhooks, regression, unit, env). |
+| 2026-05-28 | 5 | B5 closed: staging host **Neon + Render** (`STAGING-HOST.md`, `render.yaml`), `start:dev:staging`, `validate:live-razorpay-smoke` (S5-M01). |
+| 2026-06-10 | 5 | Resumed closeout: `check:razorpay-keys`, optional `LIVE_SMOKE=1` in suite; re-verified `validate:sprint5-suite` 8/8. |
 
 ---
 
@@ -404,6 +434,8 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | **Product workflow (validate here first)** | [`docs/PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) |
 | Architecture & file guide | [`docs/PROJECT-OVERVIEW.md`](PROJECT-OVERVIEW.md) |
 | Sprint 4 detail | [`docs/sprint-4/README.md`](sprint-4/README.md) |
+| Sprint 5 payments / staging | [`docs/sprint-5/README.md`](sprint-5/README.md) |
+| Sprint 5 test cases | [`docs/sprint-5/TEST-CASES.md`](sprint-5/TEST-CASES.md) |
 | Sprint 0 specs | [`docs/sprint-0/`](sprint-0/) |
 | Backend setup | [`backend/README.md`](../backend/README.md) |
 | Auth details | [`docs/sprint-3/AUTH.md`](sprint-3/AUTH.md) |

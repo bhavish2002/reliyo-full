@@ -16,7 +16,13 @@ describe('FundHoldsService.assertRewardHoldForTaskCreate', () => {
         findFirst: jest.fn().mockResolvedValue(null),
       },
     };
-    const service = new FundHoldsService({} as never);
+    const service = new FundHoldsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
 
     await expect(
       service.assertRewardHoldForTaskCreate(
@@ -45,7 +51,13 @@ describe('FundHoldsService.assertRewardHoldForTaskCreate', () => {
         }),
       },
     };
-    const service = new FundHoldsService({} as never);
+    const service = new FundHoldsService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
 
     const result = await service.assertRewardHoldForTaskCreate(
       tx as never,

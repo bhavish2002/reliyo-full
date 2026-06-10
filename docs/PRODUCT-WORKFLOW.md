@@ -402,7 +402,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 |---------------|--------|-------|
 | Create Task (all fields + review) | ✅ | `CreateTask.tsx` |
 | Update frequency “Biweekly” | ⚠️ | UI label **Bi-weekly** (`CreateTask.tsx`) |
-| Payment before publish | 🟡 | Fund holds + mock gateway (`/payment`) |
+| Payment before publish | 🟡 | Fund holds + Razorpay Checkout (live) or mock gateway |
 | Dashboard stats | ⬜ | `Dashboard.tsx` uses **localStorage** |
 | My Tasks (Created / Accepted / Dispute) | 🟡 | API `scope=mine`; dispute tab may be incomplete |
 | Browse Tasks (country, domain) | 🟡 | API `scope=browse`; filters partial |
@@ -440,7 +440,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 
 | Workflow item | Status | Notes |
 |---------------|--------|-------|
-| UPI / card / net banking UI | 🟡 | Mock outcomes in `payment-outcomes.ts` |
+| UPI / card / net banking UI | 🟡 | Mock outcomes in dev; Razorpay Checkout in live mode (`GET /payments/config`) |
 | 5% / 3% settlement | ⬜ | Spec only; `ledger` module stub |
 | Escrow release on close / force close | ⬜ | Sprint 6 |
 
@@ -480,7 +480,7 @@ Aligned with [`EXECUTION-TRACKER.md`](EXECUTION-TRACKER.md):
 | Sprint | Workflow coverage |
 |--------|-------------------|
 | **4 polish** | Wire `TaskTimeline` → API; Dashboard/My Tasks fully API; remove demo timeline dependency |
-| **5** | Real PSP + webhooks; replace mock fund-hold confirmation |
+| **5** | Real PSP + webhooks; Razorpay Checkout; replace mock-only confirmation in prod |
 | **6** | Ledger settlements for close, force close, cancel, quit |
 | **7** | DSP4 admin, force-close requests, notifications, support tickets, user suspend UI |
 | **8** | E2E against this document; staging deploy |

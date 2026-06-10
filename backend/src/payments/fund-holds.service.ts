@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { FundHold, FundHoldPurpose, Prisma } from '@prisma/client';
 import { FundHoldStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,6 +12,10 @@ import type { AuthUserPayload } from '../auth/auth.types';
 import { resolveFundHoldStatusFromMethod } from './payment-outcomes';
 import type { CreateFundHoldDto } from './dto/create-fund-hold.dto';
 import { computeTrustDepositAmount } from './trust-deposit.util';
+import { PaymentWebhookService } from './payment-webhook.service';
+import { PaymentProviderRegistry } from './providers/payment-provider.registry';
+import type { CheckoutConfigDto } from './payments-config.types';
+import { PaymentsConfigService } from './payments-config.service';
 
 export interface FundHoldDto {
   id: string;
@@ -18,6 +23,11 @@ export interface FundHoldDto {
   amount: number;
   currency: string;
   status: FundHoldStatus;
+  provider: string;
+  providerIntentId?: string;
+  providerPaymentId?: string;
+  clientSecret?: string;
+  checkout?: CheckoutConfigDto;
   paymentMethod?: string;
   confirmedAt?: string;
   failedAt?: string;
@@ -26,15 +36,36 @@ export interface FundHoldDto {
 
 @Injectable()
 export class FundHoldsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly webhooks: PaymentWebhookService,
+    private readonly paymentProviders: PaymentProviderRegistry,
+    private readonly paymentsConfig: PaymentsConfigService,
+  ) {}
 
   private toDto(hold: FundHold): FundHoldDto {
+    const checkout = this.paymentsConfig.buildCheckoutForHold({
+      provider: hold.provider,
+      providerIntentId: hold.providerIntentId,
+      purpose: hold.purpose,
+      amount: Number(hold.amount),
+      currency: hold.currency,
+    });
+
     return {
       id: hold.id,
       purpose: hold.purpose,
       amount: Number(hold.amount),
       currency: hold.currency,
       status: hold.status,
+      provider: hold.provider,
+      providerIntentId: hold.providerIntentId ?? undefined,
+      providerPaymentId: hold.providerPaymentId ?? undefined,
+      clientSecret: hold.providerIntentId
+        ? `${hold.provider}_secret_${hold.providerIntentId}`
+        : undefined,
+      checkout,
       paymentMethod: hold.paymentMethod ?? undefined,
       confirmedAt: hold.confirmedAt?.toISOString(),
       failedAt: hold.failedAt?.toISOString(),
@@ -46,9 +77,28 @@ export class FundHoldsService {
     dto: CreateFundHoldDto,
     actor: AuthUserPayload,
   ): Promise<FundHoldDto> {
-    const status = resolveFundHoldStatusFromMethod(dto.paymentMethod);
-    const now = new Date();
+    const provider = this.config.get<string>('PAYMENT_PSP') ?? 'mock';
+    const mode = this.config.get<string>('PAYMENT_MODE') ?? 'mock';
+    let providerIntentId: string;
     let targetTaskId: string | undefined;
+
+    const psp = this.paymentProviders.resolve();
+    if (psp) {
+      const intent = await psp.createPaymentIntent({
+        amount: dto.amount,
+        currency: dto.currency ?? 'INR',
+        // Razorpay receipt max 40 chars; userId lives in notes.
+        receipt: `${dto.purpose === 'task_reward' ? 'tr' : 'td'}_${Date.now()}`,
+        notes: {
+          purpose: dto.purpose,
+          userId: actor.sub,
+          ...(dto.taskId ? { taskId: dto.taskId } : {}),
+        },
+      });
+      providerIntentId = intent.providerIntentId;
+    } else {
+      providerIntentId = `${provider}_pi_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    }
 
     if (dto.purpose === 'trust_deposit') {
       if (!dto.taskId) {
@@ -101,6 +151,8 @@ export class FundHoldsService {
       targetTaskId = task.id;
     }
 
+    const holdProvider = psp?.name ?? provider;
+
     const hold = await this.prisma.fundHold.create({
       data: {
         userId: actor.sub,
@@ -108,14 +160,37 @@ export class FundHoldsService {
         amount: dto.amount,
         currency: dto.currency ?? 'INR',
         paymentMethod: dto.paymentMethod,
-        status,
+        provider: holdProvider,
+        providerIntentId,
+        status: FundHoldStatus.pending,
         targetTaskId,
-        confirmedAt: status === FundHoldStatus.confirmed ? now : null,
-        failedAt: status === FundHoldStatus.failed ? now : null,
       },
     });
 
-    return this.toDto(hold);
+    if (mode === 'mock') {
+      const outcome = resolveFundHoldStatusFromMethod(dto.paymentMethod);
+      const webhookStatus =
+        outcome === FundHoldStatus.confirmed
+          ? 'confirmed'
+          : outcome === FundHoldStatus.failed
+            ? 'failed'
+            : 'pending';
+      await this.webhooks.ingestEvent(holdProvider, {
+        eventId: `${provider}_evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        intentId: providerIntentId,
+        paymentId: `${provider}_pay_${Math.random().toString(36).slice(2, 12)}`,
+        status: webhookStatus,
+        metadata: {
+          purpose: dto.purpose,
+          paymentMethod: dto.paymentMethod,
+        },
+      });
+    }
+
+    const refreshed = await this.prisma.fundHold.findUniqueOrThrow({
+      where: { id: hold.id },
+    });
+    return this.toDto(refreshed);
   }
 
   async getHold(id: string, actor: AuthUserPayload): Promise<FundHoldDto> {
