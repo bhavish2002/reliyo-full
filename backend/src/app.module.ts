@@ -16,11 +16,19 @@ import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 import { SuccessEnvelopeInterceptor } from './common/interceptors/success-envelope.interceptor';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 
+/** dotenv-cli and @nestjs/config both use first-file-wins precedence. */
+function resolveEnvFilePath(): string[] {
+  if (process.env.RELIYO_PROFILE === 'staging') {
+    return ['.env.staging.local', '.env.staging', '.env.local', '.env'];
+  }
+  return ['.env.local', '.env'];
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: resolveEnvFilePath(),
     }),
     PrismaModule,
     HealthModule,

@@ -11,6 +11,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { getCurrentUser } from "@/lib/auth";
 import { notifyTaskAccepted } from "@/lib/notifications";
 import { createFundHold } from "@/lib/payments/api";
+import { settleFundHold } from "@/lib/payments/flow";
 import { acceptTask, createTask, type CreateTaskPayload } from "@/lib/tasks/api";
 import { notifyTasksChanged } from "@/lib/tasks/events";
 import { ApiClientError } from "@/lib/api/client";
@@ -39,7 +40,6 @@ const PaymentGateway = () => {
   const taskData = location.state?.taskData ?? null;
   const taskDraft = location.state?.taskDraft as Omit<CreateTaskPayload, "fundHoldId"> | null;
   const amount: number = location.state?.amount ?? 0;
-  const platformFee: number = location.state?.platformFee ?? 0;
   const isAcceptFlow: boolean = location.state?.isAcceptFlow ?? false;
   const currency: string = location.state?.currency ?? taskDraft?.currency ?? "INR";
   const currencySymbol: string = taskData?.currencySymbol || taskDraft?.currencySymbol || "₹";
@@ -61,74 +61,56 @@ const PaymentGateway = () => {
     setPublishError(null);
 
     void (async () => {
-      await new Promise((r) => setTimeout(r, 2000));
-
-      const outcomeMap: Record<string, PaymentStatus> = {
-        upi: "success",
-        card: "pending",
-        netbanking: "failed",
-      };
-      const outcome = outcomeMap[selectedMethod] ?? "failed";
-      setStatus(outcome);
-
       const user = getCurrentUser();
-      const userName = user?.name || "Unknown User";
+      const payer = {
+        name: user?.name,
+        contact: user?.phone?.replace(/\D/g, "").slice(-10),
+      };
 
-      if (isAcceptFlow) {
-        try {
-          const hold = await createFundHold({
-            purpose: "trust_deposit",
-            amount,
-            currency,
-            paymentMethod: selectedMethod,
-            taskId: taskData.id,
-          });
-
-          if (hold.status === "confirmed") {
-            await acceptTask(taskData.id, hold.id);
-            notifyTasksChanged();
-            notifyTaskAccepted(taskData);
-            toast({
-              title: "Task Accepted!",
-              description: "Trust deposit locked. You can now start working on this task.",
-            });
-            navigate(`/task/${taskData.id}`, { replace: true });
-            return;
-          }
-
-          if (hold.status === "pending") {
-            setStatus("pending");
-            toast({
-              title: "Payment Under Processing",
-              description: "Your acceptance will complete once payment is confirmed.",
-            });
-            return;
-          }
-
-          setStatus("failed");
-        } catch (err) {
-          setStatus("failed");
-          const message =
-            err instanceof ApiClientError ? err.message : "Payment or accept failed.";
-          setPublishError(message);
-          toast({ title: "Accept failed", description: message, variant: "destructive" });
-        }
-        return;
-      }
-
-      // Create-task flow: fund hold must confirm before POST /tasks (Rule Zero)
       try {
         const hold = await createFundHold({
-          purpose: "task_reward",
+          purpose: isAcceptFlow ? "trust_deposit" : "task_reward",
           amount,
           currency,
           paymentMethod: selectedMethod,
+          ...(isAcceptFlow ? { taskId: taskData.id } : {}),
         });
 
-        if (hold.status === "confirmed" && taskDraft) {
+        const settled = await settleFundHold(hold, payer);
+
+        if (settled.status === "failed") {
+          setStatus("failed");
+          setPublishError("Payment could not be confirmed. Please try again.");
+          return;
+        }
+
+        if (settled.status === "pending") {
+          setStatus("pending");
+          toast({
+            title: "Payment Under Processing",
+            description: isAcceptFlow
+              ? "Your acceptance will complete once payment is confirmed."
+              : "Your task will be published once payment is confirmed.",
+          });
+          return;
+        }
+
+        if (isAcceptFlow) {
+          await acceptTask(taskData.id, settled.id);
+          notifyTasksChanged();
+          notifyTaskAccepted(taskData);
+          toast({
+            title: "Task Accepted!",
+            description: "Trust deposit locked. You can now start working on this task.",
+          });
+          navigate(`/task/${taskData.id}`, { replace: true });
+          return;
+        }
+
+        if (taskDraft) {
           const created = await createTask({
             ...taskDraft,
-            fundHoldId: hold.id,
+            fundHoldId: settled.id,
           });
           toast({
             title: "Payment Successful!",
@@ -136,24 +118,23 @@ const PaymentGateway = () => {
           });
           notifyTasksChanged();
           navigate(`/task/${created.id}`, { replace: true });
-          return;
         }
-
-        if (hold.status === "pending") {
-          toast({
-            title: "Payment Under Processing",
-            description: "Your task will be published once payment is confirmed.",
-          });
-          return;
-        }
-
-        setStatus("failed");
       } catch (err) {
         setStatus("failed");
         const message =
-          err instanceof ApiClientError ? err.message : "Payment or task publish failed.";
+          err instanceof ApiClientError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : isAcceptFlow
+                ? "Payment or accept failed."
+                : "Payment or task publish failed.";
         setPublishError(message);
-        toast({ title: "Could not publish task", description: message, variant: "destructive" });
+        toast({
+          title: isAcceptFlow ? "Accept failed" : "Could not publish task",
+          description: message,
+          variant: "destructive",
+        });
       }
     })();
   };
@@ -173,7 +154,6 @@ const PaymentGateway = () => {
 
   const handleBack = () => navigate(isAcceptFlow ? "/browse-tasks" : "/create-task");
 
-  // ── Processing state ──
   if (status === "processing") {
     return (
       <DashboardLayout>
@@ -188,7 +168,6 @@ const PaymentGateway = () => {
     );
   }
 
-  // ── Success state ──
   if (status === "success") {
     return (
       <DashboardLayout>
@@ -204,14 +183,6 @@ const PaymentGateway = () => {
                 : `${currencySymbol}${fmtMoney(amount)} has been locked as a reward deposit. Your task is now live and visible to workers.`}
             </p>
           </div>
-          <div className="w-full rounded-xl bg-muted p-4 text-sm text-left space-y-2">
-            <div className="flex justify-between"><span className="text-muted-foreground">Amount Paid</span><span className="font-semibold">{currencySymbol}{fmtMoney(amount)}</span></div>
-            {!isAcceptFlow && (
-              <div className="flex justify-between text-muted-foreground text-xs pt-1">
-                <span>Platform fee will be deducted at payout</span>
-              </div>
-            )}
-          </div>
           <Button className="w-full" onClick={handleGoToTasks}>
             {isAcceptFlow ? "View Accepted Tasks" : "Back to Create Task"}
           </Button>
@@ -220,7 +191,6 @@ const PaymentGateway = () => {
     );
   }
 
-  // ── Failed state ──
   if (status === "failed") {
     return (
       <DashboardLayout>
@@ -249,7 +219,6 @@ const PaymentGateway = () => {
     );
   }
 
-  // ── Pending state ──
   if (status === "pending") {
     return (
       <DashboardLayout>
@@ -262,17 +231,9 @@ const PaymentGateway = () => {
             <p className="text-muted-foreground mt-2">
               Your payment of {currencySymbol}{fmtMoney(amount)} is being verified.
               {isAcceptFlow
-                ? " The task has been added to your accepted list and will be fully confirmed once payment clears."
-                : " Your payment is being processed. The task will be created and go live once payment is confirmed."}
+                ? " Your acceptance will complete once payment clears."
+                : " Your task will be published once payment is confirmed."}
             </p>
-          </div>
-          <div className="w-full rounded-xl border border-secondary bg-secondary/50 p-4 text-sm text-left">
-            <p className="font-medium text-secondary-foreground">What happens next?</p>
-            <ul className="mt-2 space-y-1 text-muted-foreground list-disc list-inside">
-              <li>We'll verify the payment with your bank</li>
-              <li>{isAcceptFlow ? "Your task commitment will be fully confirmed" : "Your task will be published automatically on confirmation"}</li>
-              <li>You'll receive a notification once it's processed</li>
-            </ul>
           </div>
           <Button className="w-full" onClick={handleGoToTasks}>
             {isAcceptFlow ? "View Accepted Tasks" : "View My Tasks"}
@@ -282,7 +243,6 @@ const PaymentGateway = () => {
     );
   }
 
-  // ── Idle / Select payment method ──
   return (
     <DashboardLayout>
       <div className="max-w-2xl mx-auto">
@@ -328,6 +288,7 @@ const PaymentGateway = () => {
             return (
               <button
                 key={method.id}
+                type="button"
                 onClick={() => setSelectedMethod(method.id)}
                 className={`w-full flex items-center gap-4 rounded-xl border p-4 text-left transition-all ${
                   isSelected
@@ -350,7 +311,7 @@ const PaymentGateway = () => {
 
         <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-xs text-muted-foreground mb-6">
           <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
-          Your payment is secured with 256-bit SSL encryption. {isAcceptFlow ? "The trust deposit is held as platform-held funds and refunded on task completion per policy." : "The reward is held as platform-held funds and released only on task completion per policy."}
+          Payments are processed securely via Razorpay in live mode. Funds are held as platform-held escrow per policy until task completion.
         </div>
 
         <Button
