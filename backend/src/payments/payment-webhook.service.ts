@@ -48,6 +48,38 @@ export class PaymentWebhookService {
     }
   }
 
+  /** Razorpay Checkout: HMAC(order_id|payment_id, key_secret). */
+  verifyRazorpayCheckoutSignature(
+    orderId: string,
+    paymentId: string,
+    signature?: string,
+  ): void {
+    const mode = this.config.get<string>('PAYMENT_MODE') ?? 'mock';
+    if (mode === 'mock') return;
+    if (!signature) {
+      throw new BadRequestException({
+        code: 'PAYMENT_CHECKOUT_SIGNATURE_MISSING',
+        message: 'Missing Razorpay payment signature.',
+      });
+    }
+    const secret = this.config.get<string>('RAZORPAY_KEY_SECRET') ?? '';
+    if (!secret) {
+      throw new BadRequestException({
+        code: 'PAYMENT_PSP_NOT_CONFIGURED',
+        message: 'Razorpay key secret is not configured.',
+      });
+    }
+    const expected = createHmac('sha256', secret)
+      .update(`${orderId}|${paymentId}`)
+      .digest('hex');
+    if (expected !== signature) {
+      throw new BadRequestException({
+        code: 'PAYMENT_CHECKOUT_SIGNATURE_INVALID',
+        message: 'Invalid Razorpay payment signature.',
+      });
+    }
+  }
+
   /** Razorpay uses X-Razorpay-Signature over the raw webhook body. */
   verifyRazorpaySignature(rawBody: string, signature?: string): void {
     const mode = this.config.get<string>('PAYMENT_MODE') ?? 'mock';
@@ -98,6 +130,9 @@ export class PaymentWebhookService {
         });
 
     await this.processEvent(event.id);
+    this.logger.log(
+      `Webhook ingested: provider=${provider} event=${payload.eventId} order=${payload.intentId} status=${payload.status}`,
+    );
     return { processed: true, duplicate: false };
   }
 

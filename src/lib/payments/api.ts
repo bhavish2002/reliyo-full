@@ -24,9 +24,39 @@ export interface FundHold {
   providerIntentId?: string;
   checkout?: CheckoutConfig;
   paymentMethod?: string;
+  targetTaskId?: string;
   confirmedAt?: string;
   failedAt?: string;
   createdAt: string;
+}
+
+export interface UserTransaction {
+  id: string;
+  kind: 'fund_hold';
+  purpose: FundHoldPurpose;
+  role: 'requestor' | 'acceptor';
+  amount: number;
+  currency: string;
+  status: FundHoldStatus;
+  paymentMethod?: string;
+  provider: string;
+  providerPaymentId?: string;
+  taskId?: string;
+  taskDisplayId?: string;
+  taskTitle?: string;
+  taskStatus?: string;
+  taskCancelled?: boolean;
+  settlementScenario?: string;
+  settlementAt?: string;
+  createdAt: string;
+  confirmedAt?: string;
+  failedAt?: string;
+}
+
+export function listUserTransactions() {
+  return apiClient.get<{ items: UserTransaction[]; total: number }>(
+    '/payments/fund-holds/transactions/list',
+  );
 }
 
 export interface PaymentsConfig {
@@ -53,6 +83,17 @@ export function createFundHold(payload: {
 
 export function getFundHold(id: string) {
   return apiClient.get<FundHold>(`/payments/fund-holds/${id}`);
+}
+
+export interface ConfirmCheckoutPayload {
+  razorpayPaymentId: string;
+  razorpayOrderId: string;
+  razorpaySignature: string;
+}
+
+/** Verify Razorpay Checkout success server-side and confirm the fund hold (live mode). */
+export function confirmFundHoldCheckout(holdId: string, payload: ConfirmCheckoutPayload) {
+  return apiClient.post<FundHold>(`/payments/fund-holds/${holdId}/confirm-checkout`, payload);
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

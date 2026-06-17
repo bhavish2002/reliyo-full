@@ -48,6 +48,30 @@ describe('PaymentWebhookService', () => {
     );
   });
 
+  it('verifies Razorpay checkout payment signature when mode is live', () => {
+    const prisma = {} as never;
+    const config = {
+      get: (key: string) => {
+        if (key === 'PAYMENT_MODE') return 'live';
+        if (key === 'RAZORPAY_KEY_SECRET') return 'keysec';
+        return '';
+      },
+    } as never;
+    const service = new PaymentWebhookService(prisma, config);
+
+    const orderId = 'order_abc';
+    const paymentId = 'pay_xyz';
+    const sig = createHmac('sha256', 'keysec')
+      .update(`${orderId}|${paymentId}`)
+      .digest('hex');
+    expect(() =>
+      service.verifyRazorpayCheckoutSignature(orderId, paymentId, sig),
+    ).not.toThrow();
+    expect(() =>
+      service.verifyRazorpayCheckoutSignature(orderId, paymentId, 'bad'),
+    ).toThrow(BadRequestException);
+  });
+
   it('returns duplicate on already processed event id', async () => {
     const prisma = {
       paymentWebhookEvent: {

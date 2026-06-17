@@ -365,6 +365,11 @@ const TaskDetail = () => {
       ? availableActions.canDelete
       : isOwner && status === "open" && !task.acceptedBy;
 
+  const canAcceptTask =
+    serverTimeline && availableActions
+      ? availableActions.canAccept
+      : status === "open" && !isOwner && !task.acceptedBy;
+
   // ── Delete task handler ─────────────────────────────────────────────────────
   const handleDeleteTask = async () => {
     try {
@@ -675,7 +680,7 @@ const TaskDetail = () => {
                     <CheckCircle2 className="h-4 w-4 shrink-0" />
                     You have accepted this task.
                   </div>
-                ) : status === "open" && !isOwner ? (
+                ) : canAcceptTask ? (
                   <Button className="w-full" onClick={handleAcceptClick}>Accept Task</Button>
                 ) : status === "closed" || status === "force_closed" ? (
                   <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">

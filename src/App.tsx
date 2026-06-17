@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import TaskDetail from "./pages/TaskDetail";
 import NotFound from "./pages/NotFound";
 import PaymentGateway from "./pages/PaymentGateway";
+import Transactions from "./pages/Transactions";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAllTasks from "./pages/admin/AdminAllTasks";
 import AdminUsers from "./pages/admin/AdminUsers";
@@ -56,6 +57,7 @@ const App = () => (
           <Route path="/profile" element={<Profile />} />
           <Route path="/task/:id" element={<TaskDetail />} />
           <Route path="/payment" element={<PaymentGateway />} />
+          <Route path="/transactions" element={<Transactions />} />
           <Route path="/help-support" element={<HelpSupport />} />
           <Route path="/about" element={<About />} />
           <Route path="/leadership" element={<Leadership />} />

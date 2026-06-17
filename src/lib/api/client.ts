@@ -1,5 +1,5 @@
 import { env } from "@/lib/env";
-import { getAccessToken } from "@/lib/auth/session";
+import { getAccessToken, setAccessToken } from "@/lib/auth/session";
 import { traceEvent, getClientTraceId } from "@/lib/observability";
 import type { ApiErrorBody, ApiErrorEnvelope, ApiSuccessResponse } from "@/lib/api/contracts";
 
@@ -40,7 +40,42 @@ function parseErrorBody(json: unknown): ApiErrorBody | undefined {
   return undefined;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type RequestOptions = RequestInit & { _authRetried?: boolean };
+
+async function refreshAccessTokenFromCookie(): Promise<boolean> {
+  const traceId = getClientTraceId();
+  const response = await fetch(`${env.apiBaseUrl}/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Client-Trace-Id": traceId,
+    },
+  });
+  if (!response.ok) return false;
+
+  const text = await response.text();
+  if (!text) return false;
+
+  try {
+    const parsed = JSON.parse(text) as ApiSuccessResponse<{ accessToken: string }>;
+    if (parsed.data?.accessToken) {
+      setAccessToken(parsed.data.accessToken);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function friendlyAuthMessage(status: number, body?: ApiErrorBody): string | undefined {
+  if (status !== 401) return undefined;
+  if (body?.code === "AUTH_SUSPENDED") return body.message;
+  return "Your session expired. Please sign in again.";
+}
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const url = `${env.apiBaseUrl}${path}`;
   const startedAt = performance.now();
   const traceId = getClientTraceId();
@@ -71,7 +106,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       } catch {
         body = undefined;
       }
-      throw new ApiClientError(body?.message || "Request failed", response.status, body);
+
+      if (
+        response.status === 401 &&
+        !init?._authRetried &&
+        !path.startsWith("/auth/")
+      ) {
+        const refreshed = await refreshAccessTokenFromCookie();
+        if (refreshed) {
+          return request<T>(path, { ...init, _authRetried: true });
+        }
+      }
+
+      const message =
+        friendlyAuthMessage(response.status, body) ??
+        body?.message ??
+        "Request failed";
+      throw new ApiClientError(message, response.status, body);
     }
 
     if (response.status === 204) {

@@ -36,4 +36,9 @@ export class ListTasksQueryDto {
   @IsOptional()
   @IsIn(['mine', 'browse', 'admin'])
   scope?: 'mine' | 'browse' | 'admin' = 'browse';
+
+  /** When scope=mine: filter to tasks created or accepted by the current user */
+  @IsOptional()
+  @IsIn(['created', 'accepted'])
+  participation?: 'created' | 'accepted';
 }

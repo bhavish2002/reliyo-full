@@ -1,6 +1,7 @@
 import type { FundHold } from "@/lib/payments/api";
-import { pollFundHoldUntilSettled } from "@/lib/payments/api";
+import { confirmFundHoldCheckout, pollFundHoldUntilSettled } from "@/lib/payments/api";
 import { openRazorpayCheckout } from "@/lib/payments/razorpay";
+import { rememberCheckoutSuccess } from "@/lib/payments/payment-session";
 
 export interface PayerProfile {
   name?: string;
@@ -21,8 +22,26 @@ export async function settleFundHold(
   }
 
   if (hold.checkout) {
-    await openRazorpayCheckout(hold.checkout, payer);
-    return pollFundHoldUntilSettled(hold.id);
+    const response = await openRazorpayCheckout(hold.checkout, payer);
+    rememberCheckoutSuccess({
+      holdId: hold.id,
+      razorpayPaymentId: response.razorpay_payment_id,
+      razorpayOrderId: response.razorpay_order_id,
+      razorpaySignature: response.razorpay_signature,
+    });
+    try {
+      return await confirmFundHoldCheckout(hold.id, {
+        razorpayPaymentId: response.razorpay_payment_id,
+        razorpayOrderId: response.razorpay_order_id,
+        razorpaySignature: response.razorpay_signature,
+      });
+    } catch {
+      // Webhook may still arrive (tunnel); poll as fallback.
+      return pollFundHoldUntilSettled(hold.id, {
+        maxAttempts: 30,
+        intervalMs: 2000,
+      });
+    }
   }
 
   return hold;

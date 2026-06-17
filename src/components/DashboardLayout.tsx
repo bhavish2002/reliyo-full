@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Search, Bell, UserRound, LogOut, Plus, Menu,
-  ChevronDown,
+  ChevronDown, ArrowRightLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,6 +17,7 @@ const getNavItems = (notifCount: number) => [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "My Tasks", icon: FileText, path: "/my-tasks" },
   { label: "Browse Tasks", icon: Search, path: "/browse-tasks" },
+  { label: "Transactions", icon: ArrowRightLeft, path: "/transactions" },
   { label: "Notifications", icon: Bell, path: "/notifications", badge: notifCount > 0 ? notifCount : undefined },
   { label: "Profile", icon: UserRound, path: "/profile" },
 ];

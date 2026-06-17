@@ -15,27 +15,20 @@ import {
   STATUS_COLORS, STATUS_LABELS,
   QUIT_GRACE_HOURS,
 } from "@/lib/taskTypes";
-import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
 import { notifyAcceptorQuit } from "@/lib/notifications";
 import { generateDisputeId, isEscalated } from "@/lib/disputeId";
-import { readJson, writeJson, removeItem } from "@/lib/storage";
-import { migrateLegacyTaskList } from "@/lib/taskMigration";
-import { env } from "@/lib/env";
-import { listTasks, mapApiTaskToTask, cancelTask, quitTask } from "@/lib/tasks/api";
+import { removeItem } from "@/lib/storage";
+import {
+  cancelTask,
+  quitTask,
+  listMyAcceptedTasks,
+  listMyCreatedTasks,
+  mapApiTaskToTask,
+} from "@/lib/tasks/api";
 import { notifyTasksChanged } from "@/lib/tasks/events";
 import { ApiClientError } from "@/lib/api/client";
-
-const DEMO_TASKS: Task[] = [
-  { id: "demo1", taskId: "RLY-TSK-2026-F2H8K4", title: "Deliver documents to Koramangala office", status: "open", location: "Bengaluru", reward: 4500, deadline: "2026-02-15", createdAt: "2026-02-10T10:00:00Z", createdBy: "Arjun Mehta", description: "", workType: "Physical", manpower: 1, skills: [], domain: "Delivery", updateFrequency: "Daily" },
-  { id: "demo2", taskId: "RLY-TSK-2026-G5N3P7", title: "Design a logo for my bakery startup", status: "in_progress", location: "Mumbai", reward: 2000, deadline: "2026-02-21", createdAt: "2026-02-08T10:00:00Z", createdBy: "Arjun Mehta", acceptedBy: "Priya Sharma", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "Design", updateFrequency: "Weekly" },
-  { id: "demo3", taskId: "RLY-TSK-2026-H9Q6R2", title: "Translate product brochure to Hindi", status: "done", location: "Lucknow", reward: 1500, deadline: "2026-03-02", createdAt: "2026-02-05T10:00:00Z", createdBy: "Arjun Mehta", acceptedBy: "Sanjay Patel", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "Translation", updateFrequency: "Weekly" },
-];
-
-const DEMO_ACCEPTED: Task[] = [
-  { id: "accepted1", taskId: "RLY-TSK-2026-A3M7K9", title: "Social media management for 1 week", status: "committed", location: "", reward: 10000, deadline: "2026-02-25", createdAt: "2026-02-12T10:00:00Z", createdBy: "Priya", description: "", workType: "Virtual", manpower: 1, skills: [], domain: "", updateFrequency: "", acceptedAt: new Date().toISOString() },
-];
 
 const MyTasks = () => {
   const navigate = useNavigate();
@@ -56,42 +49,25 @@ const MyTasks = () => {
   const [quitDialog, setQuitDialog] = useState<Task | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<Task | null>(null);
 
-  const currentUser = getCurrentUser();
-  const currentUserName = currentUser?.name || "";
-
   const loadTasks = async () => {
     if (!user) return;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const res = await listTasks({ scope: "mine", page: 1, pageSize: 100 });
-      const mapped = res.items.map(mapApiTaskToTask);
-      setTasks(
-        mapped.filter(
-          (t) => t.createdById === user.id || (!t.createdById && t.createdBy === (user.name ?? "")),
-        ),
+      const [createdRes, acceptedRes] = await Promise.all([
+        listMyCreatedTasks(),
+        listMyAcceptedTasks(),
+      ]);
+      setTasks(createdRes.items.map(mapApiTaskToTask));
+      setAcceptedTasks(acceptedRes.items.map(mapApiTaskToTask));
+    } catch (err) {
+      setTasks([]);
+      setAcceptedTasks([]);
+      setLoadError(
+        err instanceof ApiClientError
+          ? err.message
+          : "We couldn't load your tasks. Please refresh and try again.",
       );
-      setAcceptedTasks(
-        mapped.filter(
-          (t) =>
-            t.acceptedById === user.id ||
-            (!t.acceptedById && t.acceptedBy === (user.name ?? "")),
-        ),
-      );
-    } catch {
-      try {
-        const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-        if (stored.length === 0 && env.enableDemoData) {
-          writeJson("reliyo_tasks", DEMO_TASKS);
-          setTasks(DEMO_TASKS);
-        } else {
-          setTasks(stored.filter((t) => t.createdBy === currentUserName));
-        }
-        const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
-        setAcceptedTasks(storedAccepted.filter((t) => t.acceptedBy === currentUserName));
-      } catch {
-        setLoadError("We couldn't load your tasks. Please refresh and try again.");
-      }
     } finally {
       setIsLoading(false);
     }
@@ -178,8 +154,7 @@ const MyTasks = () => {
 
   const currentList = tab === "created" ? createdTasks : tab === "accepted" ? myAcceptedTasks : disputeTasks;
 
-  // Check if any accepted task is in committed status
-  const hasCommittedTasks = myAcceptedTasks.some(t => t.status === "committed");
+  const hasCommittedTasks = myAcceptedTasks.some((t) => t.status === "committed");
 
   if (isLoading) {
     return (
@@ -223,12 +198,13 @@ const MyTasks = () => {
         ))}
       </div>
 
-      {/* Quit task info notice for Accepted tab */}
       {tab === "accepted" && hasCommittedTasks && (
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 mb-4 text-sm text-primary">
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <p>
-            <span className="font-semibold">Quit Task Policy:</span> You can quit a task only within the first <span className="font-semibold">{QUIT_GRACE_HOURS} hours</span> after accepting it. After this period, the "Quit Task" option will be disabled and you must complete the task.
+            <span className="font-semibold">Quit Task Policy:</span> You can quit a task only within the first{" "}
+            <span className="font-semibold">{QUIT_GRACE_HOURS} hours</span> after accepting it. After this period,
+            the &quot;Quit Task&quot; option will be disabled and you must complete the task.
           </p>
         </div>
       )}
@@ -239,8 +215,8 @@ const MyTasks = () => {
           {tab === "dispute"
             ? "No disputes — keep up the good work!"
             : tab === "accepted"
-            ? "No accepted tasks yet. Browse tasks to find work!"
-            : "No tasks created yet."}
+              ? "No accepted tasks yet. Browse tasks to find work!"
+              : "No tasks created yet."}
         </div>
       ) : (
         <div className="space-y-3">
@@ -271,7 +247,10 @@ const MyTasks = () => {
                     <p className="text-sm font-semibold text-foreground">{task.title}</p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       {task.location && (
-                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{task.location}</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {task.location}
+                        </span>
                       )}
                       {tab === "accepted" && task.createdBy && (
                         <span className="flex items-center gap-1">👤 {task.createdBy}</span>
@@ -283,7 +262,9 @@ const MyTasks = () => {
                         <Calendar className="h-3 w-3" />
                         {task.deadline ? format(new Date(task.deadline), "MMM d") : "—"}
                       </span>
-                      <span>{task.currencySymbol || "₹"} {task.reward.toLocaleString()}</span>
+                      <span>
+                        {task.currencySymbol || "₹"} {task.reward.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -305,9 +286,11 @@ const MyTasks = () => {
                         variant="outline"
                         size="sm"
                         disabled={!canQuit}
-                        className={`${canQuit 
-                          ? "text-destructive border-destructive/30 hover:bg-destructive/10" 
-                          : "text-muted-foreground border-border opacity-50 cursor-not-allowed"}`}
+                        className={`${
+                          canQuit
+                            ? "text-destructive border-destructive/30 hover:bg-destructive/10"
+                            : "text-muted-foreground border-border opacity-50 cursor-not-allowed"
+                        }`}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (canQuit) setQuitDialog(task);
@@ -329,7 +312,6 @@ const MyTasks = () => {
         </div>
       )}
 
-      {/* Quit task confirmation dialog */}
       <Dialog open={!!quitDialog} onOpenChange={() => setQuitDialog(null)}>
         <DialogContent>
           <DialogHeader>
@@ -337,11 +319,16 @@ const MyTasks = () => {
               <AlertTriangle className="h-5 w-5 text-destructive" /> Quit Task?
             </DialogTitle>
             <DialogDescription>
-              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of {quitDialog ? (quitDialog.currencySymbol || "₹") : "₹"}{quitDialog ? (quitDialog.reward * 0.1).toFixed(2) : "0.00"} will be fully refunded. The task will be released back to Browse Tasks.
+              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of{" "}
+              {quitDialog ? quitDialog.currencySymbol || "₹" : "₹"}
+              {quitDialog ? (quitDialog.reward * 0.1).toFixed(2) : "0.00"} will be fully refunded. The task will be
+              released back to Browse Tasks.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setQuitDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setQuitDialog(null)}>
+              Cancel
+            </Button>
             <Button variant="destructive" onClick={() => quitDialog && handleQuitTask(quitDialog)}>
               Confirm Quit
             </Button>
@@ -349,7 +336,6 @@ const MyTasks = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete task confirmation dialog */}
       <Dialog open={!!deleteDialog} onOpenChange={() => setDeleteDialog(null)}>
         <DialogContent>
           <DialogHeader>
@@ -357,11 +343,15 @@ const MyTasks = () => {
               <Trash2 className="h-5 w-5 text-destructive" /> Delete Task?
             </DialogTitle>
             <DialogDescription>
-              This will cancel and archive the task "{deleteDialog?.title}". Your reward deposit of {deleteDialog?.currencySymbol || "₹"}{deleteDialog?.reward.toLocaleString() || 0} will be fully refunded.
+              This will cancel and archive the task &quot;{deleteDialog?.title}&quot;. Your reward deposit of{" "}
+              {deleteDialog?.currencySymbol || "₹"}
+              {deleteDialog?.reward.toLocaleString() || 0} will be fully refunded.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>
+              Cancel
+            </Button>
             <Button variant="destructive" onClick={() => deleteDialog && handleDeleteTask(deleteDialog)}>
               Confirm Delete
             </Button>

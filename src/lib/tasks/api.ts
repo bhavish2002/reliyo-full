@@ -114,6 +114,20 @@ export function listTasks(params: Record<string, string | number | undefined>) {
   return apiClient.get<TaskListResponse>(`/tasks${q ? `?${q}` : ""}`);
 }
 
+export type MineParticipation = "created" | "accepted";
+
+export function listMyCreatedTasks(pageSize = 100) {
+  return listTasks({ scope: "mine", participation: "created", page: 1, pageSize });
+}
+
+export function listMyAcceptedTasks(pageSize = 100) {
+  return listTasks({ scope: "mine", participation: "accepted", page: 1, pageSize });
+}
+
+export function listBrowseTasks(pageSize = 100) {
+  return listTasks({ scope: "browse", status: "open", page: 1, pageSize });
+}
+
 export function getTaskDetail(id: string) {
   return apiClient.get<TaskDetailApi>(`/tasks/${id}`);
 }
