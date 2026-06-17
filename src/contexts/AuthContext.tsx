@@ -14,6 +14,7 @@ import {
 } from "@/lib/auth/api";
 import { setAuthStoreUser } from "@/lib/auth/store";
 import { clearAccessToken, setAccessToken } from "@/lib/auth/session";
+import { clearUserLocalSession } from "@/lib/auth/clearUserSession";
 import type { AuthUser } from "@/lib/auth/types";
 import { ApiClientError } from "@/lib/api/client";
 
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* clear local session even if API fails */
     }
     clearAccessToken();
+    clearUserLocalSession();
     setUser(null);
     setAuthStoreUser(null);
   }, []);

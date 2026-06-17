@@ -21,6 +21,8 @@ import {
 } from './tasks.mapper';
 import type { AuthUserPayload } from '../auth/auth.types';
 import { FundHoldsService } from '../payments/fund-holds.service';
+import { LedgerService } from '../ledger/ledger.service';
+import type { TaskForSettlement } from '../ledger/ledger.types';
 
 type TaskWithUsers = Task & { requestor: User; acceptor: User | null };
 
@@ -30,7 +32,18 @@ export class TasksService {
     private readonly prisma: PrismaService,
     private readonly lifecycle: LifecycleService,
     private readonly fundHolds: FundHoldsService,
+    private readonly ledger: LedgerService,
   ) {}
+
+  private async loadTaskForSettlement(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+  ): Promise<TaskForSettlement> {
+    return tx.task.findUniqueOrThrow({
+      where: { id: taskId },
+      include: { rewardFundHold: true, trustFundHold: true },
+    });
+  }
 
   private async loadTaskOrThrow(id: string): Promise<TaskWithUsers> {
     const task = await this.prisma.task.findFirst({
@@ -187,10 +200,16 @@ export class TasksService {
         where.status = query.status;
       }
     } else if (query.scope === 'mine') {
-      where.OR = [
-        { requestorId: actor.sub },
-        { acceptorId: actor.sub },
-      ];
+      if (query.participation === 'created') {
+        where.requestorId = actor.sub;
+      } else if (query.participation === 'accepted') {
+        where.acceptorId = actor.sub;
+      } else {
+        where.OR = [
+          { requestorId: actor.sub },
+          { acceptorId: actor.sub },
+        ];
+      }
     } else {
       where.status = query.status ?? 'open';
       where.requestorId = { not: actor.sub };
@@ -290,6 +309,9 @@ export class TasksService {
     }
 
     const cancelledTask = await this.prisma.$transaction(async (tx) => {
+      const forSettlement = await this.loadTaskForSettlement(tx, task.id);
+      await this.ledger.settleCancelOpen(tx, forSettlement);
+
       await this.transition(
         tx,
         task,
@@ -347,6 +369,29 @@ export class TasksService {
     actor: AuthUserPayload,
   ): Promise<TaskDetailDto> {
     const task = await this.loadTaskOrThrow(id);
+
+    if (
+      task.acceptorId === actor.sub &&
+      task.trustFundHoldId === dto.fundHoldId &&
+      task.status !== 'open'
+    ) {
+      return this.getDetail(id, actor);
+    }
+
+    if (task.acceptorId && task.acceptorId !== actor.sub) {
+      throw new BadRequestException({
+        code: 'TASK_ALREADY_ACCEPTED',
+        message: 'This task has already been accepted by another worker.',
+      });
+    }
+
+    if (task.requestorId === actor.sub) {
+      throw new ForbiddenException({
+        code: 'TASK_CANNOT_ACCEPT_OWN',
+        message: 'You cannot accept your own task.',
+      });
+    }
+
     const events = await this.prisma.taskEvent.findMany({
       where: { taskId: task.id },
     });
@@ -425,6 +470,9 @@ export class TasksService {
     this.lifecycle.assertActionAllowed('canQuit', actions);
 
     await this.prisma.$transaction(async (tx) => {
+      const forSettlement = await this.loadTaskForSettlement(tx, task.id);
+      await this.ledger.settleQuitTrustRefund(tx, forSettlement);
+
       await this.transition(tx, task, 'open', {
         message: 'Acceptor quit the task within the grace window. Trust deposit refunded.',
         authorUserId: actor.sub,
@@ -525,6 +573,8 @@ export class TasksService {
         authorRole: 'system',
         entryType: 'funds',
       });
+      const forSettlement = await this.loadTaskForSettlement(tx, task.id);
+      await this.ledger.settleClosed(tx, forSettlement);
     });
 
     return this.getDetail(id, actor);

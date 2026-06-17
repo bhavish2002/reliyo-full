@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { AuthUserPayload } from '../auth/auth.types';
 import { resolveFundHoldStatusFromMethod } from './payment-outcomes';
 import type { CreateFundHoldDto } from './dto/create-fund-hold.dto';
+import type { ConfirmFundHoldCheckoutDto } from './dto/confirm-fund-hold-checkout.dto';
 import { computeTrustDepositAmount } from './trust-deposit.util';
 import { PaymentWebhookService } from './payment-webhook.service';
 import { PaymentProviderRegistry } from './providers/payment-provider.registry';
@@ -29,6 +30,7 @@ export interface FundHoldDto {
   clientSecret?: string;
   checkout?: CheckoutConfigDto;
   paymentMethod?: string;
+  targetTaskId?: string;
   confirmedAt?: string;
   failedAt?: string;
   createdAt: string;
@@ -67,6 +69,7 @@ export class FundHoldsService {
         : undefined,
       checkout,
       paymentMethod: hold.paymentMethod ?? undefined,
+      targetTaskId: hold.targetTaskId ?? undefined,
       confirmedAt: hold.confirmedAt?.toISOString(),
       failedAt: hold.failedAt?.toISOString(),
       createdAt: hold.createdAt.toISOString(),
@@ -207,6 +210,69 @@ export class FundHoldsService {
   }
 
   /**
+   * Confirm a live Razorpay Checkout payment using the client success payload.
+   * Webhooks remain the backup path; this avoids requiring a tunnel for local staging.
+   */
+  async confirmCheckout(
+    holdId: string,
+    dto: ConfirmFundHoldCheckoutDto,
+    actor: AuthUserPayload,
+  ): Promise<FundHoldDto> {
+    const hold = await this.prisma.fundHold.findFirst({
+      where: { id: holdId, userId: actor.sub },
+    });
+    if (!hold) {
+      throw new NotFoundException({
+        code: 'PAYMENT_HOLD_NOT_FOUND',
+        message: 'Fund hold not found.',
+      });
+    }
+
+    if (hold.status === FundHoldStatus.confirmed) {
+      return this.toDto(hold);
+    }
+    if (hold.status === FundHoldStatus.failed) {
+      throw new BadRequestException({
+        code: 'PAYMENT_HOLD_FAILED',
+        message: 'This payment has already failed.',
+      });
+    }
+
+    if (hold.provider !== 'razorpay' || !hold.providerIntentId) {
+      throw new BadRequestException({
+        code: 'PAYMENT_CHECKOUT_NOT_APPLICABLE',
+        message: 'Checkout confirmation is only for Razorpay fund holds.',
+      });
+    }
+
+    if (hold.providerIntentId !== dto.razorpayOrderId) {
+      throw new BadRequestException({
+        code: 'PAYMENT_ORDER_MISMATCH',
+        message: 'Razorpay order does not match this fund hold.',
+      });
+    }
+
+    this.webhooks.verifyRazorpayCheckoutSignature(
+      dto.razorpayOrderId,
+      dto.razorpayPaymentId,
+      dto.razorpaySignature,
+    );
+
+    await this.webhooks.ingestEvent(hold.provider, {
+      eventId: `checkout_${dto.razorpayPaymentId}`,
+      intentId: dto.razorpayOrderId,
+      paymentId: dto.razorpayPaymentId,
+      status: 'confirmed',
+      metadata: { source: 'checkout_confirm' },
+    });
+
+    const refreshed = await this.prisma.fundHold.findUniqueOrThrow({
+      where: { id: holdId },
+    });
+    return this.toDto(refreshed);
+  }
+
+  /**
    * Rule Zero: reward must be confirmed before a task row is created.
    */
   async assertRewardHoldForTaskCreate(
@@ -312,4 +378,128 @@ export class FundHoldsService {
 
     return { confirmedAt: hold.confirmedAt, holdId: hold.id };
   }
+
+  async listUserTransactions(actor: AuthUserPayload): Promise<{
+    items: UserTransactionDto[];
+    total: number;
+  }> {
+    const holds = await this.prisma.fundHold.findMany({
+      where: { userId: actor.sub },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    const holdIds = holds.map((h) => h.id);
+    const targetTaskIds = holds
+      .map((h) => h.targetTaskId)
+      .filter((id): id is string => Boolean(id));
+
+    const linkedTasks = await this.prisma.task.findMany({
+      where: {
+        OR: [
+          { id: { in: targetTaskIds } },
+          { rewardFundHoldId: { in: holdIds } },
+          { trustFundHoldId: { in: holdIds } },
+        ],
+      },
+      include: { requestor: true, acceptor: true },
+    });
+
+    const taskByHoldId = new Map<string, (typeof linkedTasks)[0]>();
+    for (const t of linkedTasks) {
+      if (t.rewardFundHoldId) taskByHoldId.set(t.rewardFundHoldId, t);
+      if (t.trustFundHoldId) taskByHoldId.set(t.trustFundHoldId, t);
+    }
+
+    const journalLines = await this.prisma.journalLine.findMany({
+      where: { userId: actor.sub },
+      include: { entry: true },
+      orderBy: { entry: { createdAt: 'desc' } },
+      take: 200,
+    });
+
+    const settlementByTaskId = new Map<
+      string,
+      { scenario: string; amount: number; at: string }
+    >();
+    for (const line of journalLines) {
+      const taskId = line.entry.taskId;
+      if (!taskId) continue;
+      const existing = settlementByTaskId.get(taskId);
+      const amount = Number(line.amount);
+      if (!existing || line.entry.createdAt > new Date(existing.at)) {
+        settlementByTaskId.set(taskId, {
+          scenario: line.entry.scenario,
+          amount,
+          at: line.entry.createdAt.toISOString(),
+        });
+      }
+    }
+
+    const items: UserTransactionDto[] = holds.map((hold) => {
+      const task =
+        (hold.targetTaskId
+          ? linkedTasks.find((t) => t.id === hold.targetTaskId)
+          : undefined) ?? taskByHoldId.get(hold.id);
+
+      const role =
+        task?.requestorId === actor.sub
+          ? 'requestor'
+          : task?.acceptorId === actor.sub
+            ? 'acceptor'
+            : hold.purpose === 'task_reward'
+              ? 'requestor'
+              : 'acceptor';
+
+      const settlement = task ? settlementByTaskId.get(task.id) : undefined;
+
+      return {
+        id: hold.id,
+        kind: 'fund_hold' as const,
+        purpose: hold.purpose,
+        role,
+        amount: Number(hold.amount),
+        currency: hold.currency,
+        status: hold.status,
+        paymentMethod: hold.paymentMethod ?? undefined,
+        provider: hold.provider,
+        providerPaymentId: hold.providerPaymentId ?? undefined,
+        taskId: task?.id,
+        taskDisplayId: task?.publicId,
+        taskTitle: task?.title,
+        taskStatus: task?.status,
+        taskCancelled: task?.cancelledAt != null,
+        settlementScenario: settlement?.scenario,
+        settlementAt: settlement?.at,
+        createdAt: hold.createdAt.toISOString(),
+        confirmedAt: hold.confirmedAt?.toISOString(),
+        failedAt: hold.failedAt?.toISOString(),
+      };
+    });
+
+    return { items, total: items.length };
+  }
+}
+
+export interface UserTransactionDto {
+  id: string;
+  kind: 'fund_hold';
+  purpose: FundHoldPurpose;
+  role: 'requestor' | 'acceptor';
+  amount: number;
+  currency: string;
+  status: FundHoldStatus;
+  paymentMethod?: string;
+  provider: string;
+  providerPaymentId?: string;
+  taskId?: string;
+  taskDisplayId?: string;
+  taskTitle?: string;
+  taskStatus?: string;
+  taskCancelled?: boolean;
+  settlementScenario?: string;
+  settlementAt?: string;
+  createdAt: string;
+  confirmedAt?: string;
+  failedAt?: string;
 }

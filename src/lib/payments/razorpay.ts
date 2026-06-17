@@ -21,6 +21,8 @@ export interface RazorpayConstructorOptions {
   modal?: { ondismiss?: () => void };
   prefill?: { name?: string; email?: string; contact?: string };
   theme?: { color?: string };
+  /** false = do not prompt to save card (avoids Flash Checkout OTP to prefill phone) */
+  remember_customer?: boolean;
 }
 
 declare global {
@@ -78,12 +80,12 @@ export async function openRazorpayCheckout(
         ondismiss: () => reject(new Error("Payment cancelled.")),
       },
       prefill,
+      remember_customer: false,
       theme: { color: "#2563eb" },
     });
 
-    rzp.on("payment.failed", (response) => {
-      reject(new Error(response.error?.description ?? "Payment failed."));
-    });
+    // Do not reject here — Razorpay keeps the modal open so the user can retry
+    // another method. Reject only when the modal is dismissed (ondismiss above).
 
     rzp.open();
   });

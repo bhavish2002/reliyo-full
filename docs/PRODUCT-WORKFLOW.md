@@ -424,7 +424,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | Send Alert | ⬜ | No dedicated API; UI/local only |
 | Request Force Close | ⬜ | Timeline UI only; no admin workflow API |
 | 3-strike inactivity | ⬜ | Client `lib/inactivity.ts` only |
-| Delete open task (remove + refund) | ⚠️ | `DELETE` sets `cancelledAt`, transitions to **`closed`**, not hard delete; **no ledger refund** |
+| Delete open task (remove + refund) | 🟡 | `DELETE` → `closed` + `cancelledAt`; **ledger `cancel_open` journal** (Sprint 6) |
 
 ### Task lifecycle (frontend)
 
@@ -441,7 +441,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | Workflow item | Status | Notes |
 |---------------|--------|-------|
 | UPI / card / net banking UI | 🟡 | Mock outcomes in dev; Razorpay Checkout in live mode (`GET /payments/config`) |
-| 5% / 3% settlement | ⬜ | Spec only; `ledger` module stub |
+| 5% / 3% settlement | 🟡 | `LedgerService` on close / force-close / cancel / quit (Sprint 6); no PSP payout yet |
 | Escrow release on close / force close | ⬜ | Sprint 6 |
 
 ### Disputes & admin
@@ -462,7 +462,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | ID | Deviation | Target fix |
 |----|-----------|------------|
 | D1 | TaskTimeline drives status via localStorage | Wire all actions to task APIs; refetch detail |
-| D2 | Cancel uses status `closed` + `cancelledAt` vs “removed” open task | Align with Sprint 0 “cancelled” archival + ledger refund (Sprint 6) |
+| D2 | Cancel uses status `closed` + `cancelledAt` vs “removed” open task | Ledger refund via `cancel_open` (Sprint 6); archival label still `closed` |
 | D3 | `open` → `closed` allowed in `VALID_TRANSITIONS` for cancel | Document as cancel path; consider distinct settlement type |
 | D4 | 3-strike inactivity client-only | BullMQ/cron job + server transition (Sprint 7+) |
 | D5 | Force-close request + admin approval | Admin APIs + Close Requests UI (Sprint 7) |

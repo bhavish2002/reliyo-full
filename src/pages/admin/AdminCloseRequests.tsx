@@ -43,7 +43,7 @@ const AdminCloseRequests = () => {
           requestor: r.requestor,
           acceptor: r.acceptor,
           taskStatusAtRequest: r.taskStatusAtRequest,
-          status: r.status === "pending" ? "pending" : "approved",
+          status: r.status === "pending" ? "pending" : r.status === "rejected" ? "rejected" : "approved",
           createdAt: r.createdAt,
           task: mapApiTaskToTask(r.task as ApiTask),
         })),

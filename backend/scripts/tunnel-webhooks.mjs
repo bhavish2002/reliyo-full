@@ -36,13 +36,14 @@ function startTunnel(provider) {
     const bin = which('cloudflared');
     if (!bin) return null;
     console.log(`Starting cloudflared tunnel → ${target}`);
-    return spawn(bin, ['tunnel', '--url', target], { stdio: 'inherit', shell: platform() === 'win32' });
+    // shell: false — cloudflared often lives under "Program Files" on Windows
+    return spawn(bin, ['tunnel', '--url', target], { stdio: 'inherit', windowsHide: true });
   }
   if (provider === 'ngrok') {
     const bin = which('ngrok');
     if (!bin) return null;
     console.log(`Starting ngrok → ${target}`);
-    return spawn(bin, ['http', String(port)], { stdio: 'inherit', shell: platform() === 'win32' });
+    return spawn(bin, ['http', String(port)], { stdio: 'inherit', windowsHide: true });
   }
   return null;
 }
@@ -62,7 +63,9 @@ for (const p of order) {
 
 if (!child) {
   console.error('Neither cloudflared nor ngrok found on PATH.');
-  console.error('Install cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/');
+  console.error('Windows: winget install Cloudflare.cloudflared');
+  console.error('Then open a new terminal and run: npm run tunnel:webhooks');
+  console.error('Docs: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/');
   process.exit(1);
 }
 

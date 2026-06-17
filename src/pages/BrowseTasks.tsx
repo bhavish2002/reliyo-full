@@ -13,14 +13,12 @@ import {
 import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { ALL_COUNTRY_NAMES } from "@/lib/countriesStates";
-import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
 import type { Task } from "@/lib/taskTypes";
-import { readJson } from "@/lib/storage";
-import { migrateLegacyTaskList } from "@/lib/taskMigration";
-import { env } from "@/lib/env";
-import { listTasks, mapApiTaskToTask } from "@/lib/tasks/api";
+import { listBrowseTasks, mapApiTaskToTask } from "@/lib/tasks/api";
+import { filterBrowseTasksForUser } from "@/lib/tasks/listFilters";
+import { ApiClientError } from "@/lib/api/client";
 
 const DOMAIN_OPTIONS = [
   "All", "Technology", "Design", "Marketing", "Writing",
@@ -88,7 +86,7 @@ const StarRating = ({ rating }: { rating: number }) => (
 
 const BrowseTasks = () => {
   const navigate = useNavigate();
-  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const refreshKey = useTasksListRefresh();
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("All");
@@ -106,35 +104,19 @@ const BrowseTasks = () => {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const res = await listTasks({
-          scope: "browse",
-          status: "open",
-          page: 1,
-          pageSize: 100,
-        });
+        const res = await listBrowseTasks();
         if (!cancelled) {
-          setAllTasks(res.items.map(mapApiTaskToTask));
+          const mapped = res.items.map(mapApiTaskToTask);
+          setAllTasks(filterBrowseTasksForUser(mapped, user?.id));
         }
-      } catch {
+      } catch (err) {
         if (cancelled) return;
-        if (!env.enableDemoData) {
-          setLoadError("We couldn't load available tasks right now.");
-          setAllTasks([]);
-        } else {
-          try {
-            const stored = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-            const openStored = stored.filter((t) => t.status === "open");
-            const acceptedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
-            const acceptedIds = new Set(acceptedTasks.map((t) => t.id));
-            const ids = new Set(openStored.map((t) => t.id));
-            setAllTasks([
-              ...openStored.filter((t) => !acceptedIds.has(t.id)),
-              ...DEMO_BROWSE_TASKS.filter((t) => !ids.has(t.id) && !acceptedIds.has(t.id)),
-            ]);
-          } catch {
-            setLoadError("We couldn't load available tasks right now.");
-          }
-        }
+        setAllTasks([]);
+        setLoadError(
+          err instanceof ApiClientError
+            ? err.message
+            : "We couldn't load available tasks right now.",
+        );
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -142,13 +124,10 @@ const BrowseTasks = () => {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isAuthenticated, refreshKey]);
+  }, [authLoading, isAuthenticated, user?.id, refreshKey]);
 
   const filtered = useMemo(() => {
     return allTasks.filter((t) => {
-      const currentUser = getCurrentUser();
-      if (currentUser && (t.createdById === currentUser.id || t.createdBy === currentUser.name)) return false;
-      if (t.status !== "open") return false;
       if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (countryFilter !== "All") {
         const taskCountry = t.country?.toLowerCase() || "";

@@ -13,6 +13,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { toTaskDto } from '../tasks/tasks.mapper';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 class ResolveCloseRequestDto {
@@ -32,6 +33,7 @@ export class AdminOpsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly lifecycle: LifecycleService,
+    private readonly ledger: LedgerService,
   ) {}
 
   @Get('disputes')
@@ -75,18 +77,65 @@ export class AdminOpsController {
       return meta?.alertType === 'force_close_request';
     });
 
-    const byTask = new Map<string, (typeof forceCloseEvents)[0]>();
+    const latestByTask = new Map<string, (typeof forceCloseEvents)[0]>();
     for (const ev of forceCloseEvents) {
-      if (!byTask.has(ev.taskId)) {
-        byTask.set(ev.taskId, ev);
+      const existing = latestByTask.get(ev.taskId);
+      if (!existing || ev.createdAt > existing.createdAt) {
+        latestByTask.set(ev.taskId, ev);
       }
     }
 
-    return Array.from(byTask.values()).map((ev) => {
+    const taskIds = Array.from(latestByTask.keys());
+    const adminEvents =
+      taskIds.length > 0
+        ? await this.prisma.taskEvent.findMany({
+            where: {
+              taskId: { in: taskIds },
+              entryType: 'admin_action',
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        : [];
+
+    return Array.from(latestByTask.values()).map((ev) => {
       const t = ev.task;
-      const pending =
-        t.status !== 'force_closed' &&
-        ['committed', 'in_progress', 'done', 'disputed'].includes(t.status);
+      let status: 'pending' | 'approved' | 'rejected' = 'pending';
+
+      if (t.status === 'force_closed') {
+        status = 'approved';
+      } else {
+        const resolutionEvent = adminEvents.find((a) => {
+          if (a.taskId !== ev.taskId || a.createdAt < ev.createdAt) {
+            return false;
+          }
+          const meta = a.metadata as {
+            forceCloseResolution?: string;
+            toStatus?: string;
+          } | null;
+          if (meta?.forceCloseResolution === 'rejected') return true;
+          if (meta?.forceCloseResolution === 'approved') return true;
+          if (meta?.toStatus === 'force_closed') return true;
+          return (
+            a.message.includes('REJECTED') || a.message.includes('APPROVED')
+          );
+        });
+
+        if (resolutionEvent) {
+          const meta = resolutionEvent.metadata as {
+            forceCloseResolution?: string;
+            toStatus?: string;
+          } | null;
+          if (
+            meta?.forceCloseResolution === 'rejected' ||
+            resolutionEvent.message.includes('REJECTED')
+          ) {
+            status = 'rejected';
+          } else {
+            status = 'approved';
+          }
+        }
+      }
+
       return {
         id: ev.id,
         taskId: t.id,
@@ -95,7 +144,7 @@ export class AdminOpsController {
         requestor: t.requestor.name ?? '—',
         acceptor: t.acceptor?.name ?? '—',
         taskStatusAtRequest: t.status,
-        status: pending ? 'pending' : 'resolved',
+        status,
         createdAt: ev.createdAt.toISOString(),
         task: toTaskDto(t),
       };
@@ -121,6 +170,12 @@ export class AdminOpsController {
     if (dto.resolution === 'approved') {
       this.lifecycle.assertTransition(task.status, 'force_closed');
       await this.prisma.$transaction(async (tx) => {
+        const forSettlement = await tx.task.findUniqueOrThrow({
+          where: { id: task.id },
+          include: { rewardFundHold: true, trustFundHold: true },
+        });
+        await this.ledger.settleForceClosed(tx, forSettlement);
+
         await tx.task.update({
           where: { id: task.id },
           data: { status: 'force_closed', statusEnteredAt: new Date() },
@@ -137,6 +192,7 @@ export class AdminOpsController {
             metadata: {
               fromStatus: task.status,
               toStatus: 'force_closed',
+              forceCloseResolution: 'approved',
             },
           },
         });
@@ -151,6 +207,9 @@ export class AdminOpsController {
           message: `Force-close request REJECTED. ${dto.comment}`,
           entryType: 'admin_action',
           systemGenerated: true,
+          metadata: {
+            forceCloseResolution: 'rejected',
+          },
         },
       });
     }
