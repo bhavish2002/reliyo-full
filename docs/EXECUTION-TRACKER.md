@@ -11,12 +11,12 @@
 | Metric | Value |
 |--------|--------|
 | **Plan** | 8 sprints (0 → 8) |
-| **Completed** | Sprints **0, 1, 2, 3, 4, 5, 6** ✅ |
-| **In progress** | **Sprint 7** — Disputes + admin ops |
-| **Next sprint** | **Sprint 7** (active) → **Sprint 8** (E2E + deploy) |
+| **Completed** | Sprints **0–6**, **6.5** ✅ |
+| **In progress** | **Sprint 8** — E2E + deploy |
+| **Next sprint** | **Sprint 8** (E2E + deploy) |
 | **Workflow doc** | [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) v1.0 (2026-05-25) |
 | **Production readiness** | **Pre-production** (~75% of MVP build) |
-| **Last verified** | 2026-06-15 — lifecycle + ledger E2E OK; ledger unit tests 4/4 |
+| **Last verified** | 2026-06-19 — `validate:inactivity`, `validate:dsp4`, `validate:quit-reaccept`, `validate:force-close`, `validate:task-ownership` OK |
 
 ### Progress bar (implementation)
 
@@ -28,7 +28,8 @@ Sprint 3 █████████░  95%  Auth + guards on task/admin routes
 Sprint 4 ██████████  96%  Task APIs + timeline API + cooldown/cancel fixes
 Sprint 5 ██████████ 100%  Razorpay + webhooks + checkout + live smoke
 Sprint 6 ██████████ 100%  Ledger + settlement ✅
-Sprint 7 ░░░░░░░░░░   0%  Disputes + admin ops APIs ← **active**
+Sprint 6.5 ██████████ 100%  Stabilization gate ✅
+Sprint 7 ██████████ 100%  Notifications + inactivity job + support/revenue APIs ← **complete**
 Sprint 8 ░░░░░░░░░░   0%  E2E + deploy
 ```
 
@@ -50,9 +51,57 @@ Reliyo is a **task marketplace MVP** (NestJS + React + PostgreSQL) with **locked
 
 **Money:** Reward and trust deposits use **`fund_holds`** with mock mode (dev) or **Razorpay Orders + Checkout + webhooks** (live). Payment status is **server-authoritative** — UI polls `GET /payments/fund-holds/:id` after checkout. **Sprint 5 complete:** Rule Zero + trust lock proven via smoke scripts and browser. **Sprint 6 complete:** double-entry ledger posts settlement on cancel, quit, accept-work, and admin force-close (payables recorded; PSP payout deferred).
 
-**Admin:** Suspend-user API exists; disputes/close-requests list APIs are being wired. DSP4 resolution workflows still partial.
+**Admin:** DSP4 resolution, force-close queue, cancelled-tasks audit, **notifications DB + API**, **support tickets API**, **revenue from ledger**, server **3-strike inactivity job** (`POST /admin/jobs/inactivity/process-due`).
 
-**Canonical workflow:** [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) §15–16 lists every gap vs the product spec.
+---
+
+## Sprint 6.5 — Stabilization gate ✅ (100%)
+
+| Phase | Work | Status |
+|-------|------|--------|
+| 6.5A | Task ownership & visibility (`participation=created\|accepted`) | ✅ |
+| 6.5B | Force-close reject → resolved list | ✅ |
+| 6.5C | Minimal real-time (`useTasksListRefresh` + `notifyTasksChanged`) | ✅ |
+| 6.5D | `validate:task-ownership`, `validate:force-close` | ✅ |
+
+**Verified:** Manual browser smoke + regression scripts (2026-06-17).
+
+---
+
+## Sprint 7 — Disputes + admin ops ✅ (100%)
+
+| Phase | Work | Status |
+|-------|------|--------|
+| 7A | DSP4 admin API + deadline math + ledger | ✅ `DisputesService`, `validate:dsp4` |
+| 7B | Force-close request API + API-backed admin UI | ✅ `POST /tasks/:id/force-close-request` |
+| 7C | Quit re-accept limit (DR-009) | ✅ `validate:quit-reaccept` |
+| 7D | Cancel audit fields + admin cancelled-tasks view | ✅ |
+| 7E | Notifications DB + API | ✅ `AppNotification` + lifecycle hooks |
+| 7F | My Tasks search/filter | ✅ Client-side search |
+| 7G | Transactions timeline UX | ✅ Date-grouped timeline |
+| 7H | Admin preview scroll/CSS | ✅ `AdminTaskDetailDialog` API timeline |
+| **Phase 1** | localStorage cleanup (inactivity, notifications, admin stats) | ✅ 2026-06-19 |
+
+**Exit criteria:** All met. Cron scheduling for inactivity → Sprint 8.
+
+---
+
+## Sprint 7 (legacy table) — Disputes + admin ops
+
+**Goal:** DSP1–DSP4, force-close approval, admin queues, notifications.
+
+| Task | Status |
+|------|--------|
+| Dispute raise API (exists) + full DSP counter UI | 🟡 | Backend + API timeline; DSP4 admin API ✅ |
+| DSP4 admin decision endpoints | ✅ | `PATCH /admin/disputes/:taskId/dsp4` |
+| Force-close request + admin approve/reject API | ✅ | Dedicated request endpoint + admin PATCH |
+| Admin disputes / escalated / close-requests data | ✅ | API-backed (`AdminDisputes`, `AdminCloseRequests`) |
+| Notifications persistence + API | ⏸️ | Sprint 7E deferred |
+| Support tickets API | ⬜ |
+| Server 3-strike inactivity job | ⬜ | B6 |
+| Revenue / analytics from ledger | ⬜ | After Sprint 6 |
+
+**Depends on:** Sprint 4 lifecycle stable, Sprint 6 for money truth
 
 ---
 
@@ -142,8 +191,8 @@ npm run validate:ledger-settlement -- 111111   # after script exists
 |-------|--------|-------|
 | **Policy / specs** | ✅ Locked v1.0 | Sprint 0 |
 | **Product workflow doc** | ✅ v1.0 | `PRODUCT-WORKFLOW.md` + Cursor rule |
-| **Frontend UI** | 🟡 Hybrid | Core task/timeline actions API-backed; some admin flows still local |
-| **Frontend ↔ API** | 🟡 ~75% | TaskTimeline wired; remaining admin/dispute ops pending |
+| **Frontend UI** | ✅ API-first | Core + admin screens API-backed; demo localStorage only on fallback |
+| **Frontend ↔ API** | ✅ ~95% | TaskTimeline, notifications, admin dashboard/analytics from API |
 | **Backend API** | 🟡 Tasks + auth + payments + ledger | Settlement on 4 lifecycle paths |
 | **Database** | 🟡 | + `journal_entries`, `journal_lines`, `ledger_accounts` |
 | **Payments** | ✅ Sprint 5 | Mock (`start:dev`) + live Razorpay (`start:dev:staging`) |
@@ -161,8 +210,8 @@ npm run validate:ledger-settlement -- 111111   # after script exists
 | B3 | ~~Admin suspend UI not wired~~ | — | ✅ `AdminUsers` + `GET /admin/users` (2026-05-26) | — |
 | B4 | ~~Guards not wired~~ | — | ✅ Resolved | — |
 | B5 | ~~Staging host undefined~~ | — | ✅ **Neon + Render** — [`STAGING-HOST.md`](sprint-5/STAGING-HOST.md), [`render.yaml`](../render.yaml) | Deploy when ready |
-| B6 | No server 3-strike inactivity job | Done → closed auto path | Cron/BullMQ + API transition | Sprint 7 |
-| B7 | Force-close + DSP4 admin APIs missing | Admin ops | Sprint 7 endpoints | Sprint 7 |
+| B6 | No server 3-strike inactivity job | — | ✅ `InactivityService` + `validate:inactivity`; cron → Sprint 8 |
+| B7 | Force-close + DSP4 admin APIs missing | — | ✅ Resolved Sprint 7 |
 
 ### Workflow deviations (tracked)
 
@@ -181,7 +230,7 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | **4** | Task APIs + lifecycle | ✅ Done | 96% | Sprint 3 |
 | **5** | Payments + webhooks | ✅ Done | 100% | Sprint 4 |
 | **6** | Ledger + settlement | ✅ Done | 100% | Sprint 5 ✅ |
-| **7** | Disputes + admin ops | 🟡 **Active** | 0% | Sprint 4, 6 |
+| **7** | Disputes + admin ops | ✅ Done | 100% | Sprint 4, 6 |
 | **8** | E2E + hardening + deploy | ⬜ Not started | 0% | Sprint 7 |
 
 ---
@@ -409,25 +458,6 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 
 ---
 
-## Sprint 7 — Disputes + admin ops ⬜ (0%)
-
-**Goal:** DSP1–DSP4, force-close approval, admin queues, notifications.
-
-| Task | Status |
-|------|--------|
-| Dispute raise API (exists) + full DSP counter UI | 🟡 | Backend partial; UI local |
-| DSP4 admin decision endpoints | ⬜ |
-| Force-close request + admin approve/reject API | ⬜ |
-| Admin disputes / escalated / close-requests data | ⬜ | Currently `adminData` / local |
-| Notifications persistence + API | ⬜ |
-| Support tickets API | ⬜ |
-| Server 3-strike inactivity job | ⬜ | B6 |
-| Revenue / analytics from ledger | ⬜ | After Sprint 6 |
-
-**Depends on:** Sprint 4 lifecycle stable, Sprint 6 for money truth
-
----
-
 ## Sprint 8 — E2E + hardening + deploy ⬜ (0%)
 
 | Task | Status |
@@ -471,6 +501,11 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | Ledger unit tests | `npm test -- --testPathPattern=ledger.service.spec` | 4/4 pass | 2026-06-15 ✅ |
 | Ledger migration | `npm run prisma:deploy` | `20260611120000_ledger` | 2026-06-15 ✅ |
 | Ledger E2E | `npm run validate:ledger-settlement -- 111111` | 4 scenarios | 2026-06-15 ✅ |
+| Sprint 6.5 ownership | `npm run validate:task-ownership -- 111111` | Pass | 2026-06-17 ✅ |
+| Sprint 6.5 force-close | `npm run validate:force-close -- 111111` | Pass | 2026-06-17 ✅ |
+| Sprint 7A DSP4 | `npm run validate:dsp4 -- 111111` | 3 paths | 2026-06-17 ✅ |
+| Sprint 7C quit policy | `npm run validate:quit-reaccept -- 111111` | Pass | 2026-06-17 ✅ |
+| Backend build | `cd backend && npm run build` | 0 errors | 2026-06-17 ✅ |
 
 ---
 
@@ -496,6 +531,8 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | 2026-06-11 | 6 | Sprint 6 kickoff: ledger schema + settlement hooks planned; tracker updated. |
 | 2026-06-15 | 6 | **Parts 6A–6C shipped:** ledger migration, `LedgerService`, hooks on cancel/quit/accept-work/force-close; `validate:ledger-settlement`; unit tests 4/4. |
 | 2026-06-15 | 6 | **Sprint 6 closed ✅:** `validate:ledger-settlement` 4/4 (cancel, quit, closed, force_closed); all exit criteria met. |
+| 2026-06-17 | 6.5 | **Sprint 6.5 closed ✅:** ownership, force-close reject, real-time refresh, regression scripts. |
+| 2026-06-19 | 7 | **Phase 1 cleanup:** removed client inactivity mutations, localStorage notification writes; admin dashboard/analytics + task detail dialog API-only. |
 
 ---
 

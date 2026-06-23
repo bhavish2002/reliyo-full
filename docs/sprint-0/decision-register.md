@@ -99,6 +99,15 @@ Status legend:
   - KYC tier and hold reason must be visible in admin operations panel.
 - Due before: Sprint 6 implementation
 
+## DR-009: Quit Re-Accept Policy
+
+- Status: `LOCKED`
+- Owner: Product + Backend Lead
+- Locked decision:
+  - An acceptor who quit a task within the 2-hour grace window **cannot re-accept the same task**.
+  - Policy is enforced server-side via timeline audit (`quitByAcceptorId`) and reflected in `availableActions.canAccept`.
+- Due before: Sprint 7 implementation
+
 ## DR-008: Legal Payment Wording
 
 - Status: `LOCKED`

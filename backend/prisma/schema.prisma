@@ -43,6 +43,13 @@ enum FundHoldStatus {
   failed
 }
 
+enum Dsp4Status {
+  open
+  resolved_valid
+  resolved_invalid
+  admin_closed
+}
+
 model User {
   id            String         @id @default(cuid())
   phoneE164     String         @unique @map("phone_e164")
@@ -60,6 +67,7 @@ model User {
   tasksAccepted   Task[]         @relation("TaskAcceptor")
   taskEvents      TaskEvent[]
   fundHolds       FundHold[]
+  notifications   AppNotification[]
 
   @@map("users")
 }
@@ -126,7 +134,11 @@ model Task {
   rating             Decimal?   @db.Decimal(3, 2)
   ratingFeedback     String?    @map("rating_feedback")
   dsp4ResolvedValid  Boolean    @default(false) @map("dsp4_resolved_valid")
+  dsp4Status         Dsp4Status? @map("dsp4_status")
+  dsp4ReworkDeadline DateTime?  @map("dsp4_rework_deadline")
   cancelledAt        DateTime?  @map("cancelled_at")
+  cancelledById      String?    @map("cancelled_by_id")
+  cancelReason       String?    @map("cancel_reason")
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
 
@@ -218,6 +230,51 @@ model AuditEvent {
   payload   Json?
 
   @@map("audit_events")
+}
+
+enum NotificationTargetRole {
+  requestor
+  acceptor
+  admin
+}
+
+model AppNotification {
+  id             String                 @id @default(cuid())
+  userId         String?                @map("user_id")
+  targetRole     NotificationTargetRole @map("target_role")
+  type           String
+  priority       String                 @default("medium")
+  taskId         String?                @map("task_id")
+  taskDisplayId  String?                @map("task_display_id")
+  taskTitle      String?                @map("task_title")
+  title          String
+  message        String
+  ctaPath        String?                @map("cta_path")
+  readAt         DateTime?              @map("read_at")
+  flagged        Boolean                @default(false)
+  idempotencyKey String                 @unique @map("idempotency_key")
+  createdAt      DateTime               @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([targetRole, createdAt])
+  @@map("app_notifications")
+}
+
+model SupportTicket {
+  id        String   @id @default(cuid())
+  publicId  String   @unique @map("public_id")
+  name      String
+  email     String
+  phone     String
+  issue     String
+  status    String   @default("open")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@map("support_tickets")
 }
 
 enum JournalLineSide {

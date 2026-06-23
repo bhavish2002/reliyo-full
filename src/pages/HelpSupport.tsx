@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { createTicket } from "@/lib/supportTickets";
+import { createSupportTicket } from "@/lib/support/api";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -47,17 +47,25 @@ const HelpSupport = () => {
     (f) => f.q.toLowerCase().includes(search.toLowerCase()) || f.a.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !phone.trim() || !issue.trim()) {
       toast({ title: "All fields are required", variant: "destructive" });
       return;
     }
-    const ticket = createTicket({ name: name.trim(), email: email.trim(), phone: phone.trim(), issue: issue.trim() });
-    console.log(`[Mock Email] Support ticket ${ticket.id} submitted by ${ticket.email}`);
-    setTicketId(ticket.id);
-    setSubmitted(true);
-    setName(""); setEmail(""); setPhone(""); setIssue("");
+    try {
+      const ticket = await createSupportTicket({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        issue: issue.trim(),
+      });
+      setTicketId(ticket.id);
+      setSubmitted(true);
+      setName(""); setEmail(""); setPhone(""); setIssue("");
+    } catch {
+      toast({ title: "Could not submit ticket", description: "Please try again later.", variant: "destructive" });
+    }
   };
 
   return (

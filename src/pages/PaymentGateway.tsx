@@ -9,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { getCurrentUser } from "@/lib/auth";
-import { notifyTaskAccepted } from "@/lib/notifications";
 import { createFundHold, confirmFundHoldCheckout, getFundHold, pollFundHoldUntilSettled, type FundHold } from "@/lib/payments/api";
 import { settleFundHold } from "@/lib/payments/flow";
 import {
@@ -135,7 +134,6 @@ const PaymentGateway = () => {
         }
       }
       notifyTasksChanged();
-      notifyTaskAccepted(taskData);
       toast({
         title: "Task Accepted!",
         description: "Trust deposit locked. You can now start working on this task.",

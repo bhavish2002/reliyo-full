@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { format } from "date-fns";
+import { format, isToday, isYesterday, startOfDay } from "date-fns";
 import {
   ArrowRightLeft,
   CheckCircle2,
@@ -38,13 +38,6 @@ const SETTLEMENT_LABELS: Record<string, string> = {
   quit_trust_refund: "Trust refund (quit)",
 };
 
-function purposeLabel(tx: UserTransaction): string {
-  if (tx.purpose === "task_reward") {
-    return tx.role === "requestor" ? "Reward deposit" : "Task reward";
-  }
-  return "Trust deposit";
-}
-
 function matchesFilter(tx: UserTransaction, filter: FilterKey): boolean {
   if (filter === "all") return true;
   if (filter === "pending") return tx.status === "pending";
@@ -64,6 +57,33 @@ function matchesFilter(tx: UserTransaction, filter: FilterKey): boolean {
     );
   }
   return true;
+}
+
+function purposeLabel(tx: UserTransaction): string {
+  if (tx.purpose === "task_reward") {
+    return tx.role === "requestor" ? "Reward deposit" : "Task reward";
+  }
+  return "Trust deposit";
+}
+
+function groupLabel(iso: string): string {
+  const d = new Date(iso);
+  if (isToday(d)) return "Today";
+  if (isYesterday(d)) return "Yesterday";
+  return format(d, "EEEE, d MMMM yyyy");
+}
+
+function groupByDate(items: UserTransaction[]): Array<{ label: string; items: UserTransaction[] }> {
+  const map = new Map<string, UserTransaction[]>();
+  for (const tx of items) {
+    const key = startOfDay(new Date(tx.createdAt)).toISOString();
+    const bucket = map.get(key) ?? [];
+    bucket.push(tx);
+    map.set(key, bucket);
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
+    .map(([key, group]) => ({ label: groupLabel(key), items: group }));
 }
 
 const Transactions = () => {
@@ -101,6 +121,8 @@ const Transactions = () => {
     () => items.filter((tx) => matchesFilter(tx, filter)),
     [items, filter],
   );
+
+  const grouped = useMemo(() => groupByDate(filtered), [filtered]);
 
   return (
     <DashboardLayout>
@@ -146,8 +168,21 @@ const Transactions = () => {
           </Card>
         )}
 
-        <div className="space-y-3">
-          {filtered.map((tx) => {
+        <div className="space-y-8">
+          {grouped.map((group) => (
+            <section key={group.label}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-px flex-1 bg-border" />
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
+                  {group.label}
+                </h2>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              <div className="relative pl-6 space-y-3">
+                <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" aria-hidden />
+
+                {group.items.map((tx) => {
             const symbol = tx.currency === "INR" ? "₹" : `${tx.currency} `;
             const StatusIcon =
               tx.status === "confirmed"
@@ -157,7 +192,12 @@ const Transactions = () => {
                   : Clock;
 
             return (
-              <Card key={tx.id} className="rounded-xl">
+              <div key={tx.id} className="relative">
+                <span
+                  className="absolute -left-6 top-5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary"
+                  aria-hidden
+                />
+              <Card className="rounded-xl">
                 <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
                     <StatusIcon
@@ -191,9 +231,9 @@ const Transactions = () => {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {format(new Date(tx.createdAt), "dd MMM yyyy, HH:mm")}
+                      {format(new Date(tx.createdAt), "HH:mm")}
                       {tx.confirmedAt &&
-                        ` · Confirmed ${format(new Date(tx.confirmedAt), "dd MMM HH:mm")}`}
+                        ` · Confirmed ${format(new Date(tx.confirmedAt), "HH:mm")}`}
                       {tx.paymentMethod && ` · ${tx.paymentMethod}`}
                     </p>
                     {tx.settlementScenario && (
@@ -215,17 +255,21 @@ const Transactions = () => {
                         variant="ghost"
                         size="sm"
                         className="gap-1 h-8"
-                        onClick={() => navigate(`/task/${tx.taskId}`)}
+                        onClick={() => navigate(`/transactions/status/${tx.taskId}`)}
                       >
-                        View task
+                        View Status
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Button>
                     )}
                   </div>
                 </CardContent>
               </Card>
+              </div>
             );
           })}
+              </div>
+            </section>
+          ))}
         </div>
       </div>
     </DashboardLayout>

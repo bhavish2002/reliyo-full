@@ -32,6 +32,8 @@ export interface TaskDto {
   ratingFeedback?: string;
   statusEnteredAt?: string;
   dsp4ResolvedValid?: boolean;
+  dsp4Status?: string | null;
+  dsp4ReworkDeadline?: string | null;
 }
 
 export interface TimelineEntryDto {
@@ -96,6 +98,8 @@ export function toTaskDto(
     ratingFeedback: task.ratingFeedback ?? undefined,
     statusEnteredAt: task.statusEnteredAt.toISOString(),
     dsp4ResolvedValid: task.dsp4ResolvedValid,
+    dsp4Status: task.dsp4Status ?? undefined,
+    dsp4ReworkDeadline: task.dsp4ReworkDeadline?.toISOString(),
   };
 }
 

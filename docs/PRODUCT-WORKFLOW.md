@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Status:** **SOURCE OF TRUTH** for product behavior, task lifecycle, and admin operations  
-**Last reviewed against codebase:** 2026-05-25 (Sprints 0–4 core + fund-hold payments)
+**Last reviewed against codebase:** 2026-06-19 (Sprints 0–7 + Phase 1 cleanup)
 
 > **Before implementing any feature:** complete the [Pre-implementation validation](#pre-implementation-validation) checklist against this document and [`docs/sprint-0/`](sprint-0/) policy specs.  
 > **Enforced in Cursor:** [`.cursor/rules/product-workflow-validation.mdc`](../.cursor/rules/product-workflow-validation.mdc) (`alwaysApply: true`).  
@@ -403,10 +403,10 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | Create Task (all fields + review) | ✅ | `CreateTask.tsx` |
 | Update frequency “Biweekly” | ⚠️ | UI label **Bi-weekly** (`CreateTask.tsx`) |
 | Payment before publish | 🟡 | Fund holds + Razorpay Checkout (live) or mock gateway |
-| Dashboard stats | ⬜ | `Dashboard.tsx` uses **localStorage** |
-| My Tasks (Created / Accepted / Dispute) | 🟡 | API `scope=mine`; dispute tab may be incomplete |
+| Dashboard stats | ✅ | API `scope=mine` (localStorage fallback only on error) |
+| My Tasks (Created / Accepted / Dispute) | ✅ | API `scope=mine` + participation filter |
 | Browse Tasks (country, domain) | 🟡 | API `scope=browse`; filters partial |
-| Notifications (read/flag) | ⬜ | Client `lib/notifications.ts`; no backend module |
+| Notifications (read/flag) | ✅ | `GET /notifications` API |
 | Profile | 🟡 | UI exists; partial API tie-in |
 
 ### Task lifecycle (backend)
@@ -421,10 +421,10 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | accept / quit / mark-done / accept-work / dispute | ✅ | `tasks.service.ts` |
 | First comment → `in_progress` | ✅ | `addComment` when `committed` |
 | extend deadline | ✅ | `POST .../extend-deadline` |
-| Send Alert | ⬜ | No dedicated API; UI/local only |
-| Request Force Close | ⬜ | Timeline UI only; no admin workflow API |
-| 3-strike inactivity | ⬜ | Client `lib/inactivity.ts` only |
-| Delete open task (remove + refund) | 🟡 | `DELETE` → `closed` + `cancelledAt`; **ledger `cancel_open` journal** (Sprint 6) |
+| Send Alert | 🟡 | Via `POST /tasks/:id/comments` with `entryType=alert` |
+| Request Force Close | ✅ | `POST /tasks/:id/force-close-request` + admin queue |
+| 3-strike inactivity | ✅ | Server `InactivityService` + timeline `sla_warning` events (cron TBD) |
+| Delete open task (remove + refund) | 🟡 | `DELETE` → `closed` + `cancelledAt` + `cancelledById`; ledger `cancel_open` |
 
 ### Task lifecycle (frontend)
 
@@ -432,28 +432,29 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 |---------------|--------|-------|
 | Create → payment → API create | ✅ | Wired |
 | Accept → payment → API accept | ✅ | Wired |
-| Task detail load | 🟡 | API + localStorage fallback |
-| Timeline mutations | ⚠️ | `TaskTimeline.tsx` mostly **localStorage**; only some API use in `TaskDetail` |
-| Cancel / delete | 🟡 | API `cancelTask` available; timeline actions often local |
+| Task detail load | ✅ | API-first; demo localStorage only when `enableDemoData` |
+| Timeline mutations | ✅ | `TaskTimeline.tsx` → task APIs when authenticated |
+| Cancel / delete | ✅ | API `cancelTask` |
 
 ### Financial
 
 | Workflow item | Status | Notes |
 |---------------|--------|-------|
 | UPI / card / net banking UI | 🟡 | Mock outcomes in dev; Razorpay Checkout in live mode (`GET /payments/config`) |
-| 5% / 3% settlement | 🟡 | `LedgerService` on close / force-close / cancel / quit (Sprint 6); no PSP payout yet |
-| Escrow release on close / force close | ⬜ | Sprint 6 |
+| 5% / 3% settlement | 🟡 | `LedgerService` on close / force-close / cancel / quit (Sprint 6); DSP4 paths wired (Sprint 7) |
+| Escrow release on close / force close | 🟡 | Ledger journals posted; PSP payout deferred |
 
 ### Disputes & admin
 
 | Workflow item | Status | Notes |
 |---------------|--------|-------|
-| DSP1–3 counter + cooldown | 🟡 | Backend `dispute` API; UI/local dispute IDs |
-| DSP4 admin matrix | ⬜ | `disputes` module stub; admin pages use `adminData` / localStorage |
+| DSP1–3 counter + cooldown | 🟡 | Backend `dispute` API; UI/API timeline |
+| DSP4 admin matrix | ✅ | `PATCH /admin/disputes/:taskId/dsp4` + `DisputesService` (DR-005) |
 | Admin All Tasks | 🟡 | API `scope=admin` |
-| Admin Users suspend | 🟡 | API exists; `AdminUsers.tsx` not fully wired |
-| Close Requests approve/reject | ⬜ | Local toasts only |
-| Revenue / Analytics / Support | ⬜ | Demo/local data |
+| Admin Users suspend | ✅ | `AdminUsers.tsx` + `GET/PATCH /admin/users` |
+| Close Requests approve/reject | ✅ | `PATCH /admin/close-requests/:taskId` |
+| Cancelled tasks (admin) | ✅ | `GET /admin/cancelled-tasks` |
+| Revenue / Analytics / Support | ✅ | Ledger revenue API; admin dashboard/analytics from API |
 
 ---
 
@@ -461,12 +462,12 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 
 | ID | Deviation | Target fix |
 |----|-----------|------------|
-| D1 | TaskTimeline drives status via localStorage | Wire all actions to task APIs; refetch detail |
+| D1 | TaskTimeline drives status via localStorage | ✅ Phase 1 — API-backed when authenticated |
 | D2 | Cancel uses status `closed` + `cancelledAt` vs “removed” open task | Ledger refund via `cancel_open` (Sprint 6); archival label still `closed` |
 | D3 | `open` → `closed` allowed in `VALID_TRANSITIONS` for cancel | Document as cancel path; consider distinct settlement type |
-| D4 | 3-strike inactivity client-only | BullMQ/cron job + server transition (Sprint 7+) |
-| D5 | Force-close request + admin approval | Admin APIs + Close Requests UI (Sprint 7) |
-| D6 | Notifications not persisted | Notifications service + DB (Sprint 7+) |
+| D4 | 3-strike inactivity client-only | ✅ Server job + timeline events; schedule cron in Sprint 8 |
+| D5 | Force-close request + admin approval | ✅ Sprint 7 — dedicated request API + admin PATCH |
+| D6 | Notifications not persisted | ✅ `AppNotification` DB + API (Phase 1 removed client writes) |
 | D7 | “Bi-weekly” vs “Biweekly” label | Normalize in API validation + UI |
 | D8 | Social links placeholder `#` | Content/marketing |
 | D9 | EXECUTION-TRACKER Sprint 5 “Rule Zero ⬜” | Update: fund holds satisfy Rule Zero pre-gateway |
@@ -510,7 +511,11 @@ Aligned with [`EXECUTION-TRACKER.md`](EXECUTION-TRACKER.md):
 | POST | `/tasks/:id/mark-done` | → `done` |
 | POST | `/tasks/:id/accept-work` | Rating + → `closed` |
 | POST | `/tasks/:id/dispute` | → `disputed` |
+| POST | `/tasks/:id/force-close-request` | Requestor force-close (admin queue) |
 | POST | `/tasks/:id/extend-deadline` | Extend deadline |
+| PATCH | `/admin/disputes/:taskId/dsp4` | DSP4 admin resolution |
+| PATCH | `/admin/close-requests/:taskId` | Approve/reject force-close |
+| GET | `/admin/cancelled-tasks` | Cancelled task audit list |
 | PATCH | `/admin/users/:id/suspension` | Suspend user |
 
 ---

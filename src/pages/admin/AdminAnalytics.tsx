@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import AdminLayout from "@/components/AdminLayout";
 import { RefreshCw, CalendarIcon } from "lucide-react";
-import { getAdminStats, getAllDisputes } from "@/lib/adminData";
+import { fetchAdminOverview, emptyAdminOverview, type AdminOverviewStats } from "@/lib/admin/stats";
 import { cn } from "@/lib/utils";
 import { format, subMonths, startOfMonth, startOfDay, endOfDay, isAfter, isBefore } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -22,24 +22,28 @@ import type { DateRange } from "react-day-picker";
 type FilterMode = "6" | "3" | "custom";
 
 const AdminAnalytics = () => {
-  const [stats, setStats] = useState(() => getAdminStats());
+  const [stats, setStats] = useState<AdminOverviewStats>(emptyAdminOverview);
   const [loading, setLoading] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>("6");
   const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const reload = useCallback(() => {
+  const reload = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
-      setStats(getAdminStats());
+    try {
+      setStats(await fetchAdminOverview());
+    } catch {
+      setStats(emptyAdminOverview);
+    } finally {
       setLoading(false);
-    }, 200);
+    }
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => setStats(getAdminStats()), 5000);
+    void reload();
+    const interval = setInterval(() => void reload(), 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reload]);
 
   const tasksByDomain = useMemo(() => {
     const domainMap = new Map<string, number>();
@@ -54,7 +58,7 @@ const AdminAnalytics = () => {
   }, [stats.tasks]);
 
   const disputeResolution = useMemo(() => {
-    const disputes = getAllDisputes();
+    const disputes = stats.disputes;
     const resolved = disputes.filter((d) => d.dsp4Status === "resolved_valid" || d.dsp4Status === "resolved_invalid").length;
     const adminClosed = disputes.filter((d) => d.dsp4Status === "admin_closed").length;
     const pending = disputes.filter((d) => d.dsp4Status === "open" && d.escalated).length;
@@ -126,7 +130,7 @@ const AdminAnalytics = () => {
             </Popover>
           )}
 
-          <Button variant="outline" size="sm" onClick={reload} disabled={loading} className="gap-2 h-9">
+          <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading} className="gap-2 h-9">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>

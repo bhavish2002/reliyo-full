@@ -23,6 +23,8 @@ import type { AuthUserPayload } from '../auth/auth.types';
 import { FundHoldsService } from '../payments/fund-holds.service';
 import { LedgerService } from '../ledger/ledger.service';
 import type { TaskForSettlement } from '../ledger/ledger.types';
+import { NotificationsService } from '../notifications/notifications.service';
+import * as TaskNotify from '../notifications/task-notifications';
 
 type TaskWithUsers = Task & { requestor: User; acceptor: User | null };
 
@@ -33,6 +35,7 @@ export class TasksService {
     private readonly lifecycle: LifecycleService,
     private readonly fundHolds: FundHoldsService,
     private readonly ledger: LedgerService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async loadTaskForSettlement(
@@ -273,6 +276,13 @@ export class TasksService {
       actor.sub,
       cooldowns,
     );
+    const priorQuit = events.some((e) => {
+      const meta = e.metadata as { quitByAcceptorId?: string } | null;
+      return meta?.quitByAcceptorId === actor.sub;
+    });
+    if (priorQuit && availableActions.canAccept) {
+      availableActions.canAccept = false;
+    }
 
     return {
       task: toTaskDto(task),
@@ -326,7 +336,11 @@ export class TasksService {
       );
       await tx.task.update({
         where: { id: task.id },
-        data: { cancelledAt: new Date() },
+        data: {
+          cancelledAt: new Date(),
+          cancelledById: actor.sub,
+          cancelReason: 'requestor_cancel_open',
+        },
       });
 
       return tx.task.findUniqueOrThrow({
@@ -395,6 +409,16 @@ export class TasksService {
     const events = await this.prisma.taskEvent.findMany({
       where: { taskId: task.id },
     });
+    const priorQuit = events.some((e) => {
+      const meta = e.metadata as { quitByAcceptorId?: string } | null;
+      return meta?.quitByAcceptorId === actor.sub;
+    });
+    if (priorQuit) {
+      throw new ForbiddenException({
+        code: 'TASK_ACCEPT_FORBIDDEN',
+        message: 'You cannot re-accept a task you previously quit.',
+      });
+    }
     const role = this.lifecycle.resolveContextRole(
       task,
       actor.sub,
@@ -448,6 +472,8 @@ export class TasksService {
       });
     });
 
+    const refreshed = await this.loadTaskOrThrow(id);
+    void TaskNotify.notifyTaskAccepted(this.notifications, refreshed);
     return this.getDetail(id, actor);
   }
 
@@ -478,6 +504,7 @@ export class TasksService {
         authorUserId: actor.sub,
         authorName: task.acceptor?.name ?? 'Acceptor',
         authorRole: 'acceptor',
+        metadata: { quitByAcceptorId: actor.sub },
       });
       await tx.task.update({
         where: { id: task.id },
@@ -489,6 +516,7 @@ export class TasksService {
       });
     });
 
+    void TaskNotify.notifyTaskQuit(this.notifications, task);
     return this.getDetail(id, actor);
   }
 
@@ -519,6 +547,8 @@ export class TasksService {
       });
     });
 
+    const refreshed = await this.loadTaskOrThrow(id);
+    void TaskNotify.notifyMarkDone(this.notifications, refreshed);
     return this.getDetail(id, actor);
   }
 
@@ -606,7 +636,10 @@ export class TasksService {
       const disputeCount = task.disputeCount + 1;
       await tx.task.update({
         where: { id: task.id },
-        data: { disputeCount },
+        data: {
+          disputeCount,
+          ...(disputeCount >= 4 ? { dsp4Status: 'open' as const } : {}),
+        },
       });
       await this.appendEvent(tx, {
         taskId: task.id,
@@ -632,6 +665,62 @@ export class TasksService {
       }
     });
 
+    const refreshed = await this.loadTaskOrThrow(id);
+    void TaskNotify.notifyDisputeRaised(this.notifications, refreshed);
+    return this.getDetail(id, actor);
+  }
+
+  async requestForceClose(
+    id: string,
+    actor: AuthUserPayload,
+    message?: string,
+  ): Promise<TaskDetailDto> {
+    const task = await this.loadTaskOrThrow(id);
+    const role = this.lifecycle.resolveContextRole(
+      task,
+      actor.sub,
+      actor.platformRole,
+    );
+    if (role !== 'requestor') {
+      throw new ForbiddenException({
+        code: 'TASK_ACTION_FORBIDDEN',
+        message: 'Only the requestor can request force-close.',
+      });
+    }
+    if (task.status !== 'committed' && task.status !== 'in_progress') {
+      throw new BadRequestException({
+        code: 'FORCE_CLOSE_NOT_ALLOWED',
+        message: 'Force-close requests are only allowed while work is in progress.',
+      });
+    }
+
+    const events = await this.prisma.taskEvent.findMany({
+      where: { taskId: task.id },
+    });
+    const cooldowns = this.lifecycle.computeCooldowns(task, events);
+    if (cooldowns.forceCloseAfter) {
+      throw new BadRequestException({
+        code: 'FORCE_CLOSE_COOLDOWN',
+        message: 'Please wait before submitting another force-close request.',
+      });
+    }
+
+    await this.prisma.taskEvent.create({
+      data: {
+        taskId: task.id,
+        authorUserId: actor.sub,
+        authorName: task.requestor.name ?? 'Requestor',
+        authorRole: 'requestor',
+        message:
+          message?.trim() ||
+          'Requestor submitted a force-close request for admin review.',
+        entryType: 'alert',
+        systemGenerated: false,
+        metadata: { alertType: 'force_close_request' },
+      },
+    });
+
+    void TaskNotify.notifyForceCloseRequested(this.notifications, task);
     return this.getDetail(id, actor);
   }
 

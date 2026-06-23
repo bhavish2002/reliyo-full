@@ -20,6 +20,7 @@ import { AddCommentDto } from './dto/add-comment.dto';
 import { AcceptWorkDto } from './dto/accept-work.dto';
 import { ExtendDeadlineDto } from './dto/extend-deadline.dto';
 import { AcceptTaskDto } from './dto/accept-task.dto';
+import { ForceCloseRequestDto } from './dto/force-close-request.dto';
 
 @Controller('tasks')
 @UseGuards(JwtAuthGuard, SuspensionGuard)
@@ -88,6 +89,16 @@ export class TasksController {
     @CurrentUser() user: AuthUserPayload,
   ) {
     return this.tasks.raiseDispute(id, user, body?.message);
+  }
+
+  @Post(':id/force-close-request')
+  @UseGuards(TaskContextGuard)
+  requestForceClose(
+    @Param('id') id: string,
+    @Body() dto: ForceCloseRequestDto,
+    @CurrentUser() user: AuthUserPayload,
+  ) {
+    return this.tasks.requestForceClose(id, user, dto.message);
   }
 
   @Post(':id/comments')

@@ -293,4 +293,96 @@ export class LedgerService {
       });
     }
   }
+
+  async getAdminRevenueSummary() {
+    const lines = await this.prisma.journalLine.findMany({
+      where: {
+        side: 'credit',
+        accountCode: {
+          in: [
+            LedgerAccountCode.platformRevenue,
+            LedgerAccountCode.platformCompensationReserve,
+          ],
+        },
+      },
+      include: { entry: true },
+    });
+
+    const escrowLines = await this.prisma.journalLine.findMany({
+      where: {
+        accountCode: {
+          in: [LedgerAccountCode.escrowReward, LedgerAccountCode.escrowTrust],
+        },
+      },
+      include: { entry: true },
+    });
+
+    let platformFeeEarnings = 0;
+    let commissionFeeEarnings = 0;
+    const monthly = new Map<string, { revenue: number; fees: number }>();
+    const monthlyEscrow = new Map<string, { locked: number; released: number }>();
+    let totalEscrowLocked = 0;
+    let totalEscrowReleased = 0;
+
+    for (const line of lines) {
+      const amount = Number(line.amount);
+      const month = line.entry.createdAt.toISOString().slice(0, 7);
+      const bucket = monthly.get(month) ?? { revenue: 0, fees: 0 };
+      if (line.accountCode === LedgerAccountCode.platformRevenue) {
+        platformFeeEarnings += amount;
+        bucket.fees += amount;
+      } else {
+        commissionFeeEarnings += amount;
+      }
+      bucket.revenue += amount;
+      monthly.set(month, bucket);
+    }
+
+    for (const line of escrowLines) {
+      const amount = Number(line.amount);
+      const month = line.entry.createdAt.toISOString().slice(0, 7);
+      const bucket = monthlyEscrow.get(month) ?? { locked: 0, released: 0 };
+      if (line.side === 'debit') {
+        bucket.locked += amount;
+        totalEscrowLocked += amount;
+      } else {
+        bucket.released += amount;
+        totalEscrowReleased += amount;
+        totalEscrowLocked -= amount;
+      }
+      monthlyEscrow.set(month, bucket);
+    }
+
+    const formatMonth = (isoMonth: string) => {
+      const [y, m] = isoMonth.split('-');
+      const d = new Date(Number(y), Number(m) - 1, 1);
+      return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    };
+
+    const monthlyRevenue = Array.from(monthly.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, v]) => ({
+        month: formatMonth(month),
+        revenue: Math.round(v.revenue * 100) / 100,
+        fees: Math.round(v.fees * 100) / 100,
+      }));
+
+    const monthlyEscrowOut = Array.from(monthlyEscrow.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, v]) => ({
+        month: formatMonth(month),
+        locked: Math.round(v.locked * 100) / 100,
+        released: Math.round(v.released * 100) / 100,
+      }));
+
+    return {
+      totalRevenue: Math.round((platformFeeEarnings + commissionFeeEarnings) * 100) / 100,
+      platformFeeEarnings: Math.round(platformFeeEarnings * 100) / 100,
+      commissionFeeEarnings: Math.round(commissionFeeEarnings * 100) / 100,
+      totalEscrowLocked: Math.round(Math.max(0, totalEscrowLocked) * 100) / 100,
+      totalEscrowReleased: Math.round(totalEscrowReleased * 100) / 100,
+      monthlyRevenue,
+      monthlyEscrow: monthlyEscrowOut,
+    };
+  }
 }

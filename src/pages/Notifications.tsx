@@ -8,11 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import DashboardLayout from "@/components/DashboardLayout";
-import { getCurrentUser } from "@/lib/auth";
 import {
-  type AppNotification, type NotificationType, type NotificationTarget,
-  getNotifications, markNotificationRead, markAllNotificationsRead, toggleNotificationFlag,
+  type AppNotification, type NotificationType,
 } from "@/lib/notifications";
+import {
+  listNotifications,
+  markNotificationReadApi,
+  markAllNotificationsReadApi,
+  toggleNotificationFlagApi,
+} from "@/lib/notifications/api";
 
 // ── Icon + color map per notification type ──────────────────────────────────
 
@@ -40,31 +44,39 @@ const PRIORITY_BADGE: Record<string, string> = {
 
 const Notifications = () => {
   const navigate = useNavigate();
-  const currentUser = getCurrentUser();
-  const target: NotificationTarget = currentUser?.role === "admin" ? "admin"
-    : currentUser?.role === "acceptor" ? "acceptor" : "requestor";
-
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const reload = () => setNotifications(getNotifications(target));
+  const reload = async () => {
+    try {
+      setError(null);
+      const rows = await listNotifications();
+      setNotifications(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load notifications.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  useEffect(() => { reload(); }, [target]);
+  useEffect(() => { void reload(); }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleToggleRead = (id: string) => {
-    markNotificationRead(target, id);
-    reload();
+  const handleToggleRead = async (id: string) => {
+    await markNotificationReadApi(id);
+    await reload();
   };
 
-  const handleToggleFlag = (id: string) => {
-    toggleNotificationFlag(target, id);
-    reload();
+  const handleToggleFlag = async (id: string) => {
+    await toggleNotificationFlagApi(id);
+    await reload();
   };
 
-  const handleMarkAllRead = () => {
-    markAllNotificationsRead(target);
-    reload();
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsReadApi();
+    await reload();
   };
 
   const formatDate = (iso: string) => {
@@ -88,7 +100,17 @@ const Notifications = () => {
         </div>
       </div>
 
-      {notifications.length === 0 ? (
+      {loading && (
+        <p className="text-sm text-muted-foreground text-center py-12">Loading notifications…</p>
+      )}
+
+      {error && (
+        <Card className="rounded-xl border-destructive/30 mb-4">
+          <div className="p-4 text-sm text-destructive">{error}</div>
+        </Card>
+      )}
+
+      {!loading && notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <Bell className="h-10 w-10 mb-3 opacity-40" />
           <p className="font-medium">No notifications yet</p>

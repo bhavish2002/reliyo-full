@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
+import { LedgerModule } from '../ledger/ledger.module';
+import { LifecycleModule } from '../lifecycle/lifecycle.module';
+import { DisputesService } from './disputes.service';
 
-/** Sprint 7: DSP flows and dispute rounds. */
-@Module({})
+@Module({
+  imports: [LifecycleModule, LedgerModule],
+  providers: [DisputesService],
+  exports: [DisputesService],
+})
 export class DisputesModule {}
