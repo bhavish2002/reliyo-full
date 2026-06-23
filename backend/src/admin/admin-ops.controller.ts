@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,6 +16,11 @@ import { toTaskDto } from '../tasks/tasks.mapper';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUserPayload } from '../auth/auth.types';
+import { DisputesService } from '../disputes/disputes.service';
+import { ResolveDsp4Dto } from '../disputes/dto/resolve-dsp4.dto';
+import { InactivityService } from '../jobs/inactivity.service';
 
 class ResolveCloseRequestDto {
   @IsIn(['approved', 'rejected'])
@@ -26,6 +32,11 @@ class ResolveCloseRequestDto {
   comment!: string;
 }
 
+class ResolveSupportTicketDto {
+  @IsIn(['reviewed', 'deleted'])
+  status!: 'reviewed' | 'deleted';
+}
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
@@ -34,6 +45,8 @@ export class AdminOpsController {
     private readonly prisma: PrismaService,
     private readonly lifecycle: LifecycleService,
     private readonly ledger: LedgerService,
+    private readonly disputes: DisputesService,
+    private readonly inactivity: InactivityService,
   ) {}
 
   @Get('disputes')
@@ -58,8 +71,25 @@ export class AdminOpsController {
       escalated: t.disputeCount >= 4,
       raised: t.statusEnteredAt.toISOString(),
       status: t.status,
+      dsp4Status: this.disputes.mapDsp4Status(t),
+      dsp4ReworkDeadline: t.dsp4ReworkDeadline?.toISOString() ?? null,
       task: toTaskDto(t),
     }));
+  }
+
+  @Patch('disputes/:taskId/dsp4')
+  async resolveDsp4(
+    @Param('taskId') taskId: string,
+    @Body() dto: ResolveDsp4Dto,
+    @CurrentUser() admin: AuthUserPayload,
+  ) {
+    const task = await this.disputes.resolveDsp4(
+      taskId,
+      dto.status,
+      dto.comment,
+      admin.sub,
+    );
+    return { task: toTaskDto(task) };
   }
 
   @Get('close-requests')
@@ -219,5 +249,78 @@ export class AdminOpsController {
       include: { requestor: true, acceptor: true },
     });
     return { task: toTaskDto(refreshed) };
+  }
+
+  @Get('cancelled-tasks')
+  async listCancelledTasks() {
+    const tasks = await this.prisma.task.findMany({
+      where: { cancelledAt: { not: null } },
+      include: { requestor: true, acceptor: true },
+      orderBy: { cancelledAt: 'desc' },
+    });
+
+    return tasks.map((t) => ({
+      taskId: t.id,
+      taskDisplayId: t.publicId,
+      title: t.title,
+      requestor: t.requestor.name ?? '—',
+      acceptor: t.acceptor?.name ?? '—',
+      cancelledAt: t.cancelledAt?.toISOString() ?? null,
+      cancelledById: t.cancelledById,
+      cancelReason: t.cancelReason,
+      status: t.status,
+      task: toTaskDto(t),
+    }));
+  }
+
+  @Get('revenue/summary')
+  async revenueSummary() {
+    return this.ledger.getAdminRevenueSummary();
+  }
+
+  @Get('support/tickets')
+  async listSupportTickets() {
+    const tickets = await this.prisma.supportTicket.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return tickets.map((t) => ({
+      id: t.publicId,
+      name: t.name,
+      email: t.email,
+      phone: t.phone,
+      issue: t.issue,
+      status: t.status,
+      createdAt: t.createdAt.toISOString(),
+    }));
+  }
+
+  @Patch('support/tickets/:id')
+  async updateSupportTicket(
+    @Param('id') id: string,
+    @Body() dto: ResolveSupportTicketDto,
+  ) {
+    const ticket = await this.prisma.supportTicket.findFirst({
+      where: { OR: [{ id }, { publicId: id }] },
+    });
+    if (!ticket) {
+      throw new BadRequestException({
+        code: 'TICKET_NOT_FOUND',
+        message: 'Support ticket not found.',
+      });
+    }
+    const updated = await this.prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { status: dto.status },
+    });
+    return {
+      id: updated.publicId,
+      status: updated.status,
+      createdAt: updated.createdAt.toISOString(),
+    };
+  }
+
+  @Post('jobs/inactivity/process-due')
+  async processInactivity() {
+    return this.inactivity.processDue();
   }
 }

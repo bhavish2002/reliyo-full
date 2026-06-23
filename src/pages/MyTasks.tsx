@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { MapPin, Calendar, ChevronRight, CheckCircle2, Clock, AlertTriangle, Trash2, Info } from "lucide-react";
+import { MapPin, Calendar, ChevronRight, CheckCircle2, Clock, AlertTriangle, Trash2, Info, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import DashboardLayout from "@/components/DashboardLayout";
 import { format, differenceInHours } from "date-fns";
 import {
@@ -17,7 +18,6 @@ import {
 } from "@/lib/taskTypes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
-import { notifyAcceptorQuit } from "@/lib/notifications";
 import { generateDisputeId, isEscalated } from "@/lib/disputeId";
 import { removeItem } from "@/lib/storage";
 import {
@@ -48,6 +48,7 @@ const MyTasks = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [quitDialog, setQuitDialog] = useState<Task | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<Task | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadTasks = async () => {
     if (!user) return;
@@ -109,7 +110,6 @@ const MyTasks = () => {
   const handleQuitTask = async (task: Task) => {
     try {
       await quitTask(task.id);
-      notifyAcceptorQuit(task);
       notifyTasksChanged();
       setQuitDialog(null);
       await loadTasks();
@@ -152,7 +152,17 @@ const MyTasks = () => {
     { key: "dispute" as const, label: "In Dispute", count: disputeTasks.length },
   ];
 
-  const currentList = tab === "created" ? createdTasks : tab === "accepted" ? myAcceptedTasks : disputeTasks;
+  const currentList = (tab === "created" ? createdTasks : tab === "accepted" ? myAcceptedTasks : disputeTasks).filter(
+    (t) => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        t.title.toLowerCase().includes(q) ||
+        (t.taskId?.toLowerCase().includes(q) ?? false) ||
+        t.location.toLowerCase().includes(q)
+      );
+    },
+  );
 
   const hasCommittedTasks = myAcceptedTasks.some((t) => t.status === "committed");
 
@@ -198,6 +208,16 @@ const MyTasks = () => {
         ))}
       </div>
 
+      <div className="relative mb-4 max-w-md">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search by title, task ID, or location..."
+          className="pl-9"
+        />
+      </div>
+
       {tab === "accepted" && hasCommittedTasks && (
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 mb-4 text-sm text-primary">
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
@@ -215,8 +235,12 @@ const MyTasks = () => {
           {tab === "dispute"
             ? "No disputes — keep up the good work!"
             : tab === "accepted"
-              ? "No accepted tasks yet. Browse tasks to find work!"
-              : "No tasks created yet."}
+              ? searchQuery.trim()
+                ? "No accepted tasks match your search."
+                : "No accepted tasks yet. Browse tasks to find work!"
+              : searchQuery.trim()
+                ? "No created tasks match your search."
+                : "No tasks created yet."}
         </div>
       ) : (
         <div className="space-y-3">

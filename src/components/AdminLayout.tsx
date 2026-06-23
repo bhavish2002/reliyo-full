@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Users, AlertTriangle, DollarSign,
-  BarChart3, Settings, LogOut, Menu, Clock, Bell, FileX, Ticket,
+  BarChart3, Settings, LogOut, Menu, Clock, Bell, FileX, Ticket, Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -10,8 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUnreadCount } from "@/lib/notifications";
-import { getAllDisputes, getPendingForceCloseCount } from "@/lib/adminData";
+import { fetchUnreadNotificationCount } from "@/lib/notifications/api";
+import { listAdminDisputes, listAdminCloseRequests } from "@/lib/admin/api";
 
 const overviewItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
@@ -19,6 +19,7 @@ const overviewItems = [
   { label: "Users", icon: Users, path: "/admin/users" },
   { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", dynamicBadge: true, badgeKey: "disputes" },
   { label: "Close Requests", icon: FileX, path: "/admin/close-requests", dynamicBadge: true, badgeKey: "close_requests" },
+  { label: "Cancelled Tasks", icon: Archive, path: "/admin/cancelled-tasks" },
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
   { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
@@ -164,14 +165,24 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const [closeReqCount, setCloseReqCount] = useState(0);
 
   useEffect(() => {
-    const update = () => {
-      setAdminNotifCount(getUnreadCount("admin"));
-      const disputes = getAllDisputes();
-      setDisputeBadgeCount(disputes.filter((d) => d.escalated && d.dsp4Status === "open").length);
-      setCloseReqCount(getPendingForceCloseCount());
+    const update = async () => {
+      try {
+        const [notifCount, disputes, closeReqs] = await Promise.all([
+          fetchUnreadNotificationCount(),
+          listAdminDisputes().catch(() => []),
+          listAdminCloseRequests().catch(() => []),
+        ]);
+        setAdminNotifCount(notifCount);
+        setDisputeBadgeCount(
+          disputes.filter((d) => d.escalated && d.dsp4Status === "open").length,
+        );
+        setCloseReqCount(closeReqs.filter((r) => r.status === "pending").length);
+      } catch {
+        /* keep last counts */
+      }
     };
-    update();
-    const interval = setInterval(update, 3000);
+    void update();
+    const interval = setInterval(() => void update(), 15000);
     return () => clearInterval(interval);
   }, []);
 

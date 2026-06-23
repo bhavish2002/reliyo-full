@@ -4,6 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import type { Task, TaskEvent, TaskStatus, User } from '@prisma/client';
+import { isDsp4ReworkWindowActive } from '../disputes/dsp4-deadline.util';
 import {
   DISPUTE_COOLDOWN_MS,
   FORCE_CLOSE_COOLDOWN_MS,
@@ -151,11 +152,15 @@ export class LifecycleService {
       !!cooldowns.quitUntil &&
       new Date(cooldowns.quitUntil) > new Date();
 
-    // Acceptor may mark done from disputed until DSP4 (disputeCount >= 4), or after DSP4 resolved-valid.
+    // Acceptor may mark done from disputed on DSP1–3, or DSP4 only within active rework window.
     const canMarkDoneFromDisputed =
       role === 'acceptor' &&
       status === 'disputed' &&
-      (task.disputeCount < 4 || task.dsp4ResolvedValid);
+      (task.disputeCount < 4 ||
+        isDsp4ReworkWindowActive(
+          task.dsp4Status,
+          task.dsp4ReworkDeadline,
+        ));
 
     const canMarkDone =
       (role === 'acceptor' && status === 'in_progress') || canMarkDoneFromDisputed;

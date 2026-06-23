@@ -32,7 +32,11 @@ function baseTask(overrides: Partial<Task> = {}): Task {
     rating: null,
     ratingFeedback: null,
     dsp4ResolvedValid: false,
+    dsp4Status: null,
+    dsp4ReworkDeadline: null,
     cancelledAt: null,
+    cancelledById: null,
+    cancelReason: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -99,12 +103,30 @@ describe('LifecycleService.computeAvailableActions', () => {
         acceptorId: 'acceptor-1',
         disputeCount: 4,
         dsp4ResolvedValid: false,
+        dsp4Status: 'open',
       }),
       'acceptor',
       'acceptor-1',
       {},
     );
     expect(actions.canMarkDone).toBe(false);
+  });
+
+  it('allows acceptor mark done on DSP4 within active rework window', () => {
+    const actions = service.computeAvailableActions(
+      baseTask({
+        status: 'disputed',
+        acceptorId: 'acceptor-1',
+        disputeCount: 4,
+        dsp4ResolvedValid: true,
+        dsp4Status: 'resolved_valid',
+        dsp4ReworkDeadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      }),
+      'acceptor',
+      'acceptor-1',
+      {},
+    );
+    expect(actions.canMarkDone).toBe(true);
   });
 
   it('denies quit after grace window', () => {

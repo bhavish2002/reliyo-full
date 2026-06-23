@@ -17,7 +17,7 @@ import {
 import AdminLayout from "@/components/AdminLayout";
 import { FileText, Users, DollarSign, AlertTriangle, RefreshCw, CalendarIcon } from "lucide-react";
 import { TASK_STATUSES, STATUS_LABELS, type TaskStatus } from "@/lib/taskTypes";
-import { getAdminStats, getAllPlatformUsers } from "@/lib/adminData";
+import { fetchAdminOverview, emptyAdminOverview, type AdminOverviewStats } from "@/lib/admin/stats";
 import { cn } from "@/lib/utils";
 import { format, subMonths, startOfMonth, startOfDay, endOfDay, isAfter, isBefore, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -55,24 +55,28 @@ type FilterMode = "6" | "3" | "custom";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState(() => getAdminStats());
+  const [stats, setStats] = useState<AdminOverviewStats>(emptyAdminOverview);
   const [loading, setLoading] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>("6");
   const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const reload = useCallback(() => {
+  const reload = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
-      setStats(getAdminStats());
+    try {
+      setStats(await fetchAdminOverview());
+    } catch {
+      setStats(emptyAdminOverview);
+    } finally {
       setLoading(false);
-    }, 200);
+    }
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => setStats(getAdminStats()), 5000);
+    void reload();
+    const interval = setInterval(() => void reload(), 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reload]);
 
   const statCards = [
     { label: "Total Tasks", value: String(stats.totalTasks), icon: FileText, color: "text-primary", bg: "bg-primary/10" },
@@ -99,8 +103,6 @@ const AdminDashboard = () => {
 
   // User Monthly Stats (users onboarded per month)
   const userMonthlyData = useMemo(() => {
-    const users = getAllPlatformUsers();
-    // Derive onboarded months from tasks or use a simple distribution
     const buckets = new Map<string, number>();
     let cursor = startOfMonth(rangeStart);
     const end = startOfMonth(rangeEnd);
@@ -199,7 +201,7 @@ const AdminDashboard = () => {
             </Popover>
           )}
 
-          <Button variant="outline" size="sm" onClick={reload} disabled={loading} className="gap-2 h-9">
+          <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading} className="gap-2 h-9">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>

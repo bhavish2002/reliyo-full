@@ -8,16 +8,6 @@ vi.mock("@/hooks/use-toast", () => ({
   toast: vi.fn(),
 }));
 
-vi.mock("@/lib/notifications", () => ({
-  notifyAlertRaised: vi.fn(),
-  notifyForceCloseRequested: vi.fn(),
-  notifyTaskMarkedDone: vi.fn(),
-  notifyDisputeRaised: vi.fn(),
-  notifyFixResubmitted: vi.fn(),
-  notifyRatingRequired: vi.fn(),
-  notifyTaskClosed: vi.fn(),
-}));
-
 vi.mock("@/lib/adminData", () => ({
   saveForceCloseRequest: vi.fn(),
 }));

@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2, Clock, CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,9 +21,8 @@ import {
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
-import { checkInactivity, sendStrikeNotifications } from "@/lib/inactivity";
 import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
-import { notifyTaskClosed } from "@/lib/notifications";
+import { inactivityBannerFromTimeline } from "@/lib/inactivityDisplay";
 import { readJson, writeJson, removeItem } from "@/lib/storage";
 import { env } from "@/lib/env";
 import { comparePolicyStatus } from "@/lib/taskPolicy";
@@ -266,54 +265,10 @@ const TaskDetail = () => {
     };
   }, [id, authLoading, isAuthenticated]);
 
-  // 3-strike inactivity check
-  const inactivityChecked = useRef(false);
-  useEffect(() => {
-    if (!task || inactivityChecked.current || serverTimeline) return;
-    if (task.status !== "done") return;
-    inactivityChecked.current = true;
-
-    const inactivity = checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries);
-
-    if (inactivity.pendingEntries.length > 0) {
-      const updated = [...timelineEntries, ...inactivity.pendingEntries];
-      setTimelineEntries(updated);
-      writeJson(`reliyo_timeline_${task.id}`, updated);
-      sendStrikeNotifications(task, inactivity.pendingEntries, currentUser?.email);
-    }
-
-    if (inactivity.shouldAutoClose) {
-      const closeEntry: TimelineEntry = {
-        id: `auto-close-${Date.now()}`,
-        taskId: task.id,
-        author: "System",
-        authorRole: "system",
-        message: "Task closed automatically. Platform-held funds released.",
-        timestamp: new Date().toISOString(),
-        systemGenerated: true,
-        entryType: "escrow",
-        metadata: { fromStatus: task.status as TaskStatus, toStatus: "closed" },
-      };
-      const allEntries = [...timelineEntries, ...inactivity.pendingEntries, closeEntry];
-      setTimelineEntries(allEntries);
-      writeJson(`reliyo_timeline_${task.id}`, allEntries);
-
-      const closedTask: Task = { ...task, status: "closed" };
-      setTask(closedTask);
-
-      const storedTasks = migrateLegacyTaskList(readJson<Task[]>("reliyo_tasks", []));
-      const idx = storedTasks.findIndex((t) => t.id === task.id);
-      if (idx >= 0) { storedTasks[idx] = { ...storedTasks[idx], status: "closed" }; writeJson("reliyo_tasks", storedTasks); }
-      const storedAccepted = migrateLegacyTaskList(readJson<Task[]>("reliyo_accepted_tasks", []));
-      const accIdx = storedAccepted.findIndex((t) => t.id === task.id);
-      if (accIdx >= 0) { storedAccepted[accIdx] = { ...storedAccepted[accIdx], status: "closed" }; writeJson("reliyo_accepted_tasks", storedAccepted); }
-
-      notifyTaskClosed(task);
-      toast({ title: "Task Auto-Closed", description: "This task was closed due to requestor inactivity (3 strikes)." });
-    }
-  }, [currentUser?.email, serverTimeline, task, timelineEntries]);
-
-  const inactivityState = task ? checkInactivity(task.id, task.statusEnteredAt, task.status, timelineEntries) : null;
+  const inactivityBanner =
+    serverTimeline && task?.status === "done"
+      ? inactivityBannerFromTimeline(task.status, timelineEntries)
+      : null;
 
   if (isLoading) {
     return (
@@ -577,10 +532,10 @@ const TaskDetail = () => {
         )}
 
         {/* Inactivity banner */}
-        {inactivityState && inactivityState.bannerMessage && !inactivityState.shouldAutoClose && (
+        {inactivityBanner && (
           <div className="flex items-center gap-2 rounded-lg border bg-[hsl(35,90%,50%)]/10 border-[hsl(35,90%,50%)]/20 text-[hsl(35,90%,50%)] p-3 text-sm mb-3">
             <Clock className="h-4 w-4 shrink-0" />
-            {inactivityState.bannerMessage}
+            {inactivityBanner}
           </div>
         )}
 

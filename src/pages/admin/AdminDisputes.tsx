@@ -16,14 +16,12 @@ import { AlertTriangle, Eye, Clock, CheckCircle2, XCircle, Shield, MessageSquare
 import { toast } from "@/hooks/use-toast";
 import {
   type AdminDispute, type Dsp4Status, DSP4_STATUS_LABELS,
-  getAllDisputes, saveDsp4Status, adminUpdateTaskStatus, adminAddTimelineEntry,
-  getDsp4StatusForDispute,
 } from "@/lib/adminData";
-import { listAdminDisputes } from "@/lib/admin/api";
+import { listAdminDisputes, resolveAdminDsp4 } from "@/lib/admin/api";
 import { mapApiTaskToTask, type ApiTask } from "@/lib/tasks/api";
-import { notifyTaskForceClosed, notifyTaskClosed } from "@/lib/notifications";
-import { PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, DSP4_COMPLETION_DAYS } from "@/lib/taskTypes";
-import { addDays, format, isAfter, differenceInDays } from "date-fns";
+import { notifyTasksChanged } from "@/lib/tasks/events";
+import { ApiClientError } from "@/lib/api/client";
+import { DSP4_COMPLETION_DAYS } from "@/lib/taskTypes";
 
 const DSP4_STATUS_COLORS: Record<Dsp4Status, string> = {
   open: "bg-primary/10 text-primary border-primary/20",
@@ -39,8 +37,11 @@ const AdminDisputes = () => {
   const [adminComment, setAdminComment] = useState("");
   const [tab, setTab] = useState("disputes");
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const reload = async () => {
     try {
+      setLoadError(null);
       const rows = await listAdminDisputes();
       setDisputes(
         rows.map((r) => ({
@@ -53,14 +54,13 @@ const AdminDisputes = () => {
           acceptor: r.acceptor,
           escalated: r.escalated,
           createdAt: r.raised,
-          dsp4Status: r.escalated
-            ? getDsp4StatusForDispute(r.disputeId)
-            : "open",
+          dsp4Status: (r.dsp4Status ?? "open") as Dsp4Status,
           task: mapApiTaskToTask(r.task as ApiTask),
         })),
       );
-    } catch {
-      setDisputes(getAllDisputes());
+    } catch (err) {
+      setLoadError(err instanceof ApiClientError ? err.message : "Could not load disputes.");
+      setDisputes([]);
     }
   };
   useEffect(() => {
@@ -87,71 +87,54 @@ const AdminDisputes = () => {
     return true;
   };
 
-  const handleResolveValid = (d: AdminDispute) => {
+  const applyDsp4 = async (
+    d: AdminDispute,
+    status: "resolved_valid" | "resolved_invalid" | "admin_closed",
+    successTitle: string,
+    successDescription: string,
+  ) => {
     if (!validateComment()) return;
-    const comment = adminComment.trim();
-    
-    // Calculate completion window
-    const deadline = d.task.extendedDeadline || d.task.deadline;
-    const deadlinePassed = deadline ? isAfter(new Date(), new Date(deadline)) : true;
-    let completionDeadline: string;
-    
-    if (deadlinePassed) {
-      completionDeadline = format(addDays(new Date(), DSP4_COMPLETION_DAYS), "yyyy-MM-dd");
-    } else {
-      const remaining = differenceInDays(new Date(deadline), new Date());
-      if (remaining < DSP4_COMPLETION_DAYS) {
-        completionDeadline = format(addDays(new Date(), DSP4_COMPLETION_DAYS), "yyyy-MM-dd");
-      } else {
-        completionDeadline = deadline;
-      }
+    try {
+      await resolveAdminDsp4(d.taskId, status, adminComment.trim());
+      notifyTasksChanged();
+      setReviewDispute(null);
+      setAdminComment("");
+      await reload();
+      toast({ title: successTitle, description: successDescription });
+    } catch (err) {
+      toast({
+        title: "DSP4 action failed",
+        description: err instanceof ApiClientError ? err.message : "Try again.",
+        variant: "destructive",
+      });
     }
+  };
 
-    adminAddTimelineEntry(d.taskId, `⚠️ ADMIN RESOLUTION (${d.disputeId}): RESOLVED VALID — ${comment}. Acceptor must complete the work by ${format(new Date(completionDeadline), "MMMM do, yyyy")} or task will be force-closed.`, "admin_action", {
-      fromStatus: "disputed", toStatus: "disputed",
-    });
-    saveDsp4Status(d.disputeId, "resolved_valid");
-    
-    // Set dsp4ResolvedValid flag and extended deadline on task
-    adminUpdateTaskStatus(d.taskId, "disputed", { 
-      dsp4ResolvedValid: true, 
-      extendedDeadline: completionDeadline 
-    });
-    
-    setReviewDispute(null);
-    setAdminComment("");
-    reload();
-    toast({ title: "Dispute Resolved Valid", description: `Acceptor has ${DSP4_COMPLETION_DAYS} working days to complete. Task remains in disputed state.` });
+  const handleResolveValid = (d: AdminDispute) => {
+    void applyDsp4(
+      d,
+      "resolved_valid",
+      "Dispute Resolved Valid",
+      "Acceptor may mark done within the server-computed rework window.",
+    );
   };
 
   const handleResolveInvalid = (d: AdminDispute) => {
-    if (!validateComment()) return;
-    const comment = adminComment.trim();
-    adminAddTimelineEntry(d.taskId, `✅ ADMIN RESOLUTION (${d.disputeId}): RESOLVED INVALID — ${comment}. Platform-held funds: reward minus ${PLATFORM_FEE_PERCENT}% platform fee to acceptor; full trust deposit refunded.`, "admin_action", {
-      fromStatus: "disputed", toStatus: "closed",
-    });
-    adminUpdateTaskStatus(d.taskId, "closed");
-    saveDsp4Status(d.disputeId, "resolved_invalid");
-    notifyTaskClosed(d.task);
-    setReviewDispute(null);
-    setAdminComment("");
-    reload();
-    toast({ title: "Dispute Resolved Invalid", description: "Task closed. Settlement completed per policy." });
+    void applyDsp4(
+      d,
+      "resolved_invalid",
+      "Dispute Resolved Invalid",
+      "Task closed. Settlement completed per policy.",
+    );
   };
 
   const handleAdminClose = (d: AdminDispute) => {
-    if (!validateComment()) return;
-    const comment = adminComment.trim();
-    adminAddTimelineEntry(d.taskId, `🚫 ADMIN RESOLUTION (${d.disputeId}): ADMIN CLOSED — ${comment}. Platform-held funds settled per force-close policy (requestor reward refund; acceptor deposit less applicable fee).`, "admin_action", {
-      fromStatus: "disputed", toStatus: "force_closed",
-    });
-    adminUpdateTaskStatus(d.taskId, "force_closed");
-    saveDsp4Status(d.disputeId, "admin_closed");
-    notifyTaskForceClosed(d.task);
-    setReviewDispute(null);
-    setAdminComment("");
-    reload();
-    toast({ title: "Task Force-Closed", description: "Reward refunded to requestor. Penalty applied to acceptor's trust deposit." });
+    void applyDsp4(
+      d,
+      "admin_closed",
+      "Task Force-Closed",
+      "Reward refunded to requestor. Penalty applied to acceptor trust deposit.",
+    );
   };
 
   // ── Render dispute row ────────────────────────────────────────────────────
@@ -175,12 +158,12 @@ const AdminDisputes = () => {
       <TableCell className="text-sm text-muted-foreground">{new Date(d.createdAt).toLocaleDateString()}</TableCell>
       <TableCell className="text-center">
         {d.escalated ? (
-          <Badge variant="outline" className={`text-[10px] gap-1 ${DSP4_STATUS_COLORS[d.dsp4Status]}`}>
-            {d.dsp4Status === "open" && <Clock className="h-3 w-3" />}
+          <Badge variant="outline" className={`text-[10px] gap-1 ${DSP4_STATUS_COLORS[d.dsp4Status ?? "open"]}`}>
+            {(d.dsp4Status ?? "open") === "open" && <Clock className="h-3 w-3" />}
             {d.dsp4Status === "resolved_valid" && <AlertTriangle className="h-3 w-3" />}
             {d.dsp4Status === "resolved_invalid" && <CheckCircle2 className="h-3 w-3" />}
             {d.dsp4Status === "admin_closed" && <XCircle className="h-3 w-3" />}
-            {DSP4_STATUS_LABELS[d.dsp4Status]}
+            {DSP4_STATUS_LABELS[d.dsp4Status ?? "open"]}
           </Badge>
         ) : (
           <Badge variant="outline" className="text-[10px] gap-1 bg-primary/10 text-primary border-primary/20">
@@ -210,6 +193,9 @@ const AdminDisputes = () => {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">Disputes</h1>
         <p className="text-sm text-muted-foreground">Monitor and arbitrate task disputes — live data</p>
+        {loadError && (
+          <p className="text-sm text-destructive mt-2">{loadError}</p>
+        )}
       </div>
 
       {/* Summary cards */}

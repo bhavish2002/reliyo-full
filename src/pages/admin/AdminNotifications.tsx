@@ -9,8 +9,13 @@ import { Card } from "@/components/ui/card";
 import AdminLayout from "@/components/AdminLayout";
 import {
   type AppNotification, type NotificationType,
-  getNotifications, markNotificationRead, markAllNotificationsRead, toggleNotificationFlag,
 } from "@/lib/notifications";
+import {
+  listNotifications,
+  markNotificationReadApi,
+  markAllNotificationsReadApi,
+  toggleNotificationFlagApi,
+} from "@/lib/notifications/api";
 
 const TYPE_STYLE: Record<string, { icon: React.ElementType; className: string }> = {
   admin_force_close_request: { icon: ShieldAlert, className: "text-destructive bg-destructive/10" },
@@ -27,15 +32,25 @@ const PRIORITY_BADGE: Record<string, string> = {
 const AdminNotifications = () => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const reload = () => setNotifications(getNotifications("admin"));
-  useEffect(() => { reload(); }, []);
+  const reload = async () => {
+    try {
+      const rows = await listNotifications();
+      setNotifications(rows);
+    } catch {
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { void reload(); }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleToggleRead = (id: string) => { markNotificationRead("admin", id); reload(); };
-  const handleToggleFlag = (id: string) => { toggleNotificationFlag("admin", id); reload(); };
-  const handleMarkAllRead = () => { markAllNotificationsRead("admin"); reload(); };
+  const handleToggleRead = async (id: string) => { await markNotificationReadApi(id); await reload(); };
+  const handleToggleFlag = async (id: string) => { await toggleNotificationFlagApi(id); await reload(); };
+  const handleMarkAllRead = async () => { await markAllNotificationsReadApi(); await reload(); };
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -55,7 +70,9 @@ const AdminNotifications = () => {
         </div>
       </div>
 
-      {notifications.length === 0 ? (
+      {loading ? (
+        <p className="text-sm text-muted-foreground text-center py-12">Loading…</p>
+      ) : notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <Bell className="h-10 w-10 mb-3 opacity-40" />
           <p className="font-medium">No admin notifications</p>

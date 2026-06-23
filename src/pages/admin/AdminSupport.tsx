@@ -6,24 +6,42 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/AdminLayout";
-import { getTickets, updateTicketStatus, type SupportTicket } from "@/lib/supportTickets";
+import {
+  listAdminSupportTickets,
+  updateAdminSupportTicket,
+  type AdminSupportTicketRow,
+} from "@/lib/admin/api";
 
 const AdminSupport = () => {
   const { toast } = useToast();
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [tickets, setTickets] = useState<AdminSupportTicketRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = () => setTickets(getTickets());
+  const refresh = async () => {
+    try {
+      const rows = await listAdminSupportTickets();
+      setTickets(rows);
+    } catch {
+      toast({ title: "Could not load tickets", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 5000);
+    void refresh();
+    const interval = setInterval(() => void refresh(), 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleAction = (id: string, status: "reviewed" | "deleted") => {
-    updateTicketStatus(id, status);
-    refresh();
-    toast({ title: `Ticket ${status === "reviewed" ? "marked as reviewed" : "deleted"}` });
+  const handleAction = async (id: string, status: "reviewed" | "deleted") => {
+    try {
+      await updateAdminSupportTicket(id, status);
+      await refresh();
+      toast({ title: `Ticket ${status === "reviewed" ? "marked as reviewed" : "deleted"}` });
+    } catch {
+      toast({ title: "Update failed", variant: "destructive" });
+    }
   };
 
   const openCount = tickets.filter((t) => t.status === "open").length;
@@ -36,8 +54,8 @@ const AdminSupport = () => {
             <h1 className="text-2xl font-bold text-foreground">Support Tickets</h1>
             <p className="text-sm text-muted-foreground">{openCount} open ticket{openCount !== 1 ? "s" : ""}</p>
           </div>
-          <Button variant="outline" size="sm" onClick={refresh}>
-            <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>
 
@@ -48,7 +66,9 @@ const AdminSupport = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {tickets.length === 0 ? (
+            {loading && tickets.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Loading tickets…</p>
+            ) : tickets.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">No support tickets yet.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -82,10 +102,10 @@ const AdminSupport = () => {
                         <TableCell className="text-right">
                           {t.status === "open" && (
                             <div className="flex justify-end gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => handleAction(t.id, "reviewed")} title="Mark Reviewed">
+                              <Button variant="ghost" size="sm" onClick={() => void handleAction(t.id, "reviewed")} title="Mark Reviewed">
                                 <CheckCircle className="h-4 w-4 text-success" />
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleAction(t.id, "deleted")} title="Delete">
+                              <Button variant="ghost" size="sm" onClick={() => void handleAction(t.id, "deleted")} title="Delete">
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </div>

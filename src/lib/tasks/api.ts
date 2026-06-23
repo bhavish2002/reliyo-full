@@ -156,6 +156,10 @@ export function raiseDisputeTask(id: string, message?: string) {
   return apiClient.post<TaskDetailApi>(`/tasks/${id}/dispute`, { message });
 }
 
+export function requestForceCloseTask(id: string, message?: string) {
+  return apiClient.post<TaskDetailApi>(`/tasks/${id}/force-close-request`, { message });
+}
+
 export interface CommentAttachmentPayload {
   name: string;
   size: number;

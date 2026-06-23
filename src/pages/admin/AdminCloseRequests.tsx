@@ -13,10 +13,7 @@ import AdminLayout from "@/components/AdminLayout";
 import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
 import { Eye, CheckCircle2, XCircle, FileX, Shield, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import {
-  getAllForceCloseRequests,
-  type ForceCloseRequest,
-} from "@/lib/adminData";
+import { type ForceCloseRequest } from "@/lib/adminData";
 import {
   listAdminCloseRequests,
   resolveAdminCloseRequest,
@@ -48,8 +45,13 @@ const AdminCloseRequests = () => {
           task: mapApiTaskToTask(r.task as ApiTask),
         })),
       );
-    } catch {
-      setRequests(getAllForceCloseRequests());
+    } catch (err) {
+      setRequests([]);
+      toast({
+        title: "Could not load close requests",
+        description: err instanceof ApiClientError ? err.message : "Check API connection.",
+        variant: "destructive",
+      });
     }
   };
   useEffect(() => {
@@ -225,19 +227,19 @@ const AdminCloseRequests = () => {
 
       {/* Review Dialog */}
       <Dialog open={!!reviewReq} onOpenChange={() => setReviewReq(null)}>
-        <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
-          <div className="px-6 pt-6 pb-2">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+          <div className="shrink-0 px-6 pt-6 pb-3 pr-12 border-b border-border">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
-                <Shield className="h-5 w-5 text-primary" /> Review Force-Close Request
+                <Shield className="h-5 w-5 text-primary shrink-0" /> Review Force-Close Request
               </DialogTitle>
-              <DialogDescription className="mt-1">
+              <DialogDescription className="mt-1.5 text-left">
                 {reviewReq?.taskTitle} — requested by {reviewReq?.requestor}
               </DialogDescription>
             </DialogHeader>
           </div>
 
-          <div className="px-6 pb-6 space-y-5">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-5 space-y-5">
             {/* Task Details Card */}
             <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-3">
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
@@ -284,30 +286,34 @@ const AdminCloseRequests = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 pt-1">
               <Button
                 variant="outline"
-                className="w-full justify-start gap-3 h-auto py-3 px-4 rounded-lg"
+                className="w-full justify-start gap-3 h-auto py-3.5 px-4 rounded-lg items-start"
                 disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleApprove(reviewReq)}
               >
-                <CheckCircle2 className="h-5 w-5 text-[hsl(var(--success))] shrink-0" />
-                <div className="text-left">
+                <CheckCircle2 className="h-5 w-5 text-[hsl(var(--success))] shrink-0 mt-0.5" />
+                <div className="text-left min-w-0 flex-1">
                   <p className="font-semibold text-sm">Approve — Force Close</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Task moves to Force Closed. Reward refunded to requestor, trust deposit penalty applied.</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed whitespace-normal">
+                    Task moves to Force Closed. Reward refunded to requestor, trust deposit penalty applied.
+                  </p>
                 </div>
               </Button>
 
               <Button
                 variant="outline"
-                className="w-full justify-start gap-3 h-auto py-3 px-4 rounded-lg"
+                className="w-full justify-start gap-3 h-auto py-3.5 px-4 rounded-lg items-start"
                 disabled={!adminComment.trim()}
                 onClick={() => reviewReq && handleReject(reviewReq)}
               >
-                <XCircle className="h-5 w-5 text-destructive shrink-0" />
-                <div className="text-left">
+                <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div className="text-left min-w-0 flex-1">
                   <p className="font-semibold text-sm">Reject</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Task remains in its current status. Request dismissed.</p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed whitespace-normal">
+                    Task remains in its current status. Request dismissed.
+                  </p>
                 </div>
               </Button>
             </div>

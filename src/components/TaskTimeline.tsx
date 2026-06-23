@@ -19,11 +19,6 @@ import {
   STATUS_LABELS, ROLE_LABELS, getEffectiveDeadline, DSP4_COMPLETION_DAYS,
 } from "@/lib/taskTypes";
 import { saveForceCloseRequest } from "@/lib/adminData";
-import {
-  notifyAlertRaised, notifyForceCloseRequested, notifyTaskMarkedDone,
-  notifyDisputeRaised, notifyFixResubmitted, notifyRatingRequired,
-  notifyTaskClosed,
-} from "@/lib/notifications";
 import { format, addDays, differenceInDays, isAfter, isBefore } from "date-fns";
 import { generateDisputeId, MAX_DISPUTES, isEscalated } from "@/lib/disputeId";
 import { cn } from "@/lib/utils";
@@ -37,6 +32,7 @@ import {
   extendDeadlineTask,
   markDoneTask,
   raiseDisputeTask,
+  requestForceCloseTask,
 } from "@/lib/tasks/api";
 import { notifyTasksChanged } from "@/lib/tasks/events";
 
@@ -452,7 +448,6 @@ const TaskTimeline = ({
       "status_change",
       { fromStatus: status as TaskStatus, toStatus: "done" }
     );
-    notifyTaskMarkedDone(task);
     onStatusChange("done", [sysEntry]);
   };
 
@@ -461,7 +456,6 @@ const TaskTimeline = ({
   const handleAcceptWork = () => {
     if (status !== "done" || currentUserRole !== "requestor") return;
     if (useServer && !availableActions?.canAcceptWork) return;
-    notifyRatingRequired(task);
     setRatingMandatory(true);
     setShowRatingDialog(true);
   };
@@ -505,7 +499,6 @@ const TaskTimeline = ({
         "Dispute raised",
         `Dispute #${disputeNumber}/${MAX_DISPUTES} recorded.`,
       );
-      notifyDisputeRaised(task);
       return;
     }
 
@@ -521,7 +514,6 @@ const TaskTimeline = ({
       { fromStatus: status, toStatus: "disputed", disputeCount: disputeNumber }
     );
     setShowDisputeDialog(false);
-    notifyDisputeRaised(task);
     onStatusChange("disputed", [sysEntry]);
   };
 
@@ -540,7 +532,6 @@ const TaskTimeline = ({
           onServerDetail?.(detail);
           notifyTasksChanged();
           setCommentText("");
-          notifyFixResubmitted(task);
           toast({ title: "Fix submitted", description: "Task moved back to Done for requestor review." });
         } catch (err) {
           toast({
@@ -572,7 +563,6 @@ const TaskTimeline = ({
       { fromStatus: "disputed", toStatus: "done" }
     );
     setCommentText("");
-    notifyFixResubmitted(task);
     onStatusChange("done", [fixEntry, sysEntry]);
   };
 
@@ -580,7 +570,6 @@ const TaskTimeline = ({
 
   const handleSendAlert = () => {
     setShowAlertDialog(false);
-    notifyAlertRaised(task);
     if (useServer) {
       void runServerAction(
         () =>
@@ -621,15 +610,13 @@ const TaskTimeline = ({
 
   const handleForceCloseRequest = () => {
     setShowForceCloseDialog(false);
-    notifyForceCloseRequested(task);
 
     if (useServer) {
       void runServerAction(
         () =>
-          addTaskComment(
+          requestForceCloseTask(
             task.id,
             `Force-close requested by Requestor (${currentUserName}). Pending admin review.`,
-            { entryType: "alert", alertType: "force_close_request" },
           ),
         "Force-close requested",
         "An admin will review your request.",
@@ -680,7 +667,6 @@ const TaskTimeline = ({
       { fromStatus: "disputed" as TaskStatus, toStatus: "force_closed" }
     );
     setShowForceCloseDialog(false);
-    notifyTaskClosed(task);
     onStatusChange("force_closed", [closeEntry]);
   };
 
@@ -728,7 +714,6 @@ const TaskTimeline = ({
       setShowRatingDialog(false);
       setRatingMandatory(false);
       onRatingSubmit?.(ratingValue, ratingFeedback);
-      notifyTaskClosed(task);
       return;
     }
     if (!canTransition(status, "closed")) return;
@@ -747,7 +732,6 @@ const TaskTimeline = ({
     setShowRatingDialog(false);
     setRatingMandatory(false);
     onRatingSubmit?.(ratingValue, ratingFeedback);
-    notifyTaskClosed(task);
     onStatusChange("closed", [ratingEntry, closeEntry]);
   };
 

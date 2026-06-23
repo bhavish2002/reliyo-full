@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
-import { getUnreadCount, type NotificationTarget } from "@/lib/notifications";
+import { fetchUnreadNotificationCount } from "@/lib/notifications/api";
 import { getUserSettings, applyTheme } from "@/lib/userSettings";
 
 const getNavItems = (notifCount: number) => [
@@ -148,11 +148,10 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { signOut } = useAuth();
+  const { signOut, isAuthenticated } = useAuth();
   const currentUser = getCurrentUser();
   const userName = currentUser?.name?.split(" ")[0] || "User";
 
-  const target: NotificationTarget = currentUser?.role === "acceptor" ? "acceptor" : "requestor";
   const [notifCount, setNotifCount] = useState(0);
 
   // Apply theme on every dashboard render (ensures correct user context)
@@ -163,10 +162,12 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    setNotifCount(getUnreadCount(target));
-    const interval = setInterval(() => setNotifCount(getUnreadCount(target)), 3000);
+    if (!isAuthenticated) return;
+    const refresh = () => void fetchUnreadNotificationCount().then(setNotifCount);
+    refresh();
+    const interval = setInterval(refresh, 15000);
     return () => clearInterval(interval);
-  }, [target]);
+  }, [isAuthenticated]);
 
   const handleLogout = async () => {
     await signOut();

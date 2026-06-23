@@ -14,32 +14,47 @@ import {
 } from "recharts";
 import AdminLayout from "@/components/AdminLayout";
 import { DollarSign, TrendingUp, Wallet, RefreshCw, CalendarIcon, Coins } from "lucide-react";
-import { getRevenueStats } from "@/lib/adminData";
+import { getAdminRevenueSummary, type AdminRevenueSummary } from "@/lib/admin/api";
 import { cn } from "@/lib/utils";
 import { format, subMonths, startOfMonth, startOfDay, endOfDay, isAfter, isBefore } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 type FilterMode = "6" | "3" | "custom";
 
+const emptyRevenue: AdminRevenueSummary = {
+  totalRevenue: 0,
+  platformFeeEarnings: 0,
+  commissionFeeEarnings: 0,
+  totalEscrowLocked: 0,
+  totalEscrowReleased: 0,
+  monthlyRevenue: [],
+  monthlyEscrow: [],
+};
+
 const AdminRevenue = () => {
-  const [revenue, setRevenue] = useState(() => getRevenueStats());
+  const [revenue, setRevenue] = useState<AdminRevenueSummary>(emptyRevenue);
   const [loading, setLoading] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>("6");
   const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const reload = useCallback(() => {
+  const reload = useCallback(async () => {
     setLoading(true);
-    setTimeout(() => {
-      setRevenue(getRevenueStats());
+    try {
+      const data = await getAdminRevenueSummary();
+      setRevenue(data);
+    } catch {
+      setRevenue(emptyRevenue);
+    } finally {
       setLoading(false);
-    }, 200);
+    }
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => setRevenue(getRevenueStats()), 5000);
+    void reload();
+    const interval = setInterval(() => void reload(), 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reload]);
 
   const { rangeStart, rangeEnd } = useMemo(() => {
     const now = new Date();
@@ -58,14 +73,14 @@ const AdminRevenue = () => {
 
   const filteredMonthlyRevenue = useMemo(() => {
     return revenue.monthlyRevenue.filter(d => {
-      const date = new Date(d.month + " 1");
+      const date = new Date(`${d.month} 1`);
       return !isBefore(date, startOfMonth(rangeStart)) && !isAfter(date, rangeEnd);
     });
   }, [revenue.monthlyRevenue, rangeStart, rangeEnd]);
 
   const filteredMonthlyEscrow = useMemo(() => {
     return revenue.monthlyEscrow.filter(d => {
-      const date = new Date(d.month + " 1");
+      const date = new Date(`${d.month} 1`);
       return !isBefore(date, startOfMonth(rangeStart)) && !isAfter(date, rangeEnd);
     });
   }, [revenue.monthlyEscrow, rangeStart, rangeEnd]);
@@ -131,7 +146,7 @@ const AdminRevenue = () => {
             </Popover>
           )}
 
-          <Button variant="outline" size="sm" onClick={reload} disabled={loading} className="gap-2 h-9">
+          <Button variant="outline" size="sm" onClick={() => void reload()} disabled={loading} className="gap-2 h-9">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </div>

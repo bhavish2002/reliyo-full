@@ -156,7 +156,7 @@ export interface AdminDispute {
   acceptor: string;
   escalated: boolean;
   createdAt: string;
-  dsp4Status: Dsp4Status;
+  dsp4Status?: Dsp4Status | null;
   task: Task;
 }
 
