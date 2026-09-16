@@ -23,7 +23,44 @@ export class PaymentsConfigService {
       checkoutEnabled,
       razorpayKeyId: checkoutEnabled ? razorpayKeyId : undefined,
       webhookPath: `/${apiPrefix}/payments/webhooks/razorpay`,
+      supportedCheckoutCurrencies: this.resolveSupportedCheckoutCurrencies(
+        checkoutEnabled,
+        psp,
+      ),
     };
+  }
+
+  isCheckoutCurrencySupported(currency: string): boolean {
+    const normalized = currency.toUpperCase().trim();
+    return this.getConfig().supportedCheckoutCurrencies.includes(normalized);
+  }
+
+  private resolveSupportedCheckoutCurrencies(
+    checkoutEnabled: boolean,
+    psp: string,
+  ): string[] {
+    if (!checkoutEnabled || psp !== 'razorpay') {
+      return [
+        'INR',
+        'USD',
+        'GBP',
+        'EUR',
+        'CAD',
+        'AUD',
+        'JPY',
+        'BRL',
+        'ZAR',
+        'AED',
+        'SGD',
+        'NGN',
+      ];
+    }
+    const raw =
+      this.config.get<string>('RAZORPAY_SUPPORTED_CURRENCIES') ?? 'INR';
+    return raw
+      .split(',')
+      .map((c) => c.trim().toUpperCase())
+      .filter(Boolean);
   }
 
   buildCheckoutForHold(params: {

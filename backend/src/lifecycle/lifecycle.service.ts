@@ -6,8 +6,9 @@ import {
 import type { Task, TaskEvent, TaskStatus, User } from '@prisma/client';
 import { isDsp4ReworkWindowActive } from '../disputes/dsp4-deadline.util';
 import {
-  DISPUTE_COOLDOWN_MS,
+  disputeCooldownMsForCount,
   FORCE_CLOSE_COOLDOWN_MS,
+  MAX_DISPUTES,
   QUIT_GRACE_MS,
   VALID_TRANSITIONS,
   type CooldownMeta,
@@ -65,16 +66,29 @@ export class LifecycleService {
           e.entryType === 'status_change' &&
           (e.metadata as { toStatus?: TaskStatus } | null)?.toStatus === 'done',
       );
-    if (lastDispute) {
-      // Cooldown resets after a disputed -> done cycle.
-      if (lastDone && lastDone.createdAt > lastDispute.createdAt) {
-        return meta;
-      }
-      const disputeAfter = new Date(
-        lastDispute.createdAt.getTime() + DISPUTE_COOLDOWN_MS,
-      );
-      if (disputeAfter > new Date()) {
-        meta.disputeAfter = disputeAfter.toISOString();
+
+    // Clock starts at the last raise. Acceptor returning work to `done` resets it
+    // so the next round can be raised immediately. Persisted via `disputeAfter`
+    // on GET /tasks/:id so refresh/re-login keeps the same remaining time.
+    if (
+      lastDispute &&
+      task.disputeCount > 0 &&
+      task.disputeCount < MAX_DISPUTES
+    ) {
+      const resetByDone =
+        (lastDone != null && lastDone.createdAt > lastDispute.createdAt) ||
+        (task.status === 'done' &&
+          task.statusEnteredAt.getTime() > lastDispute.createdAt.getTime());
+      if (!resetByDone) {
+        const cooldownMs = disputeCooldownMsForCount(task.disputeCount);
+        if (cooldownMs > 0) {
+          const disputeAfter = new Date(
+            lastDispute.createdAt.getTime() + cooldownMs,
+          );
+          if (disputeAfter > new Date()) {
+            meta.disputeAfter = disputeAfter.toISOString();
+          }
+        }
       }
     }
 
@@ -165,11 +179,12 @@ export class LifecycleService {
     const canMarkDone =
       (role === 'acceptor' && status === 'in_progress') || canMarkDoneFromDisputed;
 
+    // Stays true during cooldown so the UI greys the button instead of hiding it.
+    // The wait itself is enforced in TasksService.raiseDispute.
     const canRaiseDispute =
       role === 'requestor' &&
-      status === 'done' &&
-      task.disputeCount < 4 &&
-      !cooldowns.disputeAfter;
+      (status === 'done' || status === 'disputed') &&
+      task.disputeCount < MAX_DISPUTES;
 
     const canAcceptWork = role === 'requestor' && status === 'done';
 

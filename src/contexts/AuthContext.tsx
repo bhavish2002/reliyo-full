@@ -17,6 +17,12 @@ import { clearAccessToken, setAccessToken } from "@/lib/auth/session";
 import { clearUserLocalSession } from "@/lib/auth/clearUserSession";
 import type { AuthUser } from "@/lib/auth/types";
 import { ApiClientError } from "@/lib/api/client";
+import {
+  applyTheme,
+  clearUserSettingsCache,
+  setUserSettingsCache,
+} from "@/lib/userSettings";
+import { TASKS_CHANGED_EVENT } from "@/lib/tasks/events";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -29,6 +35,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function applyUserPreferences(user: AuthUser): void {
+  if (user.preferences) {
+    setUserSettingsCache(user.id, user.preferences);
+    applyTheme(user.preferences.darkMode);
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,15 +50,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccessToken(token);
     setUser(nextUser);
     setAuthStoreUser(nextUser);
+    void fetchMe()
+      .then((me) => {
+        setUser(me);
+        setAuthStoreUser(me);
+        applyUserPreferences(me);
+      })
+      .catch(() => {
+        if (nextUser.preferences) applyUserPreferences(nextUser);
+      });
   }, []);
 
   const refreshProfile = useCallback(async () => {
     const me = await fetchMe();
     setUser(me);
     setAuthStoreUser(me);
+    applyUserPreferences(me);
   }, []);
 
+  useEffect(() => {
+    const onTasksChanged = () => {
+      void refreshProfile().catch(() => undefined);
+    };
+    window.addEventListener(TASKS_CHANGED_EVENT, onTasksChanged);
+    return () => window.removeEventListener(TASKS_CHANGED_EVENT, onTasksChanged);
+  }, [refreshProfile]);
+
   const signOut = useCallback(async () => {
+    const userId = user?.id;
     try {
       await logoutSession();
     } catch {
@@ -53,9 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     clearAccessToken();
     clearUserLocalSession();
+    if (userId) clearUserSettingsCache(userId);
     setUser(null);
     setAuthStoreUser(null);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;

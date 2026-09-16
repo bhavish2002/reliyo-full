@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { format, isToday, isYesterday, startOfDay } from "date-fns";
+import { format as formatDate, isToday, isYesterday, startOfDay } from "date-fns";
 import {
   ArrowRightLeft,
   CheckCircle2,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { listUserTransactions, type UserTransaction } from "@/lib/payments/api";
 
 type FilterKey = "all" | "active" | "refunds" | "pending";
@@ -70,7 +71,7 @@ function groupLabel(iso: string): string {
   const d = new Date(iso);
   if (isToday(d)) return "Today";
   if (isYesterday(d)) return "Yesterday";
-  return format(d, "EEEE, d MMMM yyyy");
+  return formatDate(d, "EEEE, d MMMM yyyy");
 }
 
 function groupByDate(items: UserTransaction[]): Array<{ label: string; items: UserTransaction[] }> {
@@ -89,6 +90,7 @@ function groupByDate(items: UserTransaction[]): Array<{ label: string; items: Us
 const Transactions = () => {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { format: formatMoney } = usePreferredCurrency();
   const refreshKey = useTasksListRefresh();
   const [items, setItems] = useState<UserTransaction[]>([]);
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -183,7 +185,6 @@ const Transactions = () => {
                 <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" aria-hidden />
 
                 {group.items.map((tx) => {
-            const symbol = tx.currency === "INR" ? "₹" : `${tx.currency} `;
             const StatusIcon =
               tx.status === "confirmed"
                 ? CheckCircle2
@@ -231,24 +232,23 @@ const Transactions = () => {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {format(new Date(tx.createdAt), "HH:mm")}
+                      {formatDate(new Date(tx.createdAt), "HH:mm")}
                       {tx.confirmedAt &&
-                        ` · Confirmed ${format(new Date(tx.confirmedAt), "HH:mm")}`}
+                        ` · Confirmed ${formatDate(new Date(tx.confirmedAt), "HH:mm")}`}
                       {tx.paymentMethod && ` · ${tx.paymentMethod}`}
                     </p>
                     {tx.settlementScenario && (
                       <p className="text-xs text-primary">
                         {SETTLEMENT_LABELS[tx.settlementScenario] ?? tx.settlementScenario}
                         {tx.settlementAt &&
-                          ` · ${format(new Date(tx.settlementAt), "dd MMM yyyy")}`}
+                          ` · ${formatDate(new Date(tx.settlementAt), "dd MMM yyyy")}`}
                       </p>
                     )}
                   </div>
 
                   <div className="flex items-center gap-3 sm:flex-col sm:items-end">
                     <p className="text-lg font-bold text-foreground whitespace-nowrap">
-                      {symbol}
-                      {tx.amount.toFixed(2)}
+                      {formatMoney(tx.amount, { sourceCurrency: tx.currency })}
                     </p>
                     {tx.taskId && (
                       <Button

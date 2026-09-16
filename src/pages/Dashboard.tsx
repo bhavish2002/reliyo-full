@@ -23,16 +23,13 @@ import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
 import { listTasks, mapApiTaskToTask } from "@/lib/tasks/api";
 import { type Task, type TaskStatus, TASK_STATUSES, STATUS_LABELS } from "@/lib/taskTypes";
 import { migrateLegacyTaskList } from "@/lib/taskMigration";
-import { getUserSettings } from "@/lib/userSettings";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import { format, parseISO, subMonths, startOfMonth, isAfter, isBefore, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 
-// ── Currency lookup ────────────────────────────────────────────────────────
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  INR: "₹", USD: "$", GBP: "£", CAD: "C$", AUD: "A$", EUR: "€",
-  JPY: "¥", BRL: "R$", ZAR: "R", AED: "د.إ", SGD: "S$", NGN: "₦",
-};
+// ── Currency lookup (chart labels) ─────────────────────────────────────────
+// Display conversion lives in @/lib/currency — rates are fixed (INR base).
 
 // ── Data helpers ────────────────────────────────────────────────────────────
 
@@ -64,7 +61,8 @@ function computeMonthlyData(
   tasks: Task[],
   fullName: string,
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  displayReward: (task: Task) => number,
 ) {
   // Build monthly buckets from rangeStart to rangeEnd
   const buckets: { month: string; date: Date; created: number; accepted: number; earnings: number }[] = [];
@@ -85,13 +83,13 @@ function computeMonthlyData(
     if (t.createdBy === fullName) bucket.created += 1;
     if (t.acceptedBy === fullName) bucket.accepted += 1;
     if (t.status === "closed" && t.acceptedBy === fullName) {
-      bucket.earnings += t.reward || 0;
+      bucket.earnings = roundEarnings(bucket.earnings + displayReward(t));
     }
   });
 
   let cum = 0;
   return buckets.map((b) => {
-    cum += b.earnings;
+    cum = roundEarnings(cum + b.earnings);
     return { ...b, monthLabel: b.month.split(" ")[0], cumulativeEarnings: cum };
   });
 }
@@ -156,6 +154,17 @@ const PieLegendContent = ({ payload }: any) => {
 
 type FilterMode = "6" | "3" | "custom";
 
+function roundEarnings(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function formatEarnings(value: number, symbol: string): string {
+  return `${symbol}${roundEarnings(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 // ── Dashboard ───────────────────────────────────────────────────────────────
 
 const Dashboard = () => {
@@ -164,9 +173,13 @@ const Dashboard = () => {
   const currentUser = getCurrentUser();
   const userName = currentUser?.name?.split(" ")[0] || "User";
   const fullName = currentUser?.name || "User";
-  const userId = currentUser?.id || authUser?.id || "guest";
-  const settings = getUserSettings(userId);
-  const currencySymbol = CURRENCY_SYMBOLS[settings.preferredCurrency] || "₹";
+  const { symbol: currencySymbol, convert } = usePreferredCurrency();
+
+  const displayReward = useCallback(
+    (task: Task) =>
+      convert(task.reward || 0, task.currency ?? "INR"),
+    [convert],
+  );
 
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -237,26 +250,51 @@ const Dashboard = () => {
     const { all, created, accepted } = userTasks;
     const active = all.filter((t) => ["open", "committed", "in_progress"].includes(t.status)).length;
     const disputed = all.filter((t) => t.status === "disputed").length;
-    const earnings = accepted
-      .filter((t) => t.status === "closed")
-      .reduce((s, t) => s + (t.reward || 0), 0);
+    const earnings = roundEarnings(
+      accepted
+        .filter((t) => t.status === "closed")
+        .reduce((s, t) => s + displayReward(t), 0),
+    );
 
     return [
       { label: "Active Tasks", value: String(active), icon: Clock, color: "text-primary", bg: "bg-primary/10" },
       { label: "Created Tasks", value: String(created.length), icon: FileText, color: "text-primary", bg: "bg-primary/10" },
       { label: "Accepted Tasks", value: String(accepted.length), icon: UserCheck, color: "text-[hsl(var(--success))]", bg: "bg-[hsl(var(--success))]/10" },
       { label: "Disputed", value: String(disputed), icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10" },
-      { label: "Earnings", value: `${currencySymbol}${earnings.toLocaleString()}`, icon: DollarSign, color: "text-[hsl(var(--success))]", bg: "bg-[hsl(var(--success))]/10" },
+      {
+        label: "Earnings",
+        value: formatEarnings(earnings, currencySymbol),
+        icon: DollarSign,
+        color: "text-[hsl(var(--success))]",
+        bg: "bg-[hsl(var(--success))]/10",
+      },
     ];
-  }, [userTasks, currencySymbol]);
+  }, [userTasks, currencySymbol, displayReward]);
 
   // ── Chart data ─────────────────────────────────────────────────────────
   const monthlyData = useMemo(
-    () => computeMonthlyData(userTasks.all, fullName, rangeStart, rangeEnd),
-    [userTasks.all, fullName, rangeStart, rangeEnd],
+    () => computeMonthlyData(userTasks.all, fullName, rangeStart, rangeEnd, displayReward),
+    [userTasks.all, fullName, rangeStart, rangeEnd, displayReward],
   );
 
   const hasEarnings = monthlyData.some((d) => d.cumulativeEarnings > 0);
+
+  const EarningsTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-lg">
+        <p className="mb-1 font-medium text-popover-foreground">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.dataKey} style={{ color: p.color }} className="flex justify-between gap-4">
+            <span>{p.name}</span>
+            <span className="font-semibold">
+              {formatEarnings(Number(p.value), currencySymbol)}
+            </span>
+          </p>
+        ))}
+      </div>
+    );
+  };
 
   const pieData = useMemo(() => {
     return TASK_STATUSES.map((s) => ({
@@ -443,8 +481,18 @@ const Dashboard = () => {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" strokeOpacity={0.6} />
                   <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                  <RechartsTooltip content={<CustomTooltip />} />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v: number) =>
+                      roundEarnings(v).toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 2,
+                      })
+                    }
+                  />
+                  <RechartsTooltip content={<EarningsTooltip />} />
                   <Area
                     type="monotone"
                     dataKey="cumulativeEarnings"

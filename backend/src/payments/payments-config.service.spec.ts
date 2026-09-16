@@ -17,6 +17,20 @@ describe('PaymentsConfigService', () => {
       checkoutEnabled: false,
       razorpayKeyId: undefined,
       webhookPath: '/api/v1/payments/webhooks/razorpay',
+      supportedCheckoutCurrencies: [
+        'INR',
+        'USD',
+        'GBP',
+        'EUR',
+        'CAD',
+        'AUD',
+        'JPY',
+        'BRL',
+        'ZAR',
+        'AED',
+        'SGD',
+        'NGN',
+      ],
     });
   });
 
@@ -34,6 +48,7 @@ describe('PaymentsConfigService', () => {
     const cfg = service.getConfig();
     expect(cfg.checkoutEnabled).toBe(true);
     expect(cfg.razorpayKeyId).toBe('rzp_test_abc');
+    expect(cfg.supportedCheckoutCurrencies).toEqual(['INR']);
 
     const checkout = service.buildCheckoutForHold({
       provider: 'razorpay',

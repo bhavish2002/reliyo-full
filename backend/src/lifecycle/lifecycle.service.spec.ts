@@ -143,7 +143,7 @@ describe('LifecycleService.computeAvailableActions', () => {
     expect(actions.canQuit).toBe(false);
   });
 
-  it('denies raising dispute while already disputed', () => {
+  it('allows raising the next dispute while already disputed (subject to cooldown)', () => {
     const actions = service.computeAvailableActions(
       baseTask({
         status: 'disputed',
@@ -153,44 +153,109 @@ describe('LifecycleService.computeAvailableActions', () => {
       'requestor-1',
       {},
     );
-    expect(actions.canRaiseDispute).toBe(false);
+    expect(actions.canRaiseDispute).toBe(true);
   });
 });
 
-describe('LifecycleService.computeCooldowns', () => {
+describe('LifecycleService dispute cooldown', () => {
   const service = new LifecycleService();
+  const HOUR = 60 * 60 * 1000;
 
-  it('resets dispute cooldown after disputed -> done transition', () => {
-    const now = Date.now();
-    const task = baseTask({ status: 'done' });
+  const disputeEvent = (hoursAgo: number, taskId: string, requestorId: string) =>
+    ({
+      id: 'e-dispute',
+      taskId,
+      authorUserId: requestorId,
+      authorName: 'Requestor',
+      authorRole: 'requestor',
+      message: 'Requestor raised dispute',
+      entryType: 'alert',
+      systemGenerated: false,
+      metadata: { alertType: 'dispute_raised' },
+      createdAt: new Date(Date.now() - hoursAgo * HOUR),
+    }) as unknown as Parameters<LifecycleService['computeCooldowns']>[1][number];
+
+  const doneEvent = (hoursAgo: number, taskId: string) =>
+    ({
+      id: 'e-done',
+      taskId,
+      authorUserId: null,
+      authorName: 'System',
+      authorRole: 'system',
+      message: 'Task moved to Done',
+      entryType: 'status_change',
+      systemGenerated: true,
+      metadata: { fromStatus: 'disputed', toStatus: 'done' },
+      createdAt: new Date(Date.now() - hoursAgo * HOUR),
+    }) as unknown as Parameters<LifecycleService['computeCooldowns']>[1][number];
+
+  const hoursLeft = (task: ReturnType<typeof baseTask>, events: Parameters<LifecycleService['computeCooldowns']>[1]) => {
+    const { disputeAfter } = service.computeCooldowns(task, events);
+    if (!disputeAfter) return 0;
+    return Math.round((new Date(disputeAfter).getTime() - Date.now()) / HOUR);
+  };
+
+  it('has no cooldown before the first dispute', () => {
+    const task = baseTask({ status: 'done', disputeCount: 0 });
+    expect(service.computeCooldowns(task, []).disputeAfter).toBeUndefined();
+  });
+
+  it('applies 48h, then 24h, then 12h after each raise while still disputed', () => {
+    expect(
+      hoursLeft(
+        baseTask({ status: 'disputed', disputeCount: 1 }),
+        [disputeEvent(1, 'task-1', 'requestor-1')],
+      ),
+    ).toBe(47);
+    expect(
+      hoursLeft(
+        baseTask({ status: 'disputed', disputeCount: 2 }),
+        [disputeEvent(1, 'task-1', 'requestor-1')],
+      ),
+    ).toBe(23);
+    expect(
+      hoursLeft(
+        baseTask({ status: 'disputed', disputeCount: 3 }),
+        [disputeEvent(1, 'task-1', 'requestor-1')],
+      ),
+    ).toBe(11);
+  });
+
+  it('resets the cooldown when the acceptor returns work to done', () => {
+    const task = baseTask({
+      status: 'done',
+      disputeCount: 1,
+      statusEnteredAt: new Date(Date.now() - 10 * 60 * 1000),
+    });
     const events = [
-      {
-        id: 'e1',
-        taskId: task.id,
-        authorUserId: task.requestorId,
-        authorName: 'Requestor',
-        authorRole: 'requestor',
-        message: 'Requestor raised dispute',
-        entryType: 'alert',
-        systemGenerated: false,
-        metadata: { alertType: 'dispute_raised' },
-        createdAt: new Date(now - 60 * 60 * 1000),
-      },
-      {
-        id: 'e2',
-        taskId: task.id,
-        authorUserId: null,
-        authorName: 'System',
-        authorRole: 'system',
-        message: 'Task moved to Done',
-        entryType: 'status_change',
-        systemGenerated: true,
-        metadata: { fromStatus: 'disputed', toStatus: 'done' },
-        createdAt: new Date(now - 10 * 60 * 1000),
-      },
-    ] as unknown as Parameters<LifecycleService['computeCooldowns']>[1];
+      disputeEvent(1, task.id, task.requestorId),
+      doneEvent(0.1, task.id),
+    ];
+    expect(service.computeCooldowns(task, events).disputeAfter).toBeUndefined();
+  });
 
+  it('keeps canRaiseDispute true during cooldown so the UI can grey the button', () => {
+    const task = baseTask({ status: 'disputed', disputeCount: 1 });
+    const events = [disputeEvent(1, task.id, task.requestorId)];
     const cooldowns = service.computeCooldowns(task, events);
-    expect(cooldowns.disputeAfter).toBeUndefined();
+    expect(cooldowns.disputeAfter).toBeDefined();
+    const actions = service.computeAvailableActions(
+      task,
+      'requestor',
+      'requestor-1',
+      cooldowns,
+    );
+    expect(actions.canRaiseDispute).toBe(true);
+  });
+
+  it('allows raising from done immediately after a reset', () => {
+    const task = baseTask({ status: 'done', disputeCount: 1 });
+    const actions = service.computeAvailableActions(
+      task,
+      'requestor',
+      'requestor-1',
+      {},
+    );
+    expect(actions.canRaiseDispute).toBe(true);
   });
 });

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Users, AlertTriangle, DollarSign,
-  BarChart3, Settings, LogOut, Menu, Clock, Bell, FileX, Ticket, Archive,
+  BarChart3, Settings, LogOut, Menu, Clock, Bell, FileX, Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,7 +11,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchUnreadNotificationCount } from "@/lib/notifications/api";
-import { listAdminDisputes, listAdminCloseRequests } from "@/lib/admin/api";
+import { listAdminDisputes, listAdminCloseRequests, listAdminSupportTickets } from "@/lib/admin/api";
 
 const overviewItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
@@ -19,11 +19,10 @@ const overviewItems = [
   { label: "Users", icon: Users, path: "/admin/users" },
   { label: "Disputes", icon: AlertTriangle, path: "/admin/disputes", dynamicBadge: true, badgeKey: "disputes" },
   { label: "Close Requests", icon: FileX, path: "/admin/close-requests", dynamicBadge: true, badgeKey: "close_requests" },
-  { label: "Cancelled Tasks", icon: Archive, path: "/admin/cancelled-tasks" },
   { label: "Revenue", icon: DollarSign, path: "/admin/revenue" },
   { label: "Analytics", icon: BarChart3, path: "/admin/analytics" },
   { label: "Notifications", icon: Bell, path: "/admin/notifications", dynamicBadge: true },
-  { label: "Support", icon: Ticket, path: "/admin/support" },
+  { label: "Support", icon: Ticket, path: "/admin/support", dynamicBadge: true, badgeKey: "support_tickets" },
 ];
 
 const systemItems = [
@@ -37,6 +36,7 @@ const SidebarContent = ({
   adminNotifCount,
   disputeCount,
   closeRequestCount,
+  supportTicketCount,
 }: {
   current: string;
   onNavigate: (p: string) => void;
@@ -44,6 +44,7 @@ const SidebarContent = ({
   adminNotifCount: number;
   disputeCount: number;
   closeRequestCount: number;
+  supportTicketCount: number;
 }) => {
   const user = getCurrentUser();
 
@@ -89,6 +90,11 @@ const SidebarContent = ({
               {(item as any).badgeKey === "close_requests" && closeRequestCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {closeRequestCount}
+                </Badge>
+              )}
+              {(item as any).badgeKey === "support_tickets" && supportTicketCount > 0 && (
+                <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
+                  {supportTicketCount}
                 </Badge>
               )}
               {(item as any).dynamicBadge && !(item as any).badgeKey && adminNotifCount > 0 && (
@@ -163,20 +169,23 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const [adminNotifCount, setAdminNotifCount] = useState(0);
   const [disputeBadgeCount, setDisputeBadgeCount] = useState(0);
   const [closeReqCount, setCloseReqCount] = useState(0);
+  const [supportTicketCount, setSupportTicketCount] = useState(0);
 
   useEffect(() => {
     const update = async () => {
       try {
-        const [notifCount, disputes, closeReqs] = await Promise.all([
+        const [notifCount, disputes, closeReqs, supportTickets] = await Promise.all([
           fetchUnreadNotificationCount(),
           listAdminDisputes().catch(() => []),
           listAdminCloseRequests().catch(() => []),
+          listAdminSupportTickets().catch(() => []),
         ]);
         setAdminNotifCount(notifCount);
         setDisputeBadgeCount(
           disputes.filter((d) => d.escalated && d.dsp4Status === "open").length,
         );
         setCloseReqCount(closeReqs.filter((r) => r.status === "pending").length);
+        setSupportTicketCount(supportTickets.filter((t) => t.status === "open").length);
       } catch {
         /* keep last counts */
       }
@@ -198,12 +207,12 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   return (
     <div className="flex min-h-screen bg-muted/30">
       <aside className="hidden w-60 shrink-0 border-r bg-background lg:block">
-        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} />
+        <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} supportTicketCount={supportTicketCount} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-60 p-0">
-          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} />
+          <SidebarContent current={location.pathname} onNavigate={handleNav} onLogout={handleLogout} adminNotifCount={adminNotifCount} disputeCount={disputeBadgeCount} closeRequestCount={closeReqCount} supportTicketCount={supportTicketCount} />
         </SheetContent>
       </Sheet>
 

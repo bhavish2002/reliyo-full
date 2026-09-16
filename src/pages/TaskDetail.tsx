@@ -1,11 +1,10 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
-import { ArrowLeft, Info, Star, CheckCircle2, Circle, AlertTriangle, Lock, Trash2, Clock, CalendarIcon } from "lucide-react";
+import { ArrowLeft, Info, CheckCircle2, Circle, AlertTriangle, Lock, Trash2, Clock, CalendarIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Checkbox } from "@/components/ui/checkbox";
 import DashboardLayout from "@/components/DashboardLayout";
 import TaskTimeline from "@/components/TaskTimeline";
 import { format, differenceInHours } from "date-fns";
@@ -22,7 +21,11 @@ import {
 import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { generateDisputeId, isEscalated, MAX_DISPUTES } from "@/lib/disputeId";
-import { inactivityBannerFromTimeline } from "@/lib/inactivityDisplay";
+import { getInactivityUiState } from "@/lib/inactivityDisplay";
+import TaskDeadlinePolicyNote from "@/components/TaskDeadlinePolicyNote";
+import TrustDepositTermsConsent from "@/components/legal/TrustDepositTermsPanel";
+import { UserRatingDisplay } from "@/components/UserRatingDisplay";
+import { useUserRating } from "@/hooks/useUserRating";
 import { readJson, writeJson, removeItem } from "@/lib/storage";
 import { env } from "@/lib/env";
 import { comparePolicyStatus } from "@/lib/taskPolicy";
@@ -131,7 +134,7 @@ const DEMO_TIMELINES: Record<string, TimelineEntry[]> = {
 };
 
 const TaskDetail = () => {
-  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { isLoading: authLoading, isAuthenticated, refreshProfile } = useAuth();
   const currentUser = getCurrentUser();
   const { id } = useParams();
   const navigate = useNavigate();
@@ -147,6 +150,9 @@ const TaskDetail = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const requestorRating = useUserRating(task?.createdById);
+  const acceptorRating = useUserRating(task?.acceptedById);
 
   const fromBrowse = location.state?.fromBrowse ?? false;
 
@@ -167,7 +173,14 @@ const TaskDetail = () => {
     setAvailableActions(parsed.availableActions);
     setApiCooldowns(parsed.cooldowns);
     setServerTimeline(true);
-  }, []);
+    if (
+      parsed.task.status === "closed" &&
+      currentUser?.id &&
+      parsed.task.acceptedById === currentUser.id
+    ) {
+      void refreshProfile();
+    }
+  }, [currentUser?.id, refreshProfile]);
 
   useEffect(() => {
     if (!id || authLoading) return;
@@ -265,10 +278,34 @@ const TaskDetail = () => {
     };
   }, [id, authLoading, isAuthenticated]);
 
-  const inactivityBanner =
+  // Refresh done tasks so server inactivity strikes / auto-close appear without manual reload.
+  useEffect(() => {
+    if (!id || !isAuthenticated || task?.status !== "done") return;
+    const interval = window.setInterval(() => {
+      void getTaskDetail(id)
+        .then(applyServerDetail)
+        .catch(() => undefined);
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [id, isAuthenticated, task?.status, applyServerDetail]);
+
+  const inactivityState =
     serverTimeline && task?.status === "done"
-      ? inactivityBannerFromTimeline(task.status, timelineEntries)
+      ? getInactivityUiState(
+          task.status,
+          task.statusEnteredAt,
+          getEffectiveDeadline(task),
+          timelineEntries,
+        )
       : null;
+
+  // Live countdown tick while viewing a done task (review period or strike countdown)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!inactivityState?.headline) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => window.clearInterval(t);
+  }, [inactivityState?.headline, inactivityState?.detail]);
 
   if (isLoading) {
     return (
@@ -442,8 +479,10 @@ const TaskDetail = () => {
   };
 
   const handleRatingSubmit = (rating: number, feedback: string) => {
-    const updatedTask = { ...task, rating, ratingFeedback: feedback };
+    const updatedTask = { ...task!, rating, ratingFeedback: feedback };
     setTask(updatedTask);
+    notifyTasksChanged();
+    void refreshProfile();
   };
 
   const handleDeadlineExtend = (newDeadline: string) => {
@@ -531,12 +570,29 @@ const TaskDetail = () => {
           </div>
         )}
 
-        {/* Inactivity banner */}
-        {inactivityBanner && (
-          <div className="flex items-center gap-2 rounded-lg border bg-[hsl(35,90%,50%)]/10 border-[hsl(35,90%,50%)]/20 text-[hsl(35,90%,50%)] p-3 text-sm mb-3">
-            <Clock className="h-4 w-4 shrink-0" />
-            {inactivityBanner}
+        {/* Inactivity — 3-reminder auto-close (same copy for requestor and acceptor) */}
+        {inactivityState && (
+          <div
+            className={`flex flex-col gap-1 rounded-lg border p-3 text-sm mb-3 ${
+              inactivityState.beforeDeadline
+                ? "bg-primary/10 border-primary/20 text-primary"
+                : "bg-[hsl(35,90%,50%)]/10 border-[hsl(35,90%,50%)]/20 text-[hsl(35,90%,50%)]"
+            }`}
+          >
+            <div className="flex items-start gap-2">
+              <Clock className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <p>{inactivityState.headline}</p>
+                {inactivityState.detail && (
+                  <p className="mt-1 text-xs opacity-90">{inactivityState.detail}</p>
+                )}
+              </div>
+            </div>
           </div>
+        )}
+
+        {["committed", "in_progress", "done", "disputed"].includes(status) && (
+          <TaskDeadlinePolicyNote className="mb-3" />
         )}
 
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -661,12 +717,10 @@ const TaskDetail = () => {
                   </Avatar>
                   <div>
                     <p className="text-sm font-semibold">{task.createdBy}</p>
-                    <div className="flex items-center gap-0.5">
-                      {[1,2,3,4].map(i => <Star key={i} className="h-3 w-3 fill-primary text-primary" />)}
-                      <Star className="h-3 w-3 text-primary" />
-                      <span className="ml-1 text-xs text-muted-foreground">4.7 (23)</span>
-                    </div>
-                    <p className="text-xs text-[hsl(var(--success))] mt-0.5">✓ 67% reliable</p>
+                    <UserRatingDisplay
+                      averageRating={requestorRating.averageRating ?? task.requestorAverageRating}
+                      ratingCount={requestorRating.ratingCount || task.requestorRatingCount}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -684,11 +738,15 @@ const TaskDetail = () => {
                     </Avatar>
                     <div>
                       <p className="text-sm font-semibold">{task.acceptedBy}</p>
-                      <div className="flex items-center gap-0.5">
-                        {[1,2,3,4].map(i => <Star key={i} className="h-3 w-3 fill-primary text-primary" />)}
-                        <Star className="h-3 w-3 text-muted-foreground" />
-                        <span className="ml-1 text-xs text-muted-foreground">4.3 (15)</span>
-                      </div>
+                      <UserRatingDisplay
+                        averageRating={acceptorRating.averageRating ?? task.acceptorAverageRating}
+                        ratingCount={acceptorRating.ratingCount || task.acceptorRatingCount}
+                      />
+                      {task.status === "closed" && task.rating != null && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Rated {task.rating}/5 on this task
+                        </p>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -777,24 +835,17 @@ const TaskDetail = () => {
               <span>Total Payout</span>
               <span className="text-lg">{task.currencySymbol || "₹"}{trustDeposit.toFixed(2)}</span>
             </div>
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <p className="text-xs font-semibold text-primary mb-2">Terms & conditions ⓘ</p>
-              <div className="flex items-start gap-2">
-                <Checkbox
-                  id="accept-terms"
-                  checked={agreedTerms}
-                  onCheckedChange={(v) => setAgreedTerms(v === true)}
-                />
-                <label htmlFor="accept-terms" className="text-sm leading-snug cursor-pointer">
-                  I hereby agree to the terms and conditions above
-                </label>
-              </div>
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Review and accept the trust deposit terms before payment.
+              </p>
+              <TrustDepositTermsConsent agreed={agreedTerms} onAgreedChange={setAgreedTerms} />
             </div>
             <div className="flex items-start gap-2 rounded-xl bg-[hsl(var(--success))]/10 border border-[hsl(var(--success))]/20 p-3 text-sm text-[hsl(var(--success))]">
               <Info className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
-                <p>Your full deposit amount will be refunded on successful task completion.</p>
-                <p>In case of task failures this deposit is completely forfeited.</p>
+                <p>On successful completion, your trust deposit is refunded in full.</p>
+                <p>On admin-approved force-close, the trust deposit is forfeited per the terms above (separate from the requestor&apos;s reward).</p>
               </div>
             </div>
           </div>

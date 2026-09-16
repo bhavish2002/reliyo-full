@@ -65,6 +65,15 @@ export interface PaymentsConfig {
   checkoutEnabled: boolean;
   razorpayKeyId?: string;
   webhookPath: string;
+  supportedCheckoutCurrencies: string[];
+}
+
+export function isCheckoutCurrencySupported(
+  currency: string,
+  config: PaymentsConfig,
+): boolean {
+  const code = currency.toUpperCase().trim();
+  return config.supportedCheckoutCurrencies.includes(code);
 }
 
 export function getPaymentsConfig() {

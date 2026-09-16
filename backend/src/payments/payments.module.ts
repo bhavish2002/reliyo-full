@@ -20,6 +20,6 @@ import { PaymentsController } from './payments.controller';
     PaymentProviderRegistry,
     PaymentsConfigService,
   ],
-  exports: [FundHoldsService],
+  exports: [FundHoldsService, PaymentWebhookService],
 })
 export class PaymentsModule {}

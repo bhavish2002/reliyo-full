@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Patch,
   Post,
   Req,
   Res,
@@ -18,7 +19,8 @@ import { SuspensionGuard } from './guards/suspension.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUserPayload } from './auth.types';
 import { UsersService } from '../users/users.service';
-import { toPublicUser } from '../users/users.mapper';
+import { toMeProfile } from '../users/users.mapper';
+import { PatchMeDto } from '../users/dto/patch-me.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -95,6 +97,26 @@ export class MeController {
   @UseGuards(JwtAuthGuard, SuspensionGuard)
   async me(@CurrentUser() payload: AuthUserPayload) {
     const user = await this.users.findByIdOrThrow(payload.sub);
-    return toPublicUser(user);
+    const rating = await this.users.getRatingStats(payload.sub);
+    return {
+      ...toMeProfile(user),
+      averageRating: rating.averageRating,
+      ratingCount: rating.ratingCount,
+    };
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard, SuspensionGuard)
+  async patchMe(
+    @CurrentUser() payload: AuthUserPayload,
+    @Body() dto: PatchMeDto,
+  ) {
+    const user = await this.users.patchMe(payload.sub, dto);
+    const rating = await this.users.getRatingStats(payload.sub);
+    return {
+      ...toMeProfile(user),
+      averageRating: rating.averageRating,
+      ratingCount: rating.ratingCount,
+    };
   }
 }

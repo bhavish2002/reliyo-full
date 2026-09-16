@@ -35,3 +35,7 @@ services:
         value: dev
       - key: OTP_DEV_FIXED_CODE
         sync: false
+      - key: INACTIVITY_JOB_ENABLED
+        value: "true"
+      - key: WEBHOOK_RETRY_JOB_ENABLED
+        value: "true"

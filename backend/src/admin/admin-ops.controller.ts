@@ -21,6 +21,8 @@ import type { AuthUserPayload } from '../auth/auth.types';
 import { DisputesService } from '../disputes/disputes.service';
 import { ResolveDsp4Dto } from '../disputes/dto/resolve-dsp4.dto';
 import { InactivityService } from '../jobs/inactivity.service';
+import { ScheduledJobsService } from '../jobs/scheduled-jobs.service';
+import { PLATFORM_POLICY } from '../common/platform/platform-policy.constants';
 
 class ResolveCloseRequestDto {
   @IsIn(['approved', 'rejected'])
@@ -33,8 +35,8 @@ class ResolveCloseRequestDto {
 }
 
 class ResolveSupportTicketDto {
-  @IsIn(['reviewed', 'deleted'])
-  status!: 'reviewed' | 'deleted';
+  @IsIn(['done', 'reviewed'])
+  status!: 'done' | 'reviewed';
 }
 
 @Controller('admin')
@@ -47,6 +49,7 @@ export class AdminOpsController {
     private readonly ledger: LedgerService,
     private readonly disputes: DisputesService,
     private readonly inactivity: InactivityService,
+    private readonly scheduledJobs: ScheduledJobsService,
   ) {}
 
   @Get('disputes')
@@ -288,6 +291,7 @@ export class AdminOpsController {
       name: t.name,
       email: t.email,
       phone: t.phone,
+      subject: t.subject ?? t.issue.slice(0, 80),
       issue: t.issue,
       status: t.status,
       createdAt: t.createdAt.toISOString(),
@@ -308,15 +312,27 @@ export class AdminOpsController {
         message: 'Support ticket not found.',
       });
     }
+    const nextStatus = dto.status;
     const updated = await this.prisma.supportTicket.update({
       where: { id: ticket.id },
-      data: { status: dto.status },
+      data: { status: nextStatus },
     });
     return {
       id: updated.publicId,
       status: updated.status,
+      subject: updated.subject ?? updated.issue.slice(0, 80),
       createdAt: updated.createdAt.toISOString(),
     };
+  }
+
+  @Get('jobs/status')
+  getJobsStatus() {
+    return this.scheduledJobs.getStatus();
+  }
+
+  @Get('settings')
+  getPlatformSettings() {
+    return PLATFORM_POLICY;
   }
 
   @Post('jobs/inactivity/process-due')

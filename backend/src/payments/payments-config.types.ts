@@ -14,4 +14,6 @@ export interface PaymentsConfigDto {
   checkoutEnabled: boolean;
   razorpayKeyId?: string;
   webhookPath: string;
+  /** Currencies accepted by the active checkout provider (Razorpay India: INR only). */
+  supportedCheckoutCurrencies: string[];
 }

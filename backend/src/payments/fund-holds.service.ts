@@ -85,11 +85,21 @@ export class FundHoldsService {
     let providerIntentId: string;
     let targetTaskId: string | undefined;
 
+    const holdCurrency = (dto.currency ?? 'INR').toUpperCase();
+
     const psp = this.paymentProviders.resolve();
+    if (psp && !this.paymentsConfig.isCheckoutCurrencySupported(holdCurrency)) {
+      const supported =
+        this.paymentsConfig.getConfig().supportedCheckoutCurrencies.join(', ');
+      throw new BadRequestException({
+        code: 'PAYMENT_CURRENCY_NOT_SUPPORTED',
+        message: `Razorpay checkout does not support ${holdCurrency}. Supported: ${supported}. Indian Razorpay test accounts accept INR only.`,
+      });
+    }
     if (psp) {
       const intent = await psp.createPaymentIntent({
         amount: dto.amount,
-        currency: dto.currency ?? 'INR',
+        currency: holdCurrency,
         // Razorpay receipt max 40 chars; userId lives in notes.
         receipt: `${dto.purpose === 'task_reward' ? 'tr' : 'td'}_${Date.now()}`,
         notes: {

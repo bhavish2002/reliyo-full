@@ -11,12 +11,12 @@
 | Metric | Value |
 |--------|--------|
 | **Plan** | 8 sprints (0 → 8) |
-| **Completed** | Sprints **0–6**, **6.5** ✅ |
-| **In progress** | **Sprint 8** — E2E + deploy |
-| **Next sprint** | **Sprint 8** (E2E + deploy) |
-| **Workflow doc** | [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) v1.0 (2026-05-25) |
-| **Production readiness** | **Pre-production** (~75% of MVP build) |
-| **Last verified** | 2026-06-19 — `validate:inactivity`, `validate:dsp4`, `validate:quit-reaccept`, `validate:force-close`, `validate:task-ownership` OK |
+| **Completed** | Sprints **0–7**, **6.5** ✅ |
+| **In progress** | **Sprint 8** — 8A, 8D-P0, 8F, 8G, inactivity policy ✅; **8B E2E + 8C deploy** remaining |
+| **Next focus** | **8B** E2E suite → **8C** staging deploy |
+| **Workflow doc** | [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) (incl. deadline-gated inactivity) |
+| **Production readiness** | **Pre-production** (~80% build, ~70% launch-ready) |
+| **Last verified** | 2026-09-10 — dispute cooldown (DSP1 immediate, 48/24/12h, reset on done, hover remaining time) + DSP4 rework window (`max(deadline, review+10d)`) |
 
 ### Progress bar (implementation)
 
@@ -30,7 +30,7 @@ Sprint 5 ██████████ 100%  Razorpay + webhooks + checkout + l
 Sprint 6 ██████████ 100%  Ledger + settlement ✅
 Sprint 6.5 ██████████ 100%  Stabilization gate ✅
 Sprint 7 ██████████ 100%  Notifications + inactivity job + support/revenue APIs ← **complete**
-Sprint 8 ░░░░░░░░░░   0%  E2E + deploy
+Sprint 8 █████░░░░░  50%  8A/8D-P0/8F/8G + inactivity policy done; 8B E2E + 8C deploy remain
 ```
 
 ### Status legend
@@ -51,7 +51,9 @@ Reliyo is a **task marketplace MVP** (NestJS + React + PostgreSQL) with **locked
 
 **Money:** Reward and trust deposits use **`fund_holds`** with mock mode (dev) or **Razorpay Orders + Checkout + webhooks** (live). Payment status is **server-authoritative** — UI polls `GET /payments/fund-holds/:id` after checkout. **Sprint 5 complete:** Rule Zero + trust lock proven via smoke scripts and browser. **Sprint 6 complete:** double-entry ledger posts settlement on cancel, quit, accept-work, and admin force-close (payables recorded; PSP payout deferred).
 
-**Admin:** DSP4 resolution, force-close queue, cancelled-tasks audit, **notifications DB + API**, **support tickets API**, **revenue from ledger**, server **3-strike inactivity job** (`POST /admin/jobs/inactivity/process-due`).
+**Admin:** DSP4 resolution, force-close queue, cancelled-tasks audit, **notifications DB + API**, **support tickets API**, **revenue from ledger**, server **3-strike inactivity job** (hourly cron; defaults on in local dev/staging; startup backlog run; manual `POST /admin/jobs/inactivity/process-due` for QA).
+
+**Sprint 8 (partial):** Cron scheduling (8A), API-backed profile + read-only admin settings (8D-P0), support ticket UX (8F), admin cancelled-tasks nav removed (8G), **deadline-gated inactivity** (strikes only after effective deadline in `done`), **inactivity dev automation fix** (2026-08-20), **dynamic acceptor ratings**, **support form validation + public/dashboard split**. Remaining: E2E suite (8B), deploy + hardening (8C).
 
 ---
 
@@ -107,7 +109,55 @@ Reliyo is a **task marketplace MVP** (NestJS + React + PostgreSQL) with **locked
 
 ## Next action plan
 
-### Sprint 6 — Ledger + settlement ✅ (complete)
+> **Current focus (Sprint 8 ~50%):** 8A, 8D-P0, 8F, 8G, and inactivity policy are done. **Next:** commit milestone → **8B** E2E → **8C** deploy → staging sign-off. See [`NEXT-POA.md`](NEXT-POA.md).
+
+### Step 0 — Consolidate (0.5 day)
+
+| # | Action | Exit check |
+|---|--------|------------|
+| 1 | Commit Sprint 8 work (8A, 8D-P0, 8F, 8G, inactivity) | Clean working tree; migrations applied |
+| 2 | Manual sign-off using `validate:jobs-cron`, `validate:profile-settings`, `validate:support-tickets`, `validate:inactivity` | All PASS locally |
+
+### Step 1 — Sprint 8B: E2E critical paths (3–5 days) — **launch blocker**
+
+| # | Action | Deliverable |
+|---|--------|-------------|
+| 1 | Create `validate:production-paths.mjs` orchestrating existing scripts | One command runs all lifecycle/money paths |
+| 2 | Chain: happy path, quit, cancel, dispute, force-close, inactivity, authz, profile PATCH | Each path asserts task status + ledger where applicable |
+| 3 | Wire GitHub Actions: Postgres + API + run suite on PR/nightly | CI fails on regression |
+| 4 | (Optional) Playwright browser smoke for OTP → create → pay → close | Screenshots on failure |
+
+**Depends on:** 8A ✅, 8D-P0 ✅  
+**Blocks:** 8C staging sign-off
+
+### Step 2 — Sprint 8C: Deploy + hardening (3–5 days) — **launch blocker**
+
+| # | Action | Deliverable |
+|---|--------|-------------|
+| 1 | Deploy API to Render (Neon) via `render.yaml` | `INACTIVITY_JOB_ENABLED=true`, CORS, secrets |
+| 2 | Deploy frontend (Pages/Vercel/Render static) | `VITE_API_BASE_URL` → staging API |
+| 3 | Run `validate:production-paths` against **staging** | Green on hosted API |
+| 4 | Staging browser smoke: OTP → full lifecycle | Manual checklist pass |
+| 5 | Sentry (FE + BE), runbooks (`docs/runbooks/`), webhook security tests | Observability baseline |
+| 6 | Twilio OTP on staging (not dev fixed code) | Real auth on staging |
+
+**Blocks:** Production cutover
+
+### Step 3 — Staging sign-off → prod (2–3 days)
+
+Use [`NEXT-POA.md` staging sign-off checklist](NEXT-POA.md#staging-sign-off-checklist). After 48h green: prod cutover (separate DB, live Razorpay, DNS).
+
+### Step 4 — Post-launch polish (non-blocking)
+
+| Phase | Work |
+|-------|------|
+| **8D-P1** | Dynamic platform config, notification prefs enforcement, preferred-role toggle |
+| **8G.4** | Optional cancelled filter on Admin All Tasks |
+| **8E** | KYC + payout queue (E-KYC.1–7) — required before real bank transfers |
+
+---
+
+### Historical — Sprint 6 ✅ (complete)
 
 **Goal:** Double-entry ledger; post settlement on terminal lifecycle transitions per [`financial-settlement-spec.md`](sprint-0/financial-settlement-spec.md).
 
@@ -210,12 +260,12 @@ npm run validate:ledger-settlement -- 111111   # after script exists
 | B3 | ~~Admin suspend UI not wired~~ | — | ✅ `AdminUsers` + `GET /admin/users` (2026-05-26) | — |
 | B4 | ~~Guards not wired~~ | — | ✅ Resolved | — |
 | B5 | ~~Staging host undefined~~ | — | ✅ **Neon + Render** — [`STAGING-HOST.md`](sprint-5/STAGING-HOST.md), [`render.yaml`](../render.yaml) | Deploy when ready |
-| B6 | No server 3-strike inactivity job | — | ✅ `InactivityService` + `validate:inactivity`; cron → Sprint 8 |
+| B6 | No server 3-strike inactivity job | — | ✅ `InactivityService` + cron (8A) + deadline-gated anchor; `validate:inactivity` | — |
 | B7 | Force-close + DSP4 admin APIs missing | — | ✅ Resolved Sprint 7 |
 
 ### Workflow deviations (tracked)
 
-See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical-debt) — active key IDs: **D2** cancel→`closed` not hard delete, **D4** inactivity client-only, **D5** force-close UI-only.
+See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical-debt) — active key IDs: **D2** cancel→`closed` not hard delete, **D5** force-close UI-only (resolved). **D4** inactivity → ✅ server cron + deadline-gated anchor.
 
 ---
 
@@ -231,7 +281,7 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | **5** | Payments + webhooks | ✅ Done | 100% | Sprint 4 |
 | **6** | Ledger + settlement | ✅ Done | 100% | Sprint 5 ✅ |
 | **7** | Disputes + admin ops | ✅ Done | 100% | Sprint 4, 6 |
-| **8** | E2E + hardening + deploy | ⬜ Not started | 0% | Sprint 7 |
+| **8** | E2E + hardening + deploy | 🟡 In progress | 50% | Sprint 7 |
 
 ---
 
@@ -458,10 +508,33 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 
 ---
 
-## Sprint 8 — E2E + hardening + deploy ⬜ (0%)
+## Sprint 8 — E2E + hardening + deploy 🟡 (~50%)
+
+| Phase | Work | Status |
+|-------|------|--------|
+| **8A** | Cron for inactivity + webhook retry; `INACTIVITY_JOB_ENABLED`; `GET /admin/jobs/status` | ✅ |
+| **8D-P0** | `PATCH /me`, server preferences, read-only admin settings, Profile API-backed | ✅ |
+| **8F** | Dashboard Support button, authenticated ticket form, admin View Details / Mark Done | ✅ |
+| **8G** | Remove Cancelled Tasks admin nav/route; retain audit API | ✅ |
+| **Inactivity policy** | Deadline-gated anchor; extend blocked after `done`/`disputed`; UI + docs; **dev job defaults + startup run + pending-strike UI** (2026-08-20) | ✅ |
+| **8B** | E2E critical paths + CI (`validate:production-paths` or Playwright) | ⬜ |
+| **8C** | Deploy staging, Sentry, runbooks, security tests | ⬜ |
+| **8D-P1** | Dynamic platform config, notification prefs enforcement | ⬜ |
+
+### Sprint 8 checklist (launch blockers)
 
 | Task | Status |
 |------|--------|
+| 8A Cron / jobs registered | ✅ |
+| 8A `INACTIVITY_JOB_ENABLED` env flag | ✅ |
+| 8A Webhook retry processor | ✅ |
+| 8A `validate:jobs-cron` | ✅ |
+| 8D-P0 `PATCH /me` + Profile API-backed | ✅ |
+| 8D-P0 Admin settings read-only / honest | ✅ |
+| 8D-P0 Server user preferences | ✅ |
+| 8F Support ticket UX (dashboard + admin) | ✅ |
+| 8G Cancelled Tasks admin UI removed | ✅ |
+| Inactivity deadline-gating + extend guard | ✅ |
 | E2E critical paths vs `PRODUCT-WORKFLOW.md` | ⬜ |
 | Authz abuse + webhook replay tests | ⬜ |
 | Rate limits audit (OTP, sensitive routes) | 🟡 | OTP limits exist |
@@ -471,7 +544,7 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | Incident / payout / reconciliation runbooks | ⬜ |
 | Production deploy + monitoring | ⬜ |
 
-**Depends on:** Sprints 4–7
+**Depends on:** Sprints 4–7 ✅
 
 ---
 
@@ -505,6 +578,13 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | Sprint 6.5 force-close | `npm run validate:force-close -- 111111` | Pass | 2026-06-17 ✅ |
 | Sprint 7A DSP4 | `npm run validate:dsp4 -- 111111` | 3 paths | 2026-06-17 ✅ |
 | Sprint 7C quit policy | `npm run validate:quit-reaccept -- 111111` | Pass | 2026-06-17 ✅ |
+| Sprint 8A jobs cron | `npm run validate:jobs-cron -- 111111` | Schedules + admin status | 2026-08-11 ✅ |
+| Sprint 8D-P0 profile | `npm run validate:profile-settings -- 111111` | PATCH /me + admin settings | 2026-08-11 ✅ |
+| Sprint 8F support | `npm run validate:support-tickets -- 111111` | Public + auth tickets | 2026-08-11 ✅ |
+| Inactivity policy | `npm run validate:inactivity -- 111111` | Early done, progressive strikes, auto-close | 2026-08-20 ✅ |
+| Inactivity unit tests | `npm test -- --testPathPattern=inactivity.util.spec` | 8/8 pass | 2026-08-11 ✅ |
+| Inactivity job-env tests | `npm test -- --testPathPattern=job-env.spec` | Dev default on | 2026-08-20 ✅ |
+| Inactivity UI tests | `npm test -- src/lib/inactivityDisplay.test.ts` | Pending-strike label | 2026-08-20 ✅ |
 | Backend build | `cd backend && npm run build` | 0 errors | 2026-06-17 ✅ |
 
 ---
@@ -533,6 +613,9 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | 2026-06-15 | 6 | **Sprint 6 closed ✅:** `validate:ledger-settlement` 4/4 (cancel, quit, closed, force_closed); all exit criteria met. |
 | 2026-06-17 | 6.5 | **Sprint 6.5 closed ✅:** ownership, force-close reject, real-time refresh, regression scripts. |
 | 2026-06-19 | 7 | **Phase 1 cleanup:** removed client inactivity mutations, localStorage notification writes; admin dashboard/analytics + task detail dialog API-only. |
+| 2026-08-11 | 8 | **Sprint 8 partial (~50%):** 8A cron/jobs, 8D-P0 profile/settings, 8F support UX, 8G admin cleanup, deadline-gated inactivity policy; `validate:jobs-cron`, `validate:profile-settings`, `validate:support-tickets`, extended `validate:inactivity`. |
+| 2026-09-10 | 8 | **Dispute cooldown:** DSP1 immediate; later rounds 48h → 24h → 12h from last raise; resets when acceptor marks `done` again. Raise Dispute stays visible in `done`/`disputed` and greys out with remaining time on hover. Server `cooldowns.disputeAfter` persists across refresh/re-login; raise blocked with `DISPUTE_COOLDOWN_ACTIVE`. **DSP4 rework:** `max(effectiveDeadline, review+10d)` — no change when 10+ days remain; otherwise 10 days from review. `extendedDeadline` written only when the date moves. |
+| 2026-08-20 | 8 | **Inactivity fix:** job defaults on in dev/staging, startup `processDue`, UI pending-strike message (no stuck “1 minute”); `validate:inactivity` PASS. **Polish:** dynamic ratings, support ticket validation, public `/help-support` vs dashboard prefill split. |
 
 ---
 

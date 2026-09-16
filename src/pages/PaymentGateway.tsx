@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, CreditCard,
@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import DashboardLayout from "@/components/DashboardLayout";
 import { getCurrentUser } from "@/lib/auth";
-import { createFundHold, confirmFundHoldCheckout, getFundHold, pollFundHoldUntilSettled, type FundHold } from "@/lib/payments/api";
+import { createFundHold, confirmFundHoldCheckout, getFundHold, pollFundHoldUntilSettled, getPaymentsConfig, isCheckoutCurrencySupported, type FundHold, type PaymentsConfig } from "@/lib/payments/api";
 import { settleFundHold } from "@/lib/payments/flow";
 import {
   clearFundHoldIds,
@@ -34,6 +34,9 @@ function formatPaymentError(err: unknown, isAccept: boolean): string {
     }
     if (code === "TASK_ALREADY_ACCEPTED") {
       return "This task has already been accepted by another worker.";
+    }
+    if (code === "PAYMENT_CURRENCY_NOT_SUPPORTED") {
+      return err.message;
     }
     if (code === "TASK_ACTION_FORBIDDEN") {
       return isAccept
@@ -91,6 +94,15 @@ const PaymentGateway = () => {
   const [status, setStatus] = useState<PaymentStatus>("idle");
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [paymentsConfig, setPaymentsConfig] = useState<PaymentsConfig | null>(null);
+
+  useEffect(() => {
+    void getPaymentsConfig().then(setPaymentsConfig).catch(() => setPaymentsConfig(null));
+  }, []);
+
+  const currencySupported =
+    !paymentsConfig?.checkoutEnabled ||
+    isCheckoutCurrencySupported(currency, paymentsConfig);
 
   if (isAcceptFlow && !taskData?.id) {
     return <Navigate to="/browse-tasks" replace />;
@@ -494,9 +506,20 @@ const PaymentGateway = () => {
           Razorpay handles card/UPI/netbanking in checkout. Reliyo confirms payment via server webhooks — keep your webhook tunnel running in staging.
         </div>
 
+        {!currencySupported && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive mb-6">
+            <p className="font-medium">This currency is not supported by Razorpay checkout</p>
+            <p className="mt-1 text-destructive/90">
+              Indian Razorpay test accounts accept <strong>INR only</strong>. Create the task in India (INR)
+              or configure an international Razorpay merchant with{" "}
+              <code className="text-xs">RAZORPAY_SUPPORTED_CURRENCIES</code> on the server.
+            </p>
+          </div>
+        )}
+
         <Button
           className="w-full gap-2 h-12 text-base"
-          disabled={!selectedMethod}
+          disabled={!selectedMethod || !currencySupported}
           onClick={handlePay}
         >
           <Lock className="h-4 w-4" />

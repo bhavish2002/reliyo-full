@@ -57,9 +57,12 @@ model User {
   email         String?
   platformRole  PlatformRole   @default(user) @map("platform_role")
   preferredRole PreferredRole? @map("preferred_role")
-  suspendedAt   DateTime?      @map("suspended_at")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+  suspendedAt      DateTime?      @map("suspended_at")
+  profileBio       String?        @map("profile_bio")
+  profileLocation  String?        @map("profile_location")
+  preferences      Json?          @map("preferences")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
   refreshSessions RefreshSession[]
   otpChallenges   OtpChallenge[]
@@ -68,6 +71,7 @@ model User {
   taskEvents      TaskEvent[]
   fundHolds       FundHold[]
   notifications   AppNotification[]
+  supportTickets  SupportTicket[]
 
   @@map("users")
 }
@@ -265,6 +269,8 @@ model AppNotification {
 model SupportTicket {
   id        String   @id @default(cuid())
   publicId  String   @unique @map("public_id")
+  userId    String?  @map("user_id")
+  subject   String?
   name      String
   email     String
   phone     String
@@ -273,7 +279,10 @@ model SupportTicket {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([status, createdAt])
+  @@index([userId])
   @@map("support_tickets")
 }
 
