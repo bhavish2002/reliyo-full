@@ -6,6 +6,7 @@ import {
 import { JournalLineSide, type Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  FORCE_CLOSE_REQUESTOR_PENALTY_SHARE,
   FORCE_CLOSE_TRUST_PENALTY,
   LedgerAccountCode,
   PLATFORM_FEE_ON_REWARD,
@@ -146,7 +147,12 @@ export class LedgerService {
     const reward = this.rewardAmount(task);
     const trust = this.trustAmount(task);
     const penalty = this.money(trust * FORCE_CLOSE_TRUST_PENALTY);
+    const requestorPenaltyShare = this.money(
+      penalty * FORCE_CLOSE_REQUESTOR_PENALTY_SHARE,
+    );
+    const platformPenaltyShare = this.money(penalty - requestorPenaltyShare);
     const acceptorTrustReturn = this.money(trust - penalty);
+    const requestorRefund = this.money(reward + requestorPenaltyShare);
 
     await this.postJournal(tx, {
       idempotencyKey: this.key('force_closed', task.id),
@@ -155,7 +161,7 @@ export class LedgerService {
       referenceId: task.id,
       taskId: task.id,
       currency: task.currency,
-      description: `Force close: reward refunded to requestor; trust minus ${FORCE_CLOSE_TRUST_PENALTY * 100}% penalty`,
+      description: `Force close: full reward refund plus ${FORCE_CLOSE_REQUESTOR_PENALTY_SHARE * 100}% of the ${FORCE_CLOSE_TRUST_PENALTY * 100}% trust penalty to the requestor`,
       lines: [
         {
           accountCode: LedgerAccountCode.escrowReward,
@@ -166,7 +172,7 @@ export class LedgerService {
         {
           accountCode: LedgerAccountCode.payableRequestor,
           side: 'credit',
-          amount: reward,
+          amount: requestorRefund,
           userId: task.requestorId,
         },
         {
@@ -185,11 +191,15 @@ export class LedgerService {
               },
             ]
           : []),
-        {
-          accountCode: LedgerAccountCode.platformCompensationReserve,
-          side: 'credit',
-          amount: penalty,
-        },
+        ...(platformPenaltyShare > 0
+          ? [
+              {
+                accountCode: LedgerAccountCode.platformCompensationReserve,
+                side: 'credit' as const,
+                amount: platformPenaltyShare,
+              },
+            ]
+          : []),
       ],
     });
   }

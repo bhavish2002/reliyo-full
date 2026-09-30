@@ -11,10 +11,11 @@ export type TaskStatus =
   | "done"
   | "disputed"
   | "closed"
-  | "force_closed";
+  | "force_closed"
+  | "deleted";
 
 export const TASK_STATUSES: TaskStatus[] = [
-  "open", "committed", "in_progress", "done", "disputed", "closed", "force_closed",
+  "open", "committed", "in_progress", "done", "disputed", "closed", "force_closed", "deleted",
 ];
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -25,6 +26,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   disputed: "Disputed",
   closed: "Closed",
   force_closed: "Force Closed",
+  deleted: "Deleted",
 };
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -35,17 +37,19 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   disputed: "bg-[hsl(35,90%,50%)] text-white",
   closed: "bg-muted text-muted-foreground",
   force_closed: "bg-destructive/80 text-destructive-foreground",
+  deleted: "bg-muted text-muted-foreground",
 };
 
 // ── Allowed Transitions ─────────────────────────────────────────────────────
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-  open: ["committed", "closed"],
+  open: ["committed", "deleted"],
   committed: ["in_progress", "open", "force_closed"],
   in_progress: ["done", "force_closed"],
   done: ["closed", "disputed"],
   disputed: ["done", "closed", "force_closed"],
   closed: [],
   force_closed: [],
+  deleted: [],
 };
 
 export function canTransition(from: TaskStatus, to: TaskStatus): boolean {

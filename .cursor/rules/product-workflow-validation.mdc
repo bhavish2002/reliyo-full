@@ -21,8 +21,8 @@ Before **planning, coding, or reviewing** any feature that touches tasks, paymen
 ## Non-negotiables
 
 - **Rule Zero:** No `open` task without confirmed reward escrow.
-- **Seven statuses only:** `open`, `committed`, `in_progress`, `done`, `disputed`, `closed`, `force_closed`.
-- **Cooldowns server-side:** quit 2h, dispute 48h, force-close request 24h.
+- **Eight statuses:** `open`, `committed`, `in_progress`, `done`, `disputed`, `closed`, `force_closed`, `deleted`.
+- **Cooldowns server-side:** quit 2h, dispute none then 48h → 24h → 12h, force-close request 24h.
 - **No client-trusted roles** for authorization.
 
 ## Current priority (Sprint 4 polish)

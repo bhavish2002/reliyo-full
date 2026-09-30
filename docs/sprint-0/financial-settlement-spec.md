@@ -1,8 +1,12 @@
 # Financial Settlement Spec
 
-Version: `v1.0`  
+Version: `v1.2`  
 Owner: Finance + Backend Lead  
 Status: LOCKED
+
+> **v1.2 (2026-09-24):** force-close requestor refund is the full reward plus 70% of the 3% trust-deposit penalty. Transaction status follows deposit, refund, and payout progress and shows "No Further Settlements" only after a deleted, closed, or force-closed task is fully settled.
+>
+> **v1.1 (2026-09-23):** delete-before-accept settles as `Deleted` with a full reward refund. Quit within 2h initiates a full trust-deposit refund. Acceptor net receipt is not a guaranteed displayed amount (platform fee plus variable payment-gateway charges).
 
 ## 1) Scope
 
@@ -49,9 +53,10 @@ Trigger: admin-approved force close or DSP4 admin close outcome
 
 Target outcome:
 
-- requestor receives full reward refund
-- acceptor trust deposit returned minus 3% of trust deposit penalty
-- compensation/penalty mapped via `platform_compensation_reserve`
+- requestor receives a full reward refund plus **70% of the trust-deposit penalty**
+- trust-deposit penalty remains **3% of the trust deposit**
+- acceptor receives the trust deposit minus that penalty
+- the remaining **30%** of the penalty is credited to `platform_compensation_reserve`
 
 ### 4.3 Quit Within 2h
 
@@ -59,17 +64,20 @@ Trigger: `Committed` -> `Open` via quit within cooldown
 
 Target outcome:
 
-- trust deposit fully refunded to acceptor
+- full trust-deposit refund initiated to the acceptor
 - reward remains funded for task reopening
 
-### 4.4 Cancel Before Acceptance
+### 4.4 Delete Before Acceptance
 
-Trigger: requestor cancels while task still `Open`
+Trigger: requestor deletes while task is still `Open` (no acceptor)
 
 Target outcome:
 
-- full reward refund to requestor
-- task archived with retention policy
+- status becomes `Deleted`
+- full reward refund initiated to the requestor
+- task archived with retention policy (`cancelledAt`)
+
+The amount an acceptor ultimately receives on a normal close is the reward minus the platform fee, and may also be reduced by variable payment-gateway charges at payout. The product does not display a guaranteed acceptor payout.
 
 ## 5) Ledger Requirements
 

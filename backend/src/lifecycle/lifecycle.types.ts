@@ -3,13 +3,14 @@ import type { TaskStatus } from '@prisma/client';
 export type TaskContextRole = 'requestor' | 'acceptor' | 'admin' | 'none';
 
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
-  open: ['committed', 'closed'],
+  open: ['committed', 'deleted'],
   committed: ['in_progress', 'open', 'force_closed'],
   in_progress: ['done', 'force_closed'],
   done: ['closed', 'disputed'],
   disputed: ['done', 'closed', 'force_closed'],
   closed: [],
   force_closed: [],
+  deleted: [],
 };
 
 export const QUIT_GRACE_MS = 2 * 60 * 60 * 1000;

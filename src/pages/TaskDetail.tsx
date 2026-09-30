@@ -15,7 +15,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   type Task, type TaskStatus, type TimelineEntry, type AuthorRole,
   STATUS_COLORS, STATUS_LABELS,
-  PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT, QUIT_GRACE_HOURS,
+  TRUST_DEPOSIT_PERCENT,
   getEffectiveDeadline,
 } from "@/lib/taskTypes";
 import { getCurrentUser } from "@/lib/auth";
@@ -340,8 +340,6 @@ const TaskDetail = () => {
     );
   }
 
-  const fee = parseFloat((task.reward * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
-  const acceptorPayout = parseFloat((task.reward - fee).toFixed(2));
   const trustDeposit = parseFloat((task.reward * (TRUST_DEPOSIT_PERCENT / 100)).toFixed(2));
   const isOwner =
     task.createdById === currentUser?.id || task.createdBy === CURRENT_USER;
@@ -755,21 +753,10 @@ const TaskDetail = () => {
 
             <Card className="rounded-xl">
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Info className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-bold text-foreground">Pay Breakdown</h3>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span>Total Reward</span><span>{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{task.currencySymbol || "₹"}{fee.toFixed(2)}</span></div>
-                  <div className="flex justify-between font-bold border-t pt-2 mt-2">
-                    <span>Acceptor Payout</span>
-                    <span className="text-[hsl(var(--success))]">{task.currencySymbol || "₹"}{acceptorPayout}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>Trust Deposit Locked (10%)</span>
-                    <span>{task.currencySymbol || "₹"}{trustDeposit}</span>
-                  </div>
+                <h3 className="text-sm font-bold text-foreground mb-3">Reward locked</h3>
+                <div className="flex justify-between text-sm font-semibold">
+                  <span>Reward amount</span>
+                  <span>{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span>
                 </div>
               </CardContent>
             </Card>
@@ -822,18 +809,9 @@ const TaskDetail = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                <Info className="h-4 w-4" /> Pay Breakdown
-              </div>
-              <div className="flex justify-between text-sm py-2">
-                <span>Total Deposit</span>
-                <span className="font-semibold">{task.currencySymbol || "₹"}{trustDeposit.toFixed(2)}</span>
-              </div>
-            </div>
-            <div className="flex justify-between text-sm font-bold border-t pt-3">
-              <span>Total Payout</span>
-              <span className="text-lg">{task.currencySymbol || "₹"}{trustDeposit.toFixed(2)}</span>
+            <div className="flex justify-between text-sm font-semibold">
+              <span>Trust deposit to lock</span>
+              <span>{task.currencySymbol || "₹"}{trustDeposit.toFixed(2)}</span>
             </div>
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <p className="text-sm text-muted-foreground">

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { LedgerService } from '../ledger/ledger.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import * as TaskNotify from '../notifications/task-notifications';
 import {
   computeDueStrikeLevel,
   computeInactivityAnchor,
@@ -22,6 +24,7 @@ export class InactivityService {
     private readonly prisma: PrismaService,
     private readonly lifecycle: LifecycleService,
     private readonly ledger: LedgerService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async processDue(): Promise<{ processed: number; strikes: number; closed: number }> {
@@ -131,6 +134,10 @@ export class InactivityService {
         autoClosed = true;
       }
     });
+
+    if (autoClosed) {
+      void TaskNotify.notifyTaskClosed(this.notifications, task, 'closed');
+    }
 
     return { strikesAdded, autoClosed };
   }

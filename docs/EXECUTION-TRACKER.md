@@ -16,7 +16,7 @@
 | **Next focus** | **8B** E2E suite → **8C** staging deploy |
 | **Workflow doc** | [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) (incl. deadline-gated inactivity) |
 | **Production readiness** | **Pre-production** (~80% build, ~70% launch-ready) |
-| **Last verified** | 2026-09-10 — dispute cooldown (DSP1 immediate, 48/24/12h, reset on done, hover remaining time) + DSP4 rework window (`max(deadline, review+10d)`) |
+| **Last verified** | 2026-09-22 — admin Escalated auto-flag Closed DSP4 rows + independent Flag/DSP4 Status filters (unit tests) |
 
 ### Progress bar (implementation)
 
@@ -614,6 +614,7 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | 2026-06-17 | 6.5 | **Sprint 6.5 closed ✅:** ownership, force-close reject, real-time refresh, regression scripts. |
 | 2026-06-19 | 7 | **Phase 1 cleanup:** removed client inactivity mutations, localStorage notification writes; admin dashboard/analytics + task detail dialog API-only. |
 | 2026-08-11 | 8 | **Sprint 8 partial (~50%):** 8A cron/jobs, 8D-P0 profile/settings, 8F support UX, 8G admin cleanup, deadline-gated inactivity policy; `validate:jobs-cron`, `validate:profile-settings`, `validate:support-tickets`, extended `validate:inactivity`. |
+| 2026-09-24 | 8 | **Transaction status:** View Status tracks reward deposit, trust deposit, refunds, and reward payout against task status and the settlement journal. "No Further Settlements" appears only after `deleted`, `closed`, or `force_closed` is fully settled. Force-close requestor refund is the full reward plus 70% of the 3% trust-deposit penalty. |
 | 2026-09-10 | 8 | **Dispute cooldown:** DSP1 immediate; later rounds 48h → 24h → 12h from last raise; resets when acceptor marks `done` again. Raise Dispute stays visible in `done`/`disputed` and greys out with remaining time on hover. Server `cooldowns.disputeAfter` persists across refresh/re-login; raise blocked with `DISPUTE_COOLDOWN_ACTIVE`. **DSP4 rework:** `max(effectiveDeadline, review+10d)` — no change when 10+ days remain; otherwise 10 days from review. `extendedDeadline` written only when the date moves. |
 | 2026-08-20 | 8 | **Inactivity fix:** job defaults on in dev/staging, startup `processDue`, UI pending-strike message (no stuck “1 minute”); `validate:inactivity` PASS. **Polish:** dynamic ratings, support ticket validation, public `/help-support` vs dashboard prefill split. |
 

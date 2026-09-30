@@ -12,6 +12,9 @@ export const DISPUTE_COOLDOWN_HOURS_AFTER_FIRST = [48, 24, 12] as const;
 export const FORCE_CLOSE_REQUEST_COOLDOWN_HOURS = 24;
 export const INACTIVITY_STRIKE_DAYS = [3, 6, 8] as const;
 
+export const REWARD_AMOUNT_DISCLAIMER =
+  "The final reward amount payable is subject to applicable fees and deductions, including the Platform fee and any applicable transaction charges.";
+
 export const TERMS_CONSENT_LABEL =
   "I have read and agree to these terms. I understand that locking funds authorises Reliyo to hold and settle them according to this policy.";
 
@@ -20,9 +23,10 @@ export const LOCK_REWARD_MONETARY = {
   bullets: [
     `You will lock **100% of the task reward** shown above. Funds are **platform-held** until settlement — they are not paid to any user until the task reaches a terminal status.`,
     `On **successful completion** (requestor accepts work): the acceptor receives the reward **minus a ${PLATFORM_FEE_PERCENT}% platform fee**. Your locked reward is released to the acceptor through the platform ledger (bank transfer to acceptors is subject to separate verification when enabled).`,
-    `If you **cancel the task before any acceptor** accepts it: your **full reward is refunded** to you. No platform fee applies.`,
-    `If the task is **force-closed** (admin-approved requestor force-close or DSP4 admin closure): your **full reward is refunded** to you.`,
+    `If you **delete the task before any acceptor** accepts it: the task moves to **Deleted** and a **full refund of the locked reward** is initiated. No platform fee applies.`,
+    `If the task is **force-closed** (admin-approved requestor force-close or DSP4 admin closure): you receive a **full reward refund plus 70% of the acceptor's trust-deposit penalty**.`,
     `The ${PLATFORM_FEE_PERCENT}% platform fee is **not deducted when you lock the reward** — it applies only on normal close when paying the acceptor.`,
+    REWARD_AMOUNT_DISCLAIMER,
   ],
 };
 
@@ -45,9 +49,10 @@ export const TRUST_DEPOSIT_MONETARY = {
   bullets: [
     `You will lock a **trust deposit equal to ${TRUST_DEPOSIT_PERCENT}% of the task reward** (amount shown above). This is **separate from the task reward**, which is locked by the requestor.`,
     `On **successful completion** (requestor accepts work): your trust deposit is **refunded in full**. The acceptor receives the task reward minus the ${PLATFORM_FEE_PERCENT}% platform fee — not your deposit.`,
-    `If you **quit within ${QUIT_GRACE_HOURS} hours** of accepting: your trust deposit is **fully refunded** and the task returns to Open for other acceptors.`,
-    `On **force-close** (admin-approved requestor force-close or DSP4 admin closure): you **forfeit the trust deposit** for settlement. The requestor receives a **full reward refund**; a **${FORCE_CLOSE_TRUST_FEE_PERCENT}% platform fee** is taken from the trust deposit, with the remainder applied per platform settlement rules (including compensation to the requestor where applicable).`,
+    `If you **quit within ${QUIT_GRACE_HOURS} hours** of accepting, while the task is still **Committed**: your trust deposit is **fully refunded** and the task returns to Open. You cannot accept that same task again.`,
+    `On **force-close** (admin-approved requestor force-close or DSP4 admin closure): a **${FORCE_CLOSE_TRUST_FEE_PERCENT}% penalty** is taken from your trust deposit. You receive the remainder. The requestor receives a **full reward refund plus 70% of that penalty**.`,
     `Your deposit is **platform-held** until settlement. Locking the deposit is required to accept the task.`,
+    REWARD_AMOUNT_DISCLAIMER,
   ],
 };
 
@@ -83,12 +88,12 @@ export const MAIN_TERMS_SECTIONS = [
   {
     title: "4. Tasks, rewards, and platform-held funds",
     content:
-      "Tasks move through defined statuses: Open → Committed → In Progress → Done → Closed / Disputed / Force Closed. **Reward funds** must be locked before a task is published. **Trust deposits** (10% of reward) must be locked before an acceptor is committed. All amounts are **platform-held** until settlement events defined in our workflow. Acceptor payouts are recorded in-platform; **bank transfers require separate verification** when that capability is enabled.",
+      "Tasks move through defined statuses: Open → Committed → In Progress → Done → Closed / Disputed / Force Closed / Deleted. **Deleted** applies only when a requestor removes a task before it is accepted. **Reward funds** must be locked before a task is published. **Trust deposits** (10% of reward) must be locked before an acceptor is committed. All amounts are **platform-held** until settlement events defined in our workflow. Acceptor payouts are recorded in-platform; **bank transfers require separate verification** when that capability is enabled.",
   },
   {
     title: "5. Fees and settlement (monetary rules)",
     content:
-      "**Normal close:** acceptor receives reward minus **5% platform fee**; trust deposit **fully refunded** to acceptor. **Force close:** requestor receives **full reward refund**; acceptor trust deposit is forfeited for settlement including a **3% platform fee** on the trust deposit. **Cancel open task (before acceptor):** **full reward refund** to requestor. **Quit within 2 hours of accept:** **full trust refund** to acceptor. Fees and refunds are implemented via our ledger; displayed amounts follow each task’s currency.",
+      "**Normal close:** acceptor reward payout is initiated (reward minus the **platform fee**); trust deposit **fully refunded** to acceptor. **Force close:** requestor receives a **full reward refund plus 70% of the acceptor's trust-deposit penalty** (the penalty is **3% of the trust deposit**); the acceptor receives the trust deposit minus that penalty. **Delete before acceptance:** task status becomes **Deleted** and a **full reward refund** is initiated for the requestor. **Quit within 2 hours of accept (Committed → Open):** a **full trust-deposit refund** is initiated for the acceptor. The final reward amount payable is subject to applicable fees and deductions, including the Platform fee and any applicable transaction charges. Fees and refunds are implemented via our ledger; displayed amounts follow each task’s currency.",
   },
   {
     title: "6. Deadlines, extensions, and force closure",

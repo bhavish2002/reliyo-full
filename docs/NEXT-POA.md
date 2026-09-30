@@ -3,7 +3,7 @@
 > **Purpose:** Single tracking document for everything remaining before production launch.  
 > **Consolidates:** Pending profile/settings work, Sprint 7.5 UI polish status, and Sprint 8A–8E.  
 > **Canonical workflow:** [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) · **Sprint history:** [`EXECUTION-TRACKER.md`](EXECUTION-TRACKER.md) · **Deploy & infra:** [`PRODUCTION-DEPLOYMENT-GUIDE.md`](PRODUCTION-DEPLOYMENT-GUIDE.md)  
-> **Last updated:** 2026-09-10 (dispute cooldown: DSP1 immediate then 48/24/12h, button stays greyed with hover remaining time; DSP4 rework deadline untouched when 10+ days remain)
+> **Last updated:** 2026-09-24 (transaction status timeline; force-close requestor share of trust penalty)
 
 ---
 
@@ -19,6 +19,7 @@
 | **Inactivity policy** | **Done** — strikes start after effective deadline in `done`; extend blocked after `done`/`disputed` |
 | **Dispute cooldown** | **Done** — DSP1 immediate; 48/24/12h after later raises; resets on acceptor `done`; button stays greyed with hover remaining time |
 | **DSP4 rework deadline** | **Done** — `max(deadline, review + 10 days)`; untouched when 10+ days already remain |
+| **Admin Escalated filters** | **Done** — Closed DSP4 rows auto-Flagged (display-only); Flag + DSP4 Status filters independent |
 | **KYC / payouts** | DR-007 locked; **detailed plan in 8E (E-KYC.1–7)** — not implemented |
 | **Inactivity job** | Hourly cron; **defaults on** in local dev/staging (`NODE_ENV` ≠ production/test); runs once at API startup; strikes after **effective deadline** in `done`; `validate:inactivity` PASS |
 | **Ratings (acceptor)** | **Done** — dynamic from DB (`GET /me`, `GET /users/:id/rating`, task DTOs); Profile + Task Detail + dashboard header |
@@ -574,3 +575,4 @@ flowchart TD
 | 2026-08-20 | **Ratings** — dynamic acceptor ratings across Profile, Task Detail, Browse; `GET /users/:id/rating`; refresh on task close |
 | 2026-09-10 | **Dispute cooldown** — DSP1 immediate; 48h → 24h → 12h after later raises; cooldown resets when acceptor marks `done` again; Raise Dispute stays visible and greyed with remaining time on hover; `cooldowns.disputeAfter` persists across refresh/re-login |
 | 2026-09-10 | **DSP4 rework deadline** — do not modify when 10+ days remain from review; otherwise set to 10 days from review date (passed deadline, or remaining < 10 days). `extendedDeadline` written only when the date moves |
+| 2026-09-24 | **Transaction status** — View Status follows reward deposit, trust deposit, quit refund, delete/force-close refund, and close payout. "No Further Settlements" only after `deleted` / `closed` / `force_closed` settlement is recorded. Force-close requestor credit is full reward + 70% of the 3% trust penalty |

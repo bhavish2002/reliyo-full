@@ -38,9 +38,23 @@ export async function notifyTaskQuit(
     taskDisplayId: task.publicId,
     taskTitle: task.title,
     title: 'Acceptor quit task',
-    message: 'The acceptor quit within the grace window. The task is open again.',
+    message: 'The acceptor quit within the grace window. The task is open again. Their trust deposit refund has been initiated.',
     idempotencyKey: `${task.id}:acceptor_quit:requestor`,
   });
+  if (task.acceptorId) {
+    await notifications.createIfNew({
+      userId: task.acceptorId,
+      targetRole: 'acceptor',
+      type: 'trust_refund',
+      priority: 'high',
+      taskId: task.id,
+      taskDisplayId: task.publicId,
+      taskTitle: task.title,
+      title: 'Trust deposit refund initiated',
+      message: `You quit "${task.title}" within the 2-hour window. A full refund of your trust deposit has been initiated.`,
+      idempotencyKey: `${task.id}:quit_trust_refund:acceptor`,
+    });
+  }
 }
 
 export async function notifyDisputeRaised(
@@ -96,6 +110,57 @@ export async function notifyRatingRequired(
     message: 'Please rate the acceptor to close this task.',
     idempotencyKey: `${task.id}:rating_required:requestor`,
   });
+}
+
+export async function notifyTaskClosed(
+  notifications: NotificationsService,
+  task: TaskWithUsers,
+  kind: 'closed' | 'force_closed' | 'deleted' = 'closed',
+) {
+  const title =
+    kind === 'force_closed'
+      ? 'Task force-closed'
+      : kind === 'deleted'
+        ? 'Task deleted'
+        : 'Task closed';
+  const requestorMessage =
+    kind === 'deleted'
+      ? `"${task.title}" was deleted. A full refund of the locked reward has been initiated.`
+      : kind === 'force_closed'
+        ? `"${task.title}" was force-closed. Settlement has been initiated.`
+        : `"${task.title}" is closed. Settlement has been initiated.`;
+  const acceptorMessage =
+    kind === 'force_closed'
+      ? `"${task.title}" was force-closed. Settlement has been initiated.`
+      : `"${task.title}" is closed. Settlement has been initiated.`;
+
+  await notifications.createIfNew({
+    userId: task.requestorId,
+    targetRole: 'requestor',
+    type: kind === 'deleted' ? 'task_deleted' : 'task_closed',
+    priority: 'high',
+    taskId: task.id,
+    taskDisplayId: task.publicId,
+    taskTitle: task.title,
+    title,
+    message: requestorMessage,
+    idempotencyKey: `${task.id}:${kind}:requestor`,
+  });
+
+  if (task.acceptorId && kind !== 'deleted') {
+    await notifications.createIfNew({
+      userId: task.acceptorId,
+      targetRole: 'acceptor',
+      type: 'task_closed',
+      priority: 'high',
+      taskId: task.id,
+      taskDisplayId: task.publicId,
+      taskTitle: task.title,
+      title,
+      message: acceptorMessage,
+      idempotencyKey: `${task.id}:${kind}:acceptor`,
+    });
+  }
 }
 
 export async function notifyForceCloseRequested(

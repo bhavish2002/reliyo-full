@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   type Task, type TaskStatus, type TimelineEntry, type AuthorRole, type FileAttachmentData,
-  STATUS_COLORS, STATUS_LABELS, PLATFORM_FEE_PERCENT, TRUST_DEPOSIT_PERCENT,
+  STATUS_COLORS, STATUS_LABELS, TRUST_DEPOSIT_PERCENT,
   ROLE_LABELS, getEffectiveDeadline,
 } from "@/lib/taskTypes";
 import { format } from "date-fns";
@@ -17,7 +17,7 @@ import { ApiClientError } from "@/lib/api/client";
 import { addTaskComment, getTaskDetail } from "@/lib/tasks/api";
 import { toast } from "@/hooks/use-toast";
 import {
-  AlertTriangle, Lock, Info, Star, MessageSquare, Settings, Shield, Bell,
+  AlertTriangle, Lock, Star, MessageSquare, Settings, Shield, Bell,
   Clock, Send, Paperclip, FileIcon, ImageIcon, X, Download,
 } from "lucide-react";
 
@@ -109,8 +109,6 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
   if (!task) return null;
 
   const status = task.status as TaskStatus;
-  const fee = parseFloat((task.reward * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
-  const acceptorPayout = parseFloat((task.reward - fee).toFixed(2));
   const trustDeposit = parseFloat((task.reward * (TRUST_DEPOSIT_PERCENT / 100)).toFixed(2));
   const effectiveDeadline = getEffectiveDeadline(task);
   const canAdminComment = status === "disputed";
@@ -245,17 +243,10 @@ const AdminTaskDetailDialog = ({ task, open, onOpenChange }: AdminTaskDetailDial
               </div>
 
               <div className="rounded-xl border bg-card p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Info className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-bold text-foreground">Pay Breakdown</h3>
-                </div>
+                <h3 className="text-sm font-bold text-foreground mb-3">Amounts locked</h3>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span>Total Reward</span><span>{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>Platform Fee ({PLATFORM_FEE_PERCENT}%)</span><span className="text-destructive">-{task.currencySymbol || "₹"}{fee.toFixed(2)}</span></div>
-                  <div className="flex justify-between font-bold border-t pt-2 mt-2">
-                    <span>Acceptor Payout</span>
-                    <span className="text-[hsl(var(--success))]">{task.currencySymbol || "₹"}{acceptorPayout.toFixed(2)}</span>
-                  </div>
+                  <div className="flex justify-between"><span>Reward</span><span>{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span>Trust deposit</span><span>{task.currencySymbol || "₹"}{trustDeposit.toFixed(2)}</span></div>
                 </div>
               </div>
 

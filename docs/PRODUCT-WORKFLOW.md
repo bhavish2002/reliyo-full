@@ -51,7 +51,7 @@ If this document and Sprint 0 specs disagree on **status names, transitions, or 
 Use this checklist for every PR / feature:
 
 - [ ] **Rule Zero:** No task enters `open` without confirmed reward escrow.
-- [ ] **Status set:** Only the seven valid statuses are used (no `draft`, `completed`, etc.).
+- [ ] **Status set:** Only the eight valid statuses are used (`open`, `committed`, `in_progress`, `done`, `disputed`, `closed`, `force_closed`, `deleted`). No `draft` or `completed`.
 - [ ] **Transitions:** Change matches the [status contract](#task-status-contract-do-not-deviate) and Sprint 0 spec.
 - [ ] **Cooldowns:** Quit (2h), Raise Dispute (none for DSP1, then 48h → 24h → 12h; resets when acceptor returns work to `done`), Request Force Close (24h) enforced **server-side**.
 - [ ] **Roles:** Authorization uses server-derived task context (requestor / acceptor / admin), not client input.
@@ -175,8 +175,9 @@ From **My Tasks → Created**, opening a task shows:
 ### Quit (committed only)
 
 - Allowed within **2 hours** of acceptance.
-- Trust deposit **fully refunded**; task returns to **`open`** in browse.
+- Trust deposit **fully refunded** (refund initiated on the ledger); task returns to **`open`** in browse.
 - After 2 hours: quit disabled (“Quit Expired”).
+- After quitting, that acceptor cannot accept the same task again.
 
 ---
 
@@ -184,7 +185,7 @@ From **My Tasks → Created**, opening a task shows:
 
 ### Valid statuses
 
-`open` · `committed` · `in_progress` · `done` · `disputed` · `closed` · `force_closed`
+`open` · `committed` · `in_progress` · `done` · `disputed` · `closed` · `force_closed` · `deleted`
 
 ### Cooldowns (UI + server)
 
@@ -200,9 +201,9 @@ From **My Tasks → Created**, opening a task shows:
 stateDiagram-v2
   [*] --> open: reward escrow OK
   open --> committed: accept + trust escrow
-  open --> closed: delete before accept (refund reward)
+  open --> deleted: delete before accept (full reward refund)
   committed --> in_progress: acceptor first comment
-  committed --> open: quit within 2h
+  committed --> open: quit within 2h (full trust refund)
   committed --> force_closed: admin approves force close
   in_progress --> done: acceptor Mark as Done
   in_progress --> force_closed: admin approves force close
@@ -213,6 +214,7 @@ stateDiagram-v2
   disputed --> force_closed: admin paths
   closed --> [*]
   force_closed --> [*]
+  deleted --> [*]
 ```
 
 ---
@@ -226,7 +228,7 @@ stateDiagram-v2
 | Actor | Actions |
 |-------|---------|
 | Acceptor (not requestor) | Accept → `committed` (after trust payment) |
-| Requestor | Delete before accept → refund reward, remove task |
+| Requestor | Delete before accept → `deleted`, full reward refund initiated |
 
 ---
 
@@ -237,7 +239,7 @@ stateDiagram-v2
 | Actor | Actions |
 |-------|---------|
 | Acceptor | First comment → `in_progress` (work start signal) |
-| Acceptor | Quit within 2h → trust refunded, `open` |
+| Acceptor | Quit within 2h → full trust-deposit refund initiated, `open` |
 | Requestor | **Send Alert** (system timeline message) |
 | Requestor | **Request Force Close** → admin queue; stays `committed` until admin acts |
 
@@ -329,8 +331,10 @@ Before the deadline passes, the requestor is in a **review period**—no inactiv
 
 **System settlement:**
 
-- Refund requestor: **full reward**
-- Acceptor compensation from trust: **trust deposit − 3% platform fee** (remainder to acceptor per policy)
+- Refund requestor: **full reward**, plus **70% of the acceptor's trust-deposit penalty**
+- Trust-deposit penalty: **3% of the trust deposit**
+- Acceptor receives the trust deposit minus that penalty
+- Platform retains the remaining **30%** of the penalty
 
 ---
 
@@ -339,11 +343,22 @@ Before the deadline passes, the requestor is in a **review period**—no inactiv
 | Event | Platform fee | Notes |
 |-------|----------------|-------|
 | Normal close (`closed`) | 5% of **reward** on payout to acceptor | Trust deposit fully refunded |
-| Force close (`force_closed`) | 3% of **trust deposit** | Reward refunded to requestor |
+| Force close (`force_closed`) | 3% of **trust deposit** (penalty) | Requestor: full reward refund **plus 70% of that penalty**. Acceptor: trust deposit minus the penalty. Platform keeps 30% of the penalty. |
 | Delete open task | None on reward | Full reward refund |
 | Quit within 2h | None | Full trust refund |
 
-All amounts are **platform-held** until settlement (Sprint 6 ledger).
+All amounts are **platform-held** until settlement (Sprint 6 ledger). Bank payout is not a separate status yet: a refund or payout step is **successful** when its ledger journal is recorded.
+
+### Transaction status (Dashboard → Transactions → View Status)
+
+The timeline follows the signed-in user's own deposit, not task comments.
+
+| User | Steps |
+|------|--------|
+| Requestor | Reward Deposit Initiated → Reward Deposit Successful (task becomes `open`). Then, on `deleted` or `force_closed`, Refund Initiated → Refund Successful. On `closed`, Reward Release Initiated → Reward Release Successful. |
+| Acceptor | Trust Deposit Initiated → Trust Deposit Successful (task becomes `committed` and leaves Browse). Quit within 2 hours: Refund Initiated → Refund Successful, and the task returns to `open`. On `closed`: Reward Payout Initiated → Reward Payout Successful. |
+
+**No Further Settlements** is shown only when the task is `deleted`, `closed`, or `force_closed` and the matching settlement journal exists. A terminal task whose journal is not recorded yet stays on the initiated step.
 
 ---
 
@@ -404,7 +419,7 @@ The **first dispute has no cooldown** — the requestor may raise it as soon as 
 | **All Tasks** | All statuses; view details |
 | **Users** | List; **suspend** for ToS violations |
 | **Disputes** | DSP1–DSP3 view-only |
-| **Escalated** | DSP4; admin can update status |
+| **Escalated** | DSP4; admin can update status. Closed tasks still listed here are **Flagged** (display-only). Filters: All / Flagged / Unflagged, and DSP4 Status (OPEN / ADMIN CLOSED / RESOLVED VALID / RESOLVED INVALID). |
 | **Close Requests** | Approve/reject requestor force-close |
 | **Revenue** | Platform revenue stats |
 | **Analytics** | Task distribution / performance |
@@ -416,7 +431,7 @@ The **first dispute has no cooldown** — the requestor may raise it as soon as 
 
 - **All Tasks:** Task ID, Title, Requestor, Acceptor, Status, Reward, Created
 - **Users:** User, Tasks Created, Tasks Accepted, Onboarded On, Inactivity Tracker, Status
-- **Disputes / Escalated:** Dispute ID, Task, Requestor, Acceptor, Level, Raised, Status (+ DSP4 Status for escalated)
+- **Disputes / Escalated:** Dispute ID, Task, Requestor, Acceptor, Level, Raised, Status (+ DSP4 Status, Flagged for escalated). Escalated filters: Flag (All / Flagged / Unflagged) and DSP4 Status (All / OPEN / ADMIN CLOSED / RESOLVED VALID / RESOLVED INVALID), applied independently.
 - **Close Requests:** Task ID, Title, Requestor, Acceptor, Task Status, Requested
 - **Support:** Ticket ID, User, Subject, Status, Created Date, Actions (View Details, Mark Done)
 
@@ -454,7 +469,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 |---------------|--------|-------|
 | Rule Zero (reward before `open`) | ✅ | `fund_holds` + `fundHoldId` on create |
 | Trust 10% on accept | ✅ | `trust_deposit` hold + `accept` API |
-| Status enum (7 values) | ✅ | Prisma `TaskStatus` |
+| Status enum (8 values) | ✅ | Prisma `TaskStatus`, including `deleted` |
 | Transitions + cooldowns | ✅ | `lifecycle.service.ts`, `lifecycle.types.ts` |
 | `availableActions` API | ✅ | Returned on task detail |
 | accept / quit / mark-done / accept-work / dispute | ✅ | `tasks.service.ts` |
@@ -463,7 +478,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | Send Alert | 🟡 | Via `POST /tasks/:id/comments` with `entryType=alert` |
 | Request Force Close | ✅ | `POST /tasks/:id/force-close-request` + admin queue |
 | 3-strike inactivity | ✅ | `InactivityService` + hourly cron when `INACTIVITY_JOB_ENABLED` (Sprint 8A) |
-| Delete open task (remove + refund) | 🟡 | `DELETE` → `closed` + `cancelledAt` + `cancelledById`; ledger `cancel_open` |
+| Delete open task (remove + refund) | ✅ | `DELETE` → `deleted` + `cancelledAt`; ledger `cancel_open` full reward refund |
 
 ### Task lifecycle (frontend)
 
@@ -502,8 +517,8 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | ID | Deviation | Target fix |
 |----|-----------|------------|
 | D1 | TaskTimeline drives status via localStorage | ✅ Phase 1 — API-backed when authenticated |
-| D2 | Cancel uses status `closed` + `cancelledAt` vs “removed” open task | Ledger refund via `cancel_open` (Sprint 6); archival label still `closed` |
-| D3 | `open` → `closed` allowed in `VALID_TRANSITIONS` for cancel | Document as cancel path; consider distinct settlement type |
+| D2 | Delete-before-accept used status `closed` | ✅ `deleted` + ledger `cancel_open` full reward refund |
+| D3 | `open` → `closed` was the cancel edge | ✅ `open` → `deleted` only |
 | D4 | 3-strike inactivity client-only | ✅ Server job + cron (`INACTIVITY_JOB_ENABLED`) |
 | D5 | Force-close request + admin approval | ✅ Sprint 7 — dedicated request API + admin PATCH |
 | D6 | Notifications not persisted | ✅ `AppNotification` DB + API (Phase 1 removed client writes) |

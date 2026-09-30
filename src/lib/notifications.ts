@@ -20,6 +20,8 @@ export type NotificationType =
   | "rating_required"
   | "task_force_closed"
   | "task_closed"
+  | "task_deleted"
+  | "trust_refund"
   | "admin_force_close_request"
   | "admin_dispute_escalation"
   | "admin_abuse_flag";
@@ -122,7 +124,13 @@ export function pushNotification(params: {
   message: string;
 }): void {
   // Suppress if task is already closed (except for the closure notification itself)
-  if (params.type !== "task_closed" && params.type !== "task_force_closed" && isTaskClosed(params.taskId)) return;
+  if (
+    params.type !== "task_closed" &&
+    params.type !== "task_force_closed" &&
+    params.type !== "task_deleted" &&
+    params.type !== "trust_refund" &&
+    isTaskClosed(params.taskId)
+  ) return;
 
   const existing = getNotifications(params.target);
 

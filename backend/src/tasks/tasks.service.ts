@@ -336,9 +336,10 @@ export class TasksService {
       await this.transition(
         tx,
         task,
-        'closed',
+        'deleted',
         {
-          message: 'Task cancelled by requestor. Platform-held reward will be refunded.',
+          message:
+            'Task deleted by requestor before acceptance. Full refund of the locked reward has been initiated.',
           authorUserId: actor.sub,
           authorName: task.requestor.name ?? 'Requestor',
           authorRole: 'requestor',
@@ -379,6 +380,8 @@ export class TasksService {
       actor.sub,
       refreshedCooldowns,
     );
+
+    void TaskNotify.notifyTaskClosed(this.notifications, cancelledTask, 'deleted');
 
     return {
       task: toTaskDto(cancelledTask),
@@ -511,7 +514,8 @@ export class TasksService {
       await this.ledger.settleQuitTrustRefund(tx, forSettlement);
 
       await this.transition(tx, task, 'open', {
-        message: 'Acceptor quit the task within the grace window. Trust deposit refunded.',
+        message:
+          'Acceptor quit within the 2-hour grace window. A full refund of the trust deposit has been initiated.',
         authorUserId: actor.sub,
         authorName: task.acceptor?.name ?? 'Acceptor',
         authorRole: 'acceptor',
@@ -618,6 +622,8 @@ export class TasksService {
       await this.ledger.settleClosed(tx, forSettlement);
     });
 
+    const closed = await this.loadTaskOrThrow(id);
+    void TaskNotify.notifyTaskClosed(this.notifications, closed, 'closed');
     return this.getDetail(id, actor);
   }
 

@@ -20,7 +20,7 @@ export function getAllPlatformTasks(): Task[] {
       if (!existing) {
         map.set(t.id, t);
       } else {
-        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "closed", "force_closed"];
+        const statusOrder: TaskStatus[] = ["open", "committed", "in_progress", "done", "disputed", "closed", "force_closed", "deleted"];
         const existingIdx = statusOrder.indexOf(existing.status);
         const newIdx = statusOrder.indexOf(t.status);
         if (newIdx >= existingIdx) {
@@ -145,6 +145,45 @@ export const DSP4_STATUS_LABELS: Record<Dsp4Status, string> = {
   resolved_invalid: "RESOLVED INVALID",
   admin_closed: "ADMIN CLOSED",
 };
+
+export const DSP4_STATUS_FILTERS = [
+  "open",
+  "admin_closed",
+  "resolved_valid",
+  "resolved_invalid",
+] as const satisfies readonly Dsp4Status[];
+
+export type EscalatedFlagFilter = "all" | "flagged" | "unflagged";
+export type EscalatedDsp4Filter = "all" | Dsp4Status;
+
+/**
+ * Display-only: a DSP4 row is stale/flagged when the task has already Closed
+ * (typically RESOLVED VALID → acceptor completes → requestor accepts) but the
+ * entry still appears on Escalated. Does not change DSP4 or task status.
+ */
+export function isEscalatedEntryFlagged(
+  taskStatus: string,
+  escalated: boolean,
+): boolean {
+  return escalated && taskStatus === "closed";
+}
+
+export function filterEscalatedDisputes(
+  rows: Pick<AdminDispute, "escalated" | "dsp4Status" | "task">[],
+  flagFilter: EscalatedFlagFilter,
+  dsp4Filter: EscalatedDsp4Filter,
+): typeof rows {
+  return rows.filter((d) => {
+    if (!d.escalated) return false;
+    const flagged = isEscalatedEntryFlagged(d.task.status, d.escalated);
+    if (flagFilter === "flagged" && !flagged) return false;
+    if (flagFilter === "unflagged" && flagged) return false;
+    if (dsp4Filter !== "all" && (d.dsp4Status ?? "open") !== dsp4Filter) {
+      return false;
+    }
+    return true;
+  });
+}
 
 export interface AdminDispute {
   disputeId: string;

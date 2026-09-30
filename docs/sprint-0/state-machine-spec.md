@@ -1,9 +1,11 @@
 # State Machine Spec (Canonical)
 
-Version: `v1.1`  
+Version: `v1.2`  
 Owner: Backend Lead  
 Status: LOCKED
 
+> **v1.2 (2026-09-23):** requestor delete-before-accept is `Deleted` (terminal), with a full reward refund. Quit within 2h remains `Committed` → `Open` with a full trust-deposit refund.
+>
 > **v1.1 (2026-09-10):** dispute cooldown — none before DSP1; 48/24/12h from last raise; resets when work returns to `Done`. DSP4 rework = `max(deadline, review + 10 days)`.
 
 ## 1) Valid Task States
@@ -17,8 +19,9 @@ Only the following states are valid in backend authority:
 5. `Disputed`
 6. `Closed`
 7. `Force Closed`
+8. `Deleted`
 
-Any other state (including legacy `completed`) is invalid.
+`Deleted` is the terminal state when a requestor removes a task before it is accepted. It is not a user-visible active lifecycle state. Any other state (including legacy `completed` or a separate `cancelled` label) is invalid.
 
 ## 2) Rule Zero
 
@@ -30,9 +33,9 @@ A task record becomes active only after reward funding is confirmed by payment a
 ## 3) Allowed Transitions
 
 - `Open` -> `Committed`
-- `Open` -> `Cancelled` (business action, archived; not part of user-visible lifecycle states)
+- `Open` -> `Deleted` (requestor delete before accept; full reward refund; archived)
 - `Committed` -> `In Progress`
-- `Committed` -> `Open` (quit within 2h window after valid trust deposit refund)
+- `Committed` -> `Open` (quit within 2h window after a full trust-deposit refund is initiated)
 - `Committed` -> `Force Closed` (admin-approved force close)
 - `In Progress` -> `Done`
 - `In Progress` -> `Force Closed` (admin-approved force close)
@@ -43,6 +46,7 @@ A task record becomes active only after reward funding is confirmed by payment a
 - `Disputed` -> `Force Closed` (admin close path)
 - `Closed` -> terminal
 - `Force Closed` -> terminal
+- `Deleted` -> terminal
 
 ## 4) Action Cooldowns
 

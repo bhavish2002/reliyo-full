@@ -5,7 +5,9 @@ import {
 import type { Dsp4Status, Prisma, Task, TaskStatus, User } from '@prisma/client';
 import { LedgerService } from '../ledger/ledger.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import * as TaskNotify from '../notifications/task-notifications';
 import {
   computeDsp4ReworkDeadline,
 } from './dsp4-deadline.util';
@@ -17,6 +19,7 @@ export class DisputesService {
     private readonly prisma: PrismaService,
     private readonly lifecycle: LifecycleService,
     private readonly ledger: LedgerService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async resolveDsp4(
@@ -51,7 +54,7 @@ export class DisputesService {
     const admin = await this.prisma.user.findUnique({ where: { id: adminUserId } });
     const adminName = admin?.name ?? 'Admin';
 
-    return this.prisma.$transaction(async (tx) => {
+    const resolved = await this.prisma.$transaction(async (tx) => {
       const baseEvent = {
         taskId: task.id,
         authorUserId: adminUserId,
@@ -188,6 +191,15 @@ export class DisputesService {
         include: { requestor: true, acceptor: true },
       });
     });
+
+    if (resolved.status === 'closed' || resolved.status === 'force_closed') {
+      void TaskNotify.notifyTaskClosed(
+        this.notifications,
+        resolved,
+        resolved.status === 'force_closed' ? 'force_closed' : 'closed',
+      );
+    }
+    return resolved;
   }
 
   mapDsp4Status(task: {
