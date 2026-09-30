@@ -122,7 +122,11 @@ export interface Task {
   ratingFeedback?: string;
   statusEnteredAt?: string;
   disputes?: Array<{ id: string; number: number; escalated: boolean; createdAt: string }>;
-  dsp4ResolvedValid?: boolean; // flag when DSP4 resolved valid - acceptor can mark done
+  dsp4ResolvedValid?: boolean;
+  requestorAverageRating?: number | null;
+  requestorRatingCount?: number;
+  acceptorAverageRating?: number | null;
+  acceptorRatingCount?: number;
 }
 
 // ── Permission Helpers ──────────────────────────────────────────────────────

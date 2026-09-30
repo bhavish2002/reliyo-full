@@ -21,6 +21,10 @@ import {
 import { saveForceCloseRequest } from "@/lib/adminData";
 import { format, addDays, differenceInDays, isAfter, isBefore } from "date-fns";
 import { generateDisputeId, MAX_DISPUTES, isEscalated } from "@/lib/disputeId";
+import {
+  disputeCooldownHoursForCount,
+  disputeCooldownRemainingMs,
+} from "@/lib/disputeCooldown";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { ApiClientError } from "@/lib/api/client";
@@ -47,7 +51,6 @@ const ALLOWED_FILE_TYPES = [
   "text/plain", "text/csv",
   "application/zip", "application/x-rar-compressed",
 ];
-const DISPUTE_COOLDOWN_MS = 48 * 60 * 60 * 1000;
 const FORCE_CLOSE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 interface FileAttachment {
@@ -217,46 +220,39 @@ const TaskTimeline = ({
   };
   const placeholder = getCommentPlaceholder(status, currentUserRole);
   const effectiveDeadline = getEffectiveDeadline(task);
+  const disputeCount = task.disputeCount || 0;
+  /**
+   * Stay visible for the requestor through the whole dispute loop so the action
+   * greys out instead of vanishing; only a maxed-out DSP4 counter removes it.
+   */
   const canShowRequestorDisputeAction =
     currentUserRole === "requestor" &&
-    status === "done" &&
-    (task.disputeCount || 0) < MAX_DISPUTES;
+    (status === "done" || status === "disputed") &&
+    disputeCount < MAX_DISPUTES;
 
-  // Find the most recent dispute and done-after-dispute entries for cooldown logic
   const sortedEntries = [...entries].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );
   const lastDisputeEntry = [...sortedEntries].reverse().find(
     (entry) =>
       (entry.entryType === "status_change" && entry.metadata?.toStatus === "disputed") ||
+      (entry.entryType === "alert" &&
+        (entry.metadata as { alertType?: string } | undefined)?.alertType === "dispute_raised") ||
       (entry.systemGenerated && /dispute\s+(raised|escalated)/i.test(entry.message)),
   );
-  const lastDisputeTime = lastDisputeEntry
-    ? new Date(lastDisputeEntry.timestamp).getTime()
-    : (task.disputes?.length ? new Date(task.disputes[task.disputes.length - 1].createdAt).getTime() : 0);
+  const lastDisputeTimestamp =
+    lastDisputeEntry?.timestamp ?? task.disputes?.[task.disputes.length - 1]?.createdAt;
 
-  // Check if there's a "done" status change AFTER the last dispute
-  const lastDoneAfterDisputeEntry = lastDisputeTime > 0
-    ? [...sortedEntries].reverse().find(
-        (entry) =>
-          new Date(entry.timestamp).getTime() > lastDisputeTime &&
-          ((entry.entryType === "status_change" && entry.metadata?.toStatus === "done") ||
-           (entry.systemGenerated && /moved.*back to done|marked.*as done/i.test(entry.message))),
-      )
-    : undefined;
-
-  // If task is currently "done" AND there's a done entry after the last dispute, cooldown resets
-  // Also reset if current status is "done" and the task was moved back from disputed
-  const cooldownResetByDone = lastDoneAfterDisputeEntry != null || (status === "done" && lastDisputeTime > 0 && task.statusEnteredAt && new Date(task.statusEnteredAt).getTime() > lastDisputeTime);
-  const lastDisputeTimestamp = cooldownResetByDone
-    ? undefined
-    : (lastDisputeEntry?.timestamp ?? task.disputes?.[task.disputes.length - 1]?.createdAt);
-  const getDisputeCooldownRemaining = (referenceTime: number) => {
-    if (!lastDisputeTimestamp) return 0;
-    const disputeTime = new Date(lastDisputeTimestamp).getTime();
-    if (Number.isNaN(disputeTime)) return 0;
-    return Math.max(0, DISPUTE_COOLDOWN_MS - (referenceTime - disputeTime));
-  };
+  // DSP1 has no cooldown. Later rounds wait 48h → 24h → 12h from the last raise,
+  // and reset whenever the acceptor returns work to `done`.
+  const getDisputeCooldownRemaining = (referenceTime: number) =>
+    disputeCooldownRemainingMs({
+      status,
+      disputeCount,
+      statusEnteredAt: task.statusEnteredAt,
+      lastDisputeAt: lastDisputeTimestamp,
+      nowMs: referenceTime,
+    });
   const disputeCooldownRemaining = getDisputeCooldownRemaining(currentTime);
   const serverDisputeCooldown =
     useServer && apiCooldowns?.disputeAfter
@@ -264,7 +260,15 @@ const TaskTimeline = ({
       : 0;
   const effectiveDisputeCooldown = useServer ? serverDisputeCooldown : disputeCooldownRemaining;
   const isDisputeOnCooldown = effectiveDisputeCooldown > 0;
-  const disputeCooldownMessage = `Next dispute available in ${formatDisputeCooldown(effectiveDisputeCooldown)}.`;
+  const disputeCooldownHours = disputeCooldownHoursForCount(disputeCount);
+  const nextDisputeNumber = disputeCount + 1;
+  const disputeCooldownMessage = isDisputeOnCooldown
+    ? `Next dispute available in ${formatDisputeCooldown(effectiveDisputeCooldown)} (${disputeCooldownHours}h cooldown before dispute #${nextDisputeNumber}).`
+    : disputeCount === 0
+      ? `Dispute #${nextDisputeNumber} of ${MAX_DISPUTES} available now — no cooldown applies to the first dispute.`
+      : status === "done"
+        ? `Dispute #${nextDisputeNumber} of ${MAX_DISPUTES} available now — cooldown reset when work returned to Done.`
+        : `Dispute #${nextDisputeNumber} of ${MAX_DISPUTES} available now — its ${disputeCooldownHours}h cooldown has elapsed.`;
 
   // Force close cooldown logic (24h)
   const lastForceCloseEntry = [...sortedEntries].reverse().find(
@@ -477,7 +481,7 @@ const TaskTimeline = ({
   };
 
   const handleRaiseDispute = () => {
-    if (status !== "done") return;
+    if (status !== "done" && status !== "disputed") return;
     const disputeNumber = (task.disputeCount || 0) + 1;
     if (disputeNumber > MAX_DISPUTES) return;
     const liveCooldownRemaining = useServer
@@ -502,7 +506,7 @@ const TaskTimeline = ({
       return;
     }
 
-    if (!canTransition(status, "disputed")) return;
+    if (status === "done" && !canTransition(status, "disputed")) return;
     const disputeId = generateDisputeId(task.taskId, disputeNumber);
     const escalated = isEscalated(disputeNumber);
     const escalationNote = escalated ? " ⚠️ ESCALATED — Admin review required." : "";
@@ -940,11 +944,9 @@ const TaskTimeline = ({
       );
     }
 
-    // Requestor can keep escalating disputes until DSP4, with a 48-hour cooldown between raises
+    // Requestor keeps escalating until DSP4; the wait between raises shortens each round.
     if (canShowRequestorDisputeAction) {
-      const disputeDisabled =
-        isDisputeOnCooldown ||
-        (useServer && status === "done" && availableActions?.canRaiseDispute === false);
+      const disputeDisabled = isDisputeOnCooldown;
       actions.push(
         <div key="dispute-wrapper" className="relative group">
           <Button
@@ -953,21 +955,22 @@ const TaskTimeline = ({
             size="sm"
             onClick={handleOpenDisputeDialog}
             aria-disabled={disputeDisabled}
-            title={isDisputeOnCooldown ? disputeCooldownMessage : undefined}
+            title={disputeCooldownMessage}
             className={cn(
               "gap-1.5",
-              isDisputeOnCooldown
+              disputeDisabled
                 ? "cursor-not-allowed border-border text-muted-foreground hover:bg-background hover:text-muted-foreground"
                 : "border-destructive/30 text-destructive"
             )}
           >
             <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
           </Button>
-          {isDisputeOnCooldown && (
-            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[240px] -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-center text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-              {disputeCooldownMessage}
-            </div>
-          )}
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[260px] -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-center text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            {disputeCooldownMessage}
+          </div>
         </div>
       );
     }
@@ -1016,8 +1019,12 @@ const TaskTimeline = ({
       );
     }
 
-    // Deadline extension: requestor can extend if deadline has passed (in_progress or committed)
-    if (deadlinePassed && currentUserRole === "requestor" && ["committed", "in_progress", "done", "disputed"].includes(status)) {
+    // Deadline extension: requestor only while committed or in_progress (not after done/disputed)
+    if (
+      deadlinePassed &&
+      currentUserRole === "requestor" &&
+      ["committed", "in_progress"].includes(status)
+    ) {
       actions.push(
         <Button key="extend" variant="outline" size="sm" onClick={() => setShowExtendDialog(true)} className="gap-1.5">
           <CalendarIcon className="h-3.5 w-3.5" /> Extend Deadline
@@ -1080,7 +1087,9 @@ const TaskTimeline = ({
           <div>
             <span>Deadline: <strong>{format(new Date(effectiveDeadline), "MMMM do, yyyy")}</strong></span>
             {task.extendedDeadline && <span className="ml-1 text-xs">(Extended)</span>}
-            {deadlinePassed && <span className="ml-2 font-medium">⚠️ Deadline has passed. You can extend it.</span>}
+            {deadlinePassed && ["committed", "in_progress"].includes(status) && (
+              <span className="ml-2 font-medium">⚠️ Deadline has passed. You can extend it.</span>
+            )}
             {!deadlinePassed && daysUntilDeadline !== null && daysUntilDeadline <= 3 && (
               <span className="ml-2">⏰ {daysUntilDeadline} day{daysUntilDeadline !== 1 ? "s" : ""} remaining — review approaching</span>
             )}

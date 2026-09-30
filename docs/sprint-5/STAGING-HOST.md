@@ -57,6 +57,8 @@ Use the repo root [`render.yaml`](../../render.yaml) or create manually:
 | `RAZORPAY_KEY_SECRET` | test secret |
 | `RAZORPAY_WEBHOOK_SECRET` | from Razorpay webhook |
 | `OTP_PROVIDER` | `dev` + `OTP_DEV_FIXED_CODE` for QA, or Twilio |
+| `INACTIVITY_JOB_ENABLED` | `true` on staging/prod (hourly 3-strike job) |
+| `WEBHOOK_RETRY_JOB_ENABLED` | `true` optional (retry failed webhook events every 10 min) |
 
 After deploy, note API URL: `https://reliyo-api-staging.onrender.com`
 

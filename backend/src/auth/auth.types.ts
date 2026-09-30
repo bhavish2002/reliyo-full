@@ -1,4 +1,5 @@
 import type { PlatformRole, PreferredRole } from '@prisma/client';
+import type { UserPreferences } from '../users/user-preferences.util';
 
 export interface AuthUserPayload {
   sub: string;
@@ -15,6 +16,15 @@ export interface PublicUserDto {
   role: 'requestor' | 'acceptor' | 'admin';
   platformRole: PlatformRole;
   suspended: boolean;
+}
+
+export interface MeProfileDto extends PublicUserDto {
+  bio: string | null;
+  location: string | null;
+  createdAt: string;
+  preferences: UserPreferences;
+  averageRating?: number | null;
+  ratingCount?: number;
 }
 
 export interface AuthTokensResponse {

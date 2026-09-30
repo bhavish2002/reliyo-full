@@ -18,10 +18,19 @@ describe('computeDsp4ReworkDeadline', () => {
     expect(result).toEqual(deadline);
   });
 
-  it('extends 10 days past deadline when fewer than 10 days remain', () => {
-    const deadline = new Date('2026-06-05T00:00:00.000Z');
-    const result = computeDsp4ReworkDeadline(deadline, null, now);
-    expect(result.toISOString()).toBe('2026-06-15T00:00:00.000Z');
+  it('sets 10 days from review when remaining time is less than 10 days', () => {
+    // Deadline 20 Jun, review 17 Jun → 27 Jun (not deadline + 10).
+    const deadline = new Date('2026-06-20T00:00:00.000Z');
+    const review = new Date('2026-06-17T00:00:00.000Z');
+    const result = computeDsp4ReworkDeadline(deadline, null, review);
+    expect(result.toISOString()).toBe('2026-06-27T00:00:00.000Z');
+  });
+
+  it('leaves the deadline untouched when 10+ days already remain', () => {
+    const deadline = new Date('2026-06-30T00:00:00.000Z');
+    const review = new Date('2026-06-17T00:00:00.000Z');
+    const result = computeDsp4ReworkDeadline(deadline, null, review);
+    expect(result).toEqual(deadline);
   });
 
   it('prefers extendedDeadline over deadline', () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 import TaskTimeline from "@/components/TaskTimeline";
 import type { Task, TimelineEntry } from "@/lib/taskTypes";
@@ -17,7 +17,7 @@ const baseTask: Task = {
   taskId: "RLY-TSK-TEST-1",
   title: "Test task",
   description: "Test description",
-  status: "disputed",
+  status: "done",
   workType: "Virtual",
   manpower: 1,
   location: "Remote",
@@ -29,18 +29,23 @@ const baseTask: Task = {
   createdAt: "2026-03-30T09:00:00Z",
   createdBy: "Requestor User",
   acceptedBy: "Acceptor User",
-  disputeCount: 1,
-  disputes: [
-    {
-      id: "RLY-DSP1",
-      number: 1,
-      escalated: false,
-      createdAt: "2026-04-01T10:00:00Z",
-    },
-  ],
+  disputeCount: 0,
+  statusEnteredAt: "2026-04-01T10:00:00Z",
 };
 
-const renderTimeline = (task: Task, entries: TimelineEntry[]) =>
+const disputeEntry = (timestamp: string): TimelineEntry => ({
+  id: "entry-dispute",
+  taskId: "task-1",
+  author: "System",
+  authorRole: "system",
+  message: "Dispute raised by Requestor.",
+  timestamp,
+  systemGenerated: true,
+  entryType: "status_change",
+  metadata: { fromStatus: "done", toStatus: "disputed", disputeCount: 1 },
+});
+
+const renderTimeline = (task: Task, entries: TimelineEntry[] = []) =>
   render(
     <TaskTimeline
       task={task}
@@ -52,6 +57,9 @@ const renderTimeline = (task: Task, entries: TimelineEntry[]) =>
     />,
   );
 
+const disputeButton = () =>
+  screen.getByRole("button", { name: /raise dispute/i });
+
 describe("TaskTimeline dispute cooldown", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -61,102 +69,135 @@ describe("TaskTimeline dispute cooldown", () => {
     vi.useRealTimers();
   });
 
-  it("keeps Raise Dispute visible during cooldown and shows remaining time", () => {
-    vi.setSystemTime(new Date("2026-04-02T10:00:00Z"));
+  it("lets the requestor raise DSP1 immediately with no cooldown", () => {
+    vi.setSystemTime(new Date("2026-04-01T10:00:01Z"));
 
-    const entries: TimelineEntry[] = [
-      {
-        id: "entry-1",
-        taskId: "task-1",
-        author: "System",
-        authorRole: "system",
-        message: "Dispute raised by Requestor.",
-        timestamp: "2026-04-01T10:00:00Z",
-        systemGenerated: true,
-        entryType: "status_change",
-        metadata: { fromStatus: "done", toStatus: "disputed", disputeCount: 1 },
-      },
-    ];
+    renderTimeline(baseTask);
 
-    renderTimeline(baseTask, entries);
-
-    const disputeButton = screen.getByRole("button", { name: /raise dispute/i });
-    expect(disputeButton).toBeInTheDocument();
-    expect(disputeButton).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText("Next dispute available in 24h 0m.")).toBeInTheDocument();
+    expect(disputeButton()).not.toHaveAttribute("aria-disabled", "true");
+    expect(disputeButton()).toHaveAttribute(
+      "title",
+      "Dispute #1 of 4 available now — no cooldown applies to the first dispute.",
+    );
   });
 
-  it("re-enables dispute after 48 hours", () => {
+  it("stays visible and greyed out after DSP1, showing remaining 48h on hover", () => {
+    vi.setSystemTime(new Date("2026-04-02T10:00:00Z")); // 24h after raise
+
+    renderTimeline(
+      {
+        ...baseTask,
+        status: "disputed",
+        disputeCount: 1,
+        statusEnteredAt: "2026-04-01T10:00:00Z",
+      },
+      [disputeEntry("2026-04-01T10:00:00Z")],
+    );
+
+    expect(disputeButton()).toBeInTheDocument();
+    expect(disputeButton()).toHaveAttribute("aria-disabled", "true");
+    expect(disputeButton()).toHaveAttribute(
+      "title",
+      "Next dispute available in 24h 0m (48h cooldown before dispute #2).",
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Next dispute available in 24h 0m (48h cooldown before dispute #2).",
+    );
+  });
+
+  it("re-enables DSP2 after 48 hours while still disputed", () => {
     vi.setSystemTime(new Date("2026-04-03T10:01:00Z"));
 
-    const entries: TimelineEntry[] = [
+    renderTimeline(
       {
-        id: "entry-1",
-        taskId: "task-1",
-        author: "System",
-        authorRole: "system",
-        message: "Dispute raised by Requestor.",
-        timestamp: "2026-04-01T10:00:00Z",
-        systemGenerated: true,
-        entryType: "status_change",
-        metadata: { fromStatus: "done", toStatus: "disputed", disputeCount: 1 },
+        ...baseTask,
+        status: "disputed",
+        disputeCount: 1,
+        statusEnteredAt: "2026-04-01T10:00:00Z",
       },
-    ];
+      [disputeEntry("2026-04-01T10:00:00Z")],
+    );
 
-    renderTimeline(baseTask, entries);
-
-    const disputeButton = screen.getByRole("button", { name: /raise dispute/i });
-    expect(disputeButton).not.toHaveAttribute("aria-disabled", "true");
+    expect(disputeButton()).not.toHaveAttribute("aria-disabled", "true");
   });
 
-  it("resets cooldown when acceptor moves task back to done", () => {
-    vi.setSystemTime(new Date("2026-04-01T11:00:00Z")); // only 1h after dispute
+  it("resets the cooldown when the acceptor marks the task done again", () => {
+    vi.setSystemTime(new Date("2026-04-01T11:00:00Z")); // 1h after dispute
 
-    const doneTask: Task = {
+    renderTimeline(
+      {
+        ...baseTask,
+        status: "done",
+        disputeCount: 1,
+        statusEnteredAt: "2026-04-01T10:30:00Z",
+      },
+      [
+        disputeEntry("2026-04-01T10:00:00Z"),
+        {
+          id: "entry-done",
+          taskId: "task-1",
+          author: "System",
+          authorRole: "system",
+          message: "Acceptor User has submitted a fix and moved the task back to Done.",
+          timestamp: "2026-04-01T10:30:00Z",
+          systemGenerated: true,
+          entryType: "status_change",
+          metadata: { fromStatus: "disputed", toStatus: "done" },
+        },
+      ],
+    );
+
+    expect(disputeButton()).not.toHaveAttribute("aria-disabled", "true");
+    expect(disputeButton()).toHaveAttribute(
+      "title",
+      "Dispute #2 of 4 available now — cooldown reset when work returned to Done.",
+    );
+  });
+
+  it("uses 24h then 12h for DSP3 and DSP4 while still disputed", () => {
+    vi.setSystemTime(new Date("2026-04-05T11:00:00Z"));
+
+    const { unmount } = renderTimeline(
+      {
+        ...baseTask,
+        status: "disputed",
+        disputeCount: 2,
+        statusEnteredAt: "2026-04-05T10:00:00Z",
+      },
+      [disputeEntry("2026-04-05T10:00:00Z")],
+    );
+    expect(disputeButton()).toHaveAttribute(
+      "title",
+      "Next dispute available in 23h 0m (24h cooldown before dispute #3).",
+    );
+    unmount();
+
+    renderTimeline(
+      {
+        ...baseTask,
+        status: "disputed",
+        disputeCount: 3,
+        statusEnteredAt: "2026-04-05T10:00:00Z",
+      },
+      [disputeEntry("2026-04-05T10:00:00Z")],
+    );
+    expect(disputeButton()).toHaveAttribute(
+      "title",
+      "Next dispute available in 11h 0m (12h cooldown before dispute #4).",
+    );
+  });
+
+  it("hides the action once DSP4 is reached", () => {
+    vi.setSystemTime(new Date("2026-04-10T10:00:00Z"));
+
+    renderTimeline({
       ...baseTask,
-      status: "done",
-      statusEnteredAt: "2026-04-01T10:30:00Z",
-    };
+      status: "disputed",
+      disputeCount: 4,
+    });
 
-    const entries: TimelineEntry[] = [
-      {
-        id: "entry-1",
-        taskId: "task-1",
-        author: "System",
-        authorRole: "system",
-        message: "Dispute raised by Requestor.",
-        timestamp: "2026-04-01T10:00:00Z",
-        systemGenerated: true,
-        entryType: "status_change",
-        metadata: { fromStatus: "done", toStatus: "disputed", disputeCount: 1 },
-      },
-      {
-        id: "entry-2",
-        taskId: "task-1",
-        author: "Acceptor User",
-        authorRole: "acceptor",
-        message: "Fixed the issue",
-        timestamp: "2026-04-01T10:30:00Z",
-        systemGenerated: false,
-        entryType: "comment",
-      },
-      {
-        id: "entry-3",
-        taskId: "task-1",
-        author: "System",
-        authorRole: "system",
-        message: "Acceptor User has submitted a fix and moved the task back to Done.",
-        timestamp: "2026-04-01T10:30:00Z",
-        systemGenerated: true,
-        entryType: "status_change",
-        metadata: { fromStatus: "disputed", toStatus: "done" },
-      },
-    ];
-
-    renderTimeline(doneTask, entries);
-
-    const disputeButton = screen.getByRole("button", { name: /raise dispute/i });
-    // Should be active immediately since acceptor moved back to done
-    expect(disputeButton).not.toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByRole("button", { name: /raise dispute/i }),
+    ).not.toBeInTheDocument();
   });
 });

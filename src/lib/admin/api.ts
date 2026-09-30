@@ -119,6 +119,7 @@ export interface AdminSupportTicketRow {
   name: string;
   email: string;
   phone: string;
+  subject: string;
   issue: string;
   status: string;
   createdAt: string;
@@ -130,4 +131,18 @@ export function listAdminSupportTickets() {
 
 export function updateAdminSupportTicket(id: string, status: string) {
   return apiClient.patch<AdminSupportTicketRow>(`/admin/support/tickets/${id}`, { status });
+}
+
+export interface AdminPlatformSettings {
+  platformFeePercent: number;
+  trustDepositPercent: number;
+  quitGraceHours: number;
+  inactivityStrikeHours: number[];
+  autoCloseOnThreeStrikes: boolean;
+  editable: boolean;
+  source: string;
+}
+
+export function fetchAdminPlatformSettings() {
+  return apiClient.get<AdminPlatformSettings>("/admin/settings");
 }

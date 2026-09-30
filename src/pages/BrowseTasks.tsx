@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search, MapPin, Calendar, Star, Info, LayoutGrid, List,
+  Search, MapPin, Calendar, Info, LayoutGrid, List,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +15,12 @@ import { format } from "date-fns";
 import { ALL_COUNTRY_NAMES } from "@/lib/countriesStates";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import type { Task } from "@/lib/taskTypes";
 import { listBrowseTasks, mapApiTaskToTask } from "@/lib/tasks/api";
 import { filterBrowseTasksForUser } from "@/lib/tasks/listFilters";
 import { ApiClientError } from "@/lib/api/client";
+import { UserRatingDisplay } from "@/components/UserRatingDisplay";
 
 const DOMAIN_OPTIONS = [
   "All", "Technology", "Design", "Marketing", "Writing",
@@ -68,23 +70,8 @@ const DEMO_BROWSE_TASKS: Task[] = [
   },
 ];
 
-const TASK_RATINGS: Record<string, number> = {
-  browse1: 4.7, browse2: 4.2, browse3: 4.5, browse4: 4.8, browse5: 3.9,
-};
-
-const StarRating = ({ rating }: { rating: number }) => (
-  <div className="flex items-center gap-0.5">
-    {[1, 2, 3, 4, 5].map((i) => (
-      <Star
-        key={i}
-        className={`h-3.5 w-3.5 ${i <= Math.round(rating) ? "fill-primary text-primary" : "text-muted-foreground/40"}`}
-      />
-    ))}
-    <span className="ml-1 text-xs text-muted-foreground">{rating}</span>
-  </div>
-);
-
 const BrowseTasks = () => {
+  const { formatTask } = usePreferredCurrency();
   const navigate = useNavigate();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   const refreshKey = useTasksListRefresh();
@@ -234,7 +221,8 @@ const BrowseTasks = () => {
       ) : (
         <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-2" : "space-y-3"}>
           {filtered.map((task) => {
-            const rating = TASK_RATINGS[task.id] ?? 4.0;
+            const rating = task.requestorAverageRating;
+            const ratingCount = task.requestorRatingCount ?? 0;
             return (
               <Card
                 key={task.id}
@@ -268,8 +256,12 @@ const BrowseTasks = () => {
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-primary">{task.currencySymbol || "₹"}{task.reward.toLocaleString()}</span>
-                    <StarRating rating={rating} />
+                    <span className="text-sm font-bold text-primary">{formatTask(task.reward, task)}</span>
+                    <UserRatingDisplay
+                      averageRating={rating}
+                      ratingCount={ratingCount}
+                      size="sm"
+                    />
                   </div>
                 </div>
               </Card>

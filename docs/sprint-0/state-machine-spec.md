@@ -1,8 +1,10 @@
 # State Machine Spec (Canonical)
 
-Version: `v1.0`  
+Version: `v1.1`  
 Owner: Backend Lead  
 Status: LOCKED
+
+> **v1.1 (2026-09-10):** dispute cooldown — none before DSP1; 48/24/12h from last raise; resets when work returns to `Done`. DSP4 rework = `max(deadline, review + 10 days)`.
 
 ## 1) Valid Task States
 
@@ -45,7 +47,7 @@ A task record becomes active only after reward funding is confirmed by payment a
 ## 4) Action Cooldowns
 
 - Quit Task: 2 hours from acceptance timestamp.
-- Raise Dispute: 48 hours from last dispute raise event.
+- Raise Dispute: no cooldown before DSP1. From DSP2 onward: 48h / 24h / 12h from last raise. Returning to `Done` after a fix resets the wait so the next raise is immediate.
 - Request Force Close: 24 hours from last force-close request event.
 
 Cooldown checks are enforced server-side and returned in API response as metadata.
@@ -70,9 +72,10 @@ No client-provided role input is trusted for authorization.
 ## 7) Deadline Rules
 
 - If deadline passed, requestor may extend deadline via explicit action.
-- DSP4 resolved-valid rework window:
-  - if original deadline crossed -> minimum 10 days
-  - if remaining window < 10 days -> extend to 10 days minimum
+- DSP4 resolved-valid rework window: `max(effective deadline, review date + 10 days)`
+  - if original deadline crossed -> 10 days from review date
+  - if remaining window < 10 days -> 10 days from review date
+  - if remaining window >= 10 days -> deadline unchanged
 
 ## 8) Event Requirements
 

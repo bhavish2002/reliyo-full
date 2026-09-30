@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ArrowRight, Lock, CheckCircle2, Info, CalendarIcon, X,
@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -19,7 +18,14 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { format } from "date-fns";
 import { countriesWithStates, ALL_COUNTRY_NAMES, getStatesByCountry } from "@/lib/countriesStates";
 import { getCurrentUser } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
 import { getUserSettings } from "@/lib/userSettings";
+import LockRewardTermsConsent from "@/components/legal/LockRewardTermsPanel";
+import {
+  getPaymentsConfig,
+  isCheckoutCurrencySupported,
+  type PaymentsConfig,
+} from "@/lib/payments/api";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const WORK_TYPES = ["Virtual", "Physical", "Hybrid"];
@@ -145,17 +151,17 @@ const WordCountHint = ({
 // ── Main Component ───────────────────────────────────────────────────────────
 const CreateTask = () => {
   const navigate = useNavigate();
+  const { user: authUser } = useAuth();
   const [step, setStep] = useState(1);
 
   // Pre-select country based on user's preferred currency
   const defaultCountry = useMemo(() => {
-    const user = getCurrentUser();
-    const userId = user?.id || "guest";
-    const settings = getUserSettings(userId);
+    const userId = authUser?.id || getCurrentUser()?.id || "guest";
+    const settings = getUserSettings(userId, authUser?.preferences);
     const currency = settings.preferredCurrency;
     const entry = Object.entries(COUNTRY_CURRENCY).find(([, v]) => v.code === currency);
     return entry ? entry[0] : "";
-  }, []);
+  }, [authUser?.id, authUser?.preferences?.preferredCurrency]);
 
   const [form, setForm] = useState<TaskForm>(() => ({
     ...initialForm,
@@ -163,6 +169,11 @@ const CreateTask = () => {
   }));
   const [skillInput, setSkillInput] = useState("");
   const [agreedTerms, setAgreedTerms] = useState(false);
+  const [paymentsConfig, setPaymentsConfig] = useState<PaymentsConfig | null>(null);
+
+  useEffect(() => {
+    void getPaymentsConfig().then(setPaymentsConfig).catch(() => setPaymentsConfig(null));
+  }, []);
 
   const updateField = <K extends keyof TaskForm>(key: K, value: TaskForm[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -184,6 +195,9 @@ const CreateTask = () => {
   const minReward = currency.minReward;
   const platformFee = parseFloat((rewardNum * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
   const totalPayout = rewardNum;
+  const checkoutBlocksCurrency =
+    Boolean(paymentsConfig?.checkoutEnabled) &&
+    !isCheckoutCurrencySupported(currency.code, paymentsConfig!);
 
   const effectiveDomain =
     form.domain === "Other" ? form.domainOther.trim() : form.domain;
@@ -547,21 +561,19 @@ const CreateTask = () => {
             </CardContent>
           </Card>
 
+          {checkoutBlocksCurrency && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+              Razorpay checkout supports <strong>INR only</strong> on Indian test accounts. Select India as the
+              task country or use an international Razorpay merchant before paying in {currency.code}.
+            </div>
+          )}
+
           <Card className="rounded-xl border-primary/30 bg-primary/5">
-            <CardContent className="p-4">
-              <p className="text-sm font-semibold text-primary mb-2">
-                Terms &amp; conditions <Info className="inline h-3.5 w-3.5" />
+            <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                Review and accept the terms &amp; conditions before proceeding to payment.
               </p>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="terms"
-                  checked={agreedTerms}
-                  onCheckedChange={(c) => setAgreedTerms(c === true)}
-                />
-                <label htmlFor="terms" className="text-sm">
-                  I hereby agree to the terms and conditions above
-                </label>
-              </div>
+              <LockRewardTermsConsent agreed={agreedTerms} onAgreedChange={setAgreedTerms} />
             </CardContent>
           </Card>
 
@@ -574,7 +586,7 @@ const CreateTask = () => {
             <Button variant="ghost" onClick={() => setStep(2)} className="gap-2">
               <ArrowLeft className="h-4 w-4" /> Previous
             </Button>
-            <Button disabled={!agreedTerms} onClick={handleProceedToPayment} className="gap-2">
+            <Button disabled={!agreedTerms || checkoutBlocksCurrency} onClick={handleProceedToPayment} className="gap-2">
               <CheckCircle2 className="h-4 w-4" /> Proceed to Payment
             </Button>
           </div>

@@ -53,7 +53,7 @@ Use this checklist for every PR / feature:
 - [ ] **Rule Zero:** No task enters `open` without confirmed reward escrow.
 - [ ] **Status set:** Only the seven valid statuses are used (no `draft`, `completed`, etc.).
 - [ ] **Transitions:** Change matches the [status contract](#task-status-contract-do-not-deviate) and Sprint 0 spec.
-- [ ] **Cooldowns:** Quit (2h), Raise Dispute (48h), Request Force Close (24h) enforced **server-side**.
+- [ ] **Cooldowns:** Quit (2h), Raise Dispute (none for DSP1, then 48h → 24h → 12h; resets when acceptor returns work to `done`), Request Force Close (24h) enforced **server-side**.
 - [ ] **Roles:** Authorization uses server-derived task context (requestor / acceptor / admin), not client input.
 - [ ] **Self-accept:** Requestor cannot accept own task.
 - [ ] **One acceptor:** At most one acceptor per task.
@@ -107,7 +107,8 @@ After login, navigation includes:
 | **My Tasks** | Tabs: **Created**, **Accepted**, **In Dispute** |
 | **Browse Tasks** | Discover open tasks (filters: country, domain) |
 | **Notifications** | System + task alerts; mark read / flag |
-| **Profile** | Basic profile settings |
+| **Support** | Help & Support page; submit ticket with unique ID (`/help-support`; header button in dashboard) |
+| **Profile** | API-backed profile and server preferences |
 
 ---
 
@@ -190,7 +191,7 @@ From **My Tasks → Created**, opening a task shows:
 | Action | Cooldown |
 |--------|----------|
 | Quit Task | 2 hours from acceptance |
-| Raise Dispute | 48 hours from last dispute raise |
+| Raise Dispute | None for DSP1; then 48h → 24h → 12h from last raise. Resets when acceptor marks `done` again (see [Disputes & DSP4](#disputes--dsp4)) |
 | Request Force Close | 24 hours from last force-close request |
 
 ### Transition diagram (allowed edges)
@@ -265,11 +266,19 @@ stateDiagram-v2
 
 #### 3-strike requestor inactivity (deadlock prevention)
 
-| Strike | Trigger after requestor inactivity |
-|--------|----------------------------------|
-| 1 | 3 days in `done` |
-| 2 | +3 days |
-| 3 | +2 days → auto **`closed`** + escrow release per settlement rules |
+Inactivity strikes apply only while the task is in **`done`** and only **after the effective deadline** (`extendedDeadline` if set, else `deadline`). The inactivity anchor is:
+
+`inactivityAnchor = max(statusEnteredAt, effectiveDeadline)`
+
+Each new transition into `done` (including `disputed → done`) recalculates the anchor. Strikes from a prior `done` stint do not carry over.
+
+| Strike | Trigger after inactivity anchor |
+|--------|--------------------------------|
+| 1 | 72 hours (3 days) |
+| 2 | 144 hours (6 days) |
+| 3 | 192 hours (8 days) → auto **`closed`** + escrow release per settlement rules |
+
+Before the deadline passes, the requestor is in a **review period**—no inactivity strikes yet.
 
 > Applies to **requestor** inactivity in `done` only—not acceptor inactivity.
 
@@ -281,7 +290,7 @@ stateDiagram-v2
 
 | Actor | Actions |
 |-------|---------|
-| Requestor | Comments; raise another dispute after 48h cooldown (up to 4 total) |
+| Requestor | Comments; raise another dispute after the tiered cooldown (up to 4 total). Button stays visible and greyed out during the wait. |
 | Acceptor | Comments; **Submit fix and Mark as Done** → `done` (allowed until **3rd** dispute / DSP3) |
 | Admin | DSP4 only: review timeline; set DSP4 status → drives task status (see below) |
 
@@ -341,18 +350,48 @@ All amounts are **platform-held** until settlement (Sprint 6 ledger).
 ## Disputes & DSP4
 
 - Requestor may raise up to **4** disputes per task.
-- Cooldown **48h** between raises.
 - After DSP4 escalation, only **admin** may resolve status via DSP4 matrix above.
-- **Resolved Valid** rework window (acceptor):
-  - If deadline **passed:** +10 days minimum working window; else force close.
-  - If deadline **not passed:** window = time to deadline; if &lt; 10 days remain, extend to **10 days** minimum after deadline.
+
+### Dispute cooldown (tiered, decreasing)
+
+The **first dispute has no cooldown** — the requestor may raise it as soon as the task is `done`. Later raises wait from the last raise, and the wait shortens each round:
+
+| Next dispute | Disputes already raised | Cooldown |
+|--------------|-------------------------|----------|
+| DSP1 | 0 | **None** — available immediately in `done` |
+| DSP2 | 1 | 48 hours |
+| DSP3 | 2 | 24 hours |
+| DSP4 | 3 | 12 hours |
+
+- Clock starts at the last `dispute_raised` event and is returned on `GET /tasks/:id` as `cooldowns.disputeAfter`, so it survives refresh and re-login.
+- **Reset:** whenever the acceptor marks the task `done` again, the cooldown is cleared and the requestor may raise the next dispute immediately. The next wait after that raise uses the tier for the new DSP.
+- No cooldown once the counter reaches 4 (DSP4 is admin-only).
+
+**UI contract**
+
+- The Raise Dispute button stays **visible** for the requestor in `done` and `disputed` until DSP4. It must never disappear after a raise.
+- During cooldown it is **greyed out**. Hover (and `title`) always shows the remaining time, e.g. `Next dispute available in 24h 0m (48h cooldown before dispute #2).`
+- `canRaiseDispute` stays `true` during the cooldown so the UI can render the disabled state; the wait is enforced server-side in `TasksService.raiseDispute` (`DISPUTE_COOLDOWN_ACTIVE`).
+
+### DSP4 Resolved Valid — rework deadline
+
+`reworkDeadline = max(effectiveDeadline, reviewDate + 10 days)`
+
+| Situation | Result |
+|-----------|--------|
+| Deadline already passed | Reset to **10 days from the review date** |
+| Remaining time &lt; 10 days | Set to **10 days from the review date** (e.g. deadline 20 Jun, review 17 Jun → **27 Jun**) |
+| Remaining time ≥ 10 days | **Deadline unchanged** (e.g. deadline 30 Jun, review 17 Jun → no change) |
+
+`dsp4ReworkDeadline` is always recorded (it gates acceptor `canMarkDone`); `extendedDeadline` is only written when the date actually moves forward. The deadline is never shortened.
 
 ---
 
 ## Deadline rules
 
-- Requestor may **extend deadline** from Activity & Comments (new deadline replaces old).
-- Acceptor notified before deadline; failure may lead to requestor extension loop.
+- The task deadline is a **strict commitment**. If the acceptor fails to complete by the agreed deadline, the requestor may request **Force Closure** (admin approval → `force_closed`; full reward refund to requestor; acceptor forfeits trust deposit per settlement rules).
+- Requestor may **extend deadline** from Activity & Comments while the task is **`committed`** or **`in_progress`** only (not after `done` or `disputed`).
+- Acceptor notified before deadline; failure may lead to requestor extension or force-close path.
 - Post–DSP4 Resolved Valid: see [Disputes & DSP4](#disputes--dsp4).
 
 ---
@@ -370,7 +409,7 @@ All amounts are **platform-held** until settlement (Sprint 6 ledger).
 | **Revenue** | Platform revenue stats |
 | **Analytics** | Task distribution / performance |
 | **Notifications** | View, mark read, flag |
-| **Support** | Tickets; accept/delete; email follow-up |
+| **Support** | Ticket queue; View Details; Mark Done; email follow-up outside platform |
 | **Settings** | Platform configuration |
 
 ### List parameters (reference)
@@ -379,7 +418,7 @@ All amounts are **platform-held** until settlement (Sprint 6 ledger).
 - **Users:** User, Tasks Created, Tasks Accepted, Onboarded On, Inactivity Tracker, Status
 - **Disputes / Escalated:** Dispute ID, Task, Requestor, Acceptor, Level, Raised, Status (+ DSP4 Status for escalated)
 - **Close Requests:** Task ID, Title, Requestor, Acceptor, Task Status, Requested
-- **Support:** Ticket ID, Name, Email, Phone, Issue, Date, Status, Actions
+- **Support:** Ticket ID, User, Subject, Status, Created Date, Actions (View Details, Mark Done)
 
 ---
 
@@ -407,7 +446,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | My Tasks (Created / Accepted / Dispute) | ✅ | API `scope=mine` + participation filter |
 | Browse Tasks (country, domain) | 🟡 | API `scope=browse`; filters partial |
 | Notifications (read/flag) | ✅ | `GET /notifications` API |
-| Profile | 🟡 | UI exists; partial API tie-in |
+| Profile | ✅ | `GET/PATCH /me`; server preferences |
 
 ### Task lifecycle (backend)
 
@@ -423,7 +462,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | extend deadline | ✅ | `POST .../extend-deadline` |
 | Send Alert | 🟡 | Via `POST /tasks/:id/comments` with `entryType=alert` |
 | Request Force Close | ✅ | `POST /tasks/:id/force-close-request` + admin queue |
-| 3-strike inactivity | ✅ | Server `InactivityService` + timeline `sla_warning` events (cron TBD) |
+| 3-strike inactivity | ✅ | `InactivityService` + hourly cron when `INACTIVITY_JOB_ENABLED` (Sprint 8A) |
 | Delete open task (remove + refund) | 🟡 | `DELETE` → `closed` + `cancelledAt` + `cancelledById`; ledger `cancel_open` |
 
 ### Task lifecycle (frontend)
@@ -453,8 +492,8 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | Admin All Tasks | 🟡 | API `scope=admin` |
 | Admin Users suspend | ✅ | `AdminUsers.tsx` + `GET/PATCH /admin/users` |
 | Close Requests approve/reject | ✅ | `PATCH /admin/close-requests/:taskId` |
-| Cancelled tasks (admin) | ✅ | `GET /admin/cancelled-tasks` |
-| Revenue / Analytics / Support | ✅ | Ledger revenue API; admin dashboard/analytics from API |
+| Cancelled tasks (admin UI) | ✅ | No dedicated admin page; `GET /admin/cancelled-tasks` retained for audit/scripts |
+| Revenue / Analytics / Support | ✅ | Ledger revenue API; admin Support queue with Mark Done |
 
 ---
 
@@ -465,7 +504,7 @@ Legend: ✅ Aligned · 🟡 Partial · ⬜ Not implemented · ⚠️ Deviation
 | D1 | TaskTimeline drives status via localStorage | ✅ Phase 1 — API-backed when authenticated |
 | D2 | Cancel uses status `closed` + `cancelledAt` vs “removed” open task | Ledger refund via `cancel_open` (Sprint 6); archival label still `closed` |
 | D3 | `open` → `closed` allowed in `VALID_TRANSITIONS` for cancel | Document as cancel path; consider distinct settlement type |
-| D4 | 3-strike inactivity client-only | ✅ Server job + timeline events; schedule cron in Sprint 8 |
+| D4 | 3-strike inactivity client-only | ✅ Server job + cron (`INACTIVITY_JOB_ENABLED`) |
 | D5 | Force-close request + admin approval | ✅ Sprint 7 — dedicated request API + admin PATCH |
 | D6 | Notifications not persisted | ✅ `AppNotification` DB + API (Phase 1 removed client writes) |
 | D7 | “Bi-weekly” vs “Biweekly” label | Normalize in API validation + UI |

@@ -5,16 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import DashboardLayout from "@/components/DashboardLayout";
 import { format, differenceInHours } from "date-fns";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { usePreferredCurrency } from "@/hooks/usePreferredCurrency";
 import {
   type Task, type TaskStatus,
   STATUS_COLORS, STATUS_LABELS,
-  QUIT_GRACE_HOURS,
+  QUIT_GRACE_HOURS, TRUST_DEPOSIT_PERCENT,
 } from "@/lib/taskTypes";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTasksListRefresh } from "@/hooks/useTasksListRefresh";
@@ -33,6 +35,7 @@ import { ApiClientError } from "@/lib/api/client";
 const MyTasks = () => {
   const navigate = useNavigate();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { formatTask } = usePreferredCurrency();
   const refreshKey = useTasksListRefresh();
   const [searchParams] = useSearchParams();
   const initialTab: "created" | "accepted" | "dispute" =
@@ -47,6 +50,7 @@ const MyTasks = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [quitDialog, setQuitDialog] = useState<Task | null>(null);
+  const [quitAcknowledged, setQuitAcknowledged] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<Task | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -112,6 +116,7 @@ const MyTasks = () => {
       await quitTask(task.id);
       notifyTasksChanged();
       setQuitDialog(null);
+      setQuitAcknowledged(false);
       await loadTasks();
       toast({
         title: "Task Quit Successfully",
@@ -224,7 +229,8 @@ const MyTasks = () => {
           <p>
             <span className="font-semibold">Quit Task Policy:</span> You can quit a task only within the first{" "}
             <span className="font-semibold">{QUIT_GRACE_HOURS} hours</span> after accepting it. After this period,
-            the &quot;Quit Task&quot; option will be disabled and you must complete the task.
+            the &quot;Quit Task&quot; option will be disabled and you must complete the task. If you quit, you{" "}
+            <span className="font-semibold">cannot re-accept the same task</span> in the future.
           </p>
         </div>
       )}
@@ -286,9 +292,7 @@ const MyTasks = () => {
                         <Calendar className="h-3 w-3" />
                         {task.deadline ? format(new Date(task.deadline), "MMM d") : "—"}
                       </span>
-                      <span>
-                        {task.currencySymbol || "₹"} {task.reward.toLocaleString()}
-                      </span>
+                      <span>{formatTask(task.reward, task)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -317,7 +321,10 @@ const MyTasks = () => {
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (canQuit) setQuitDialog(task);
+                          if (canQuit) {
+                            setQuitAcknowledged(false);
+                            setQuitDialog(task);
+                          }
                         }}
                       >
                         <Clock className="h-3.5 w-3.5 mr-1" />
@@ -336,24 +343,56 @@ const MyTasks = () => {
         </div>
       )}
 
-      <Dialog open={!!quitDialog} onOpenChange={() => setQuitDialog(null)}>
+      <Dialog
+        open={!!quitDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuitDialog(null);
+            setQuitAcknowledged(false);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" /> Quit Task?
             </DialogTitle>
-            <DialogDescription>
-              You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of{" "}
-              {quitDialog ? quitDialog.currencySymbol || "₹" : "₹"}
-              {quitDialog ? (quitDialog.reward * 0.1).toFixed(2) : "0.00"} will be fully refunded. The task will be
-              released back to Browse Tasks.
+            <DialogDescription asChild>
+              <div className="space-y-4 pt-1">
+                <p>
+                  You are within the {QUIT_GRACE_HOURS}-hour grace period. Your trust deposit of{" "}
+                  {quitDialog
+                    ? formatTask(
+                        quitDialog.reward * (TRUST_DEPOSIT_PERCENT / 100),
+                        quitDialog,
+                      )
+                    : formatTask(0, { currency: "INR" })}{" "}
+                  will be fully refunded. The task will be released back to Browse Tasks.
+                </p>
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                  <Checkbox
+                    id="quit-acknowledge"
+                    checked={quitAcknowledged}
+                    onCheckedChange={(checked) => setQuitAcknowledged(checked === true)}
+                  />
+                  <label htmlFor="quit-acknowledge" className="text-sm leading-snug cursor-pointer text-foreground">
+                    I understand that if I quit this task, my trust deposit will be refunded within the grace period,
+                    but I will <span className="font-semibold">permanently lose the ability to re-accept this same
+                    task</span> in the future.
+                  </label>
+                </div>
+              </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setQuitDialog(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => quitDialog && handleQuitTask(quitDialog)}>
+            <Button
+              variant="destructive"
+              disabled={!quitAcknowledged}
+              onClick={() => quitDialog && handleQuitTask(quitDialog)}
+            >
               Confirm Quit
             </Button>
           </DialogFooter>
@@ -368,8 +407,8 @@ const MyTasks = () => {
             </DialogTitle>
             <DialogDescription>
               This will cancel and archive the task &quot;{deleteDialog?.title}&quot;. Your reward deposit of{" "}
-              {deleteDialog?.currencySymbol || "₹"}
-              {deleteDialog?.reward.toLocaleString() || 0} will be fully refunded.
+              {deleteDialog ? formatTask(deleteDialog.reward, deleteDialog) : formatTask(0, { currency: "INR" })}{" "}
+              will be fully refunded.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">

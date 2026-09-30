@@ -1,6 +1,7 @@
 import type { Task, TaskEvent, User } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import type { CooldownMeta, TaskActionSummary } from '../lifecycle/lifecycle.types';
+import type { UserRatingSnapshot } from '../users/user-rating.util';
 
 export interface TaskDto {
   id: string;
@@ -34,6 +35,10 @@ export interface TaskDto {
   dsp4ResolvedValid?: boolean;
   dsp4Status?: string | null;
   dsp4ReworkDeadline?: string | null;
+  requestorAverageRating?: number | null;
+  requestorRatingCount?: number;
+  acceptorAverageRating?: number | null;
+  acceptorRatingCount?: number;
 }
 
 export interface TimelineEntryDto {
@@ -62,7 +67,13 @@ function decimalToNumber(value: Decimal | null | undefined): number | undefined 
 
 export function toTaskDto(
   task: Task & { requestor: User; acceptor?: User | null },
+  ratings?: Map<string, UserRatingSnapshot>,
 ): TaskDto {
+  const requestorStats = ratings?.get(task.requestorId);
+  const acceptorStats = task.acceptorId
+    ? ratings?.get(task.acceptorId)
+    : undefined;
+
   return {
     id: task.id,
     taskId: task.publicId,
@@ -100,6 +111,10 @@ export function toTaskDto(
     dsp4ResolvedValid: task.dsp4ResolvedValid,
     dsp4Status: task.dsp4Status ?? undefined,
     dsp4ReworkDeadline: task.dsp4ReworkDeadline?.toISOString(),
+    requestorAverageRating: requestorStats?.averageRating ?? null,
+    requestorRatingCount: requestorStats?.ratingCount ?? 0,
+    acceptorAverageRating: acceptorStats?.averageRating ?? null,
+    acceptorRatingCount: acceptorStats?.ratingCount ?? 0,
   };
 }
 

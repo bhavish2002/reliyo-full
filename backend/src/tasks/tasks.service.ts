@@ -25,6 +25,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import type { TaskForSettlement } from '../ledger/ledger.types';
 import { NotificationsService } from '../notifications/notifications.service';
 import * as TaskNotify from '../notifications/task-notifications';
+import { getUserRatingStatsMap } from '../users/user-rating.util';
 
 type TaskWithUsers = Task & { requestor: User; acceptor: User | null };
 
@@ -244,8 +245,13 @@ export class TasksService {
       }),
     ]);
 
+    const userIds = rows.flatMap((t) =>
+      [t.requestorId, t.acceptorId].filter((id): id is string => Boolean(id)),
+    );
+    const ratings = await getUserRatingStatsMap(this.prisma, userIds);
+
     return {
-      items: rows.map((t) => toTaskDto(t)),
+      items: rows.map((t) => toTaskDto(t, ratings)),
       total,
       page,
       pageSize,
@@ -284,8 +290,13 @@ export class TasksService {
       availableActions.canAccept = false;
     }
 
+    const ratings = await getUserRatingStatsMap(this.prisma, [
+      task.requestorId,
+      ...(task.acceptorId ? [task.acceptorId] : []),
+    ]);
+
     return {
-      task: toTaskDto(task),
+      task: toTaskDto(task, ratings),
       timeline: events.map(toTimelineEntryDto),
       availableActions,
       cooldowns,
@@ -624,13 +635,20 @@ export class TasksService {
       actor.sub,
       actor.platformRole,
     );
+    const cooldowns = this.lifecycle.computeCooldowns(task, events);
     const actions = this.lifecycle.computeAvailableActions(
       task,
       role,
       actor.sub,
-      this.lifecycle.computeCooldowns(task, events),
+      cooldowns,
     );
     this.lifecycle.assertActionAllowed('canRaiseDispute', actions);
+    if (cooldowns.disputeAfter && new Date(cooldowns.disputeAfter) > new Date()) {
+      throw new ForbiddenException({
+        code: 'DISPUTE_COOLDOWN_ACTIVE',
+        message: 'Dispute cooldown is still active.',
+      });
+    }
 
     await this.prisma.$transaction(async (tx) => {
       const disputeCount = task.disputeCount + 1;
@@ -808,6 +826,14 @@ export class TasksService {
       throw new ForbiddenException({
         code: 'TASK_ACTION_FORBIDDEN',
         message: 'Only the requestor can extend the deadline.',
+      });
+    }
+
+    if (task.status === 'done' || task.status === 'disputed') {
+      throw new BadRequestException({
+        code: 'DEADLINE_EXTEND_NOT_ALLOWED',
+        message:
+          'Deadline cannot be extended after the task is marked Done or enters Dispute.',
       });
     }
 

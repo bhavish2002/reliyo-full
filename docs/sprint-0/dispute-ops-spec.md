@@ -1,8 +1,10 @@
 # Dispute Operations Spec (DSP1-DSP4)
 
-Version: `v1.0`  
+Version: `v1.1`  
 Owner: Product Ops + Backend Lead  
 Status: LOCKED
+
+> **v1.1 (2026-09-10):** cooldown is none for DSP1, then 48/24/12h from last raise; resets on return to `Done`. Button stays visible and greyed during the wait.
 
 ## 1) Scope
 
@@ -18,7 +20,7 @@ Maximum disputes per task: 4
 ## 3) Core Rules
 
 1. Requestor may raise disputes on `Done` (or escalate from `Disputed`) subject to cooldown.
-2. Cooldown between dispute raises: 48 hours.
+2. The first dispute (DSP1) has no cooldown. Subsequent raises wait from the last raise, decreasing per round: 48h (DSP2), 24h (DSP3), 12h (DSP4). Returning to `Done` after a fix resets the wait so the next raise is immediate. The action stays visible and disabled during the cooldown.
 3. On DSP1-DSP3, acceptor may submit fix and move back to `Done`.
 4. On DSP4, acceptor cannot change status unless admin resolves-valid policy enables constrained rework.
 5. All dispute actions must generate timeline and audit events.

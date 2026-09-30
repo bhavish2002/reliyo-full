@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
@@ -7,6 +8,7 @@ import { DisputesModule } from './disputes/disputes.module';
 import { HealthModule } from './health/health.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { LifecycleModule } from './lifecycle/lifecycle.module';
+import { JobsModule } from './jobs/jobs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -30,6 +32,7 @@ function resolveEnvFilePath(): string[] {
       isGlobal: true,
       envFilePath: resolveEnvFilePath(),
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     HealthModule,
     AuthModule,
@@ -41,6 +44,7 @@ function resolveEnvFilePath(): string[] {
     DisputesModule,
     AdminModule,
     NotificationsModule,
+    JobsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: ApiExceptionFilter },

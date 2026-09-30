@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api/client";
-import type { AuthTokens, AuthUser, UserRole } from "@/lib/auth/types";
+import type { AuthTokens, AuthUser, PatchMePayload, UserRole } from "@/lib/auth/types";
 
 export type OtpPurpose = "login" | "signup";
 
@@ -34,6 +34,10 @@ export function logoutSession() {
 
 export function fetchMe() {
   return apiClient.get<AuthUser>("/me");
+}
+
+export function patchMe(payload: PatchMePayload) {
+  return apiClient.patch<AuthUser>("/me", payload);
 }
 
 export function getRedirectForRole(role: UserRole): string {

@@ -38,6 +38,10 @@ export interface ApiTask {
   ratingFeedback?: string;
   statusEnteredAt?: string;
   dsp4ResolvedValid?: boolean;
+  requestorAverageRating?: number | null;
+  requestorRatingCount?: number;
+  acceptorAverageRating?: number | null;
+  acceptorRatingCount?: number;
 }
 
 export interface TaskDetailApi {
@@ -81,6 +85,10 @@ export function mapApiTaskToTask(t: ApiTask): Task {
     ratingFeedback: t.ratingFeedback,
     statusEnteredAt: t.statusEnteredAt,
     dsp4ResolvedValid: t.dsp4ResolvedValid,
+    requestorAverageRating: t.requestorAverageRating,
+    requestorRatingCount: t.requestorRatingCount,
+    acceptorAverageRating: t.acceptorAverageRating,
+    acceptorRatingCount: t.acceptorRatingCount,
   };
 }
 

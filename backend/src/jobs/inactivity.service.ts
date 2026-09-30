@@ -2,13 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { LedgerService } from '../ledger/ledger.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  computeDueStrikeLevel,
+  computeInactivityAnchor,
+  countStrikesInDoneStint,
+  INACTIVITY_STRIKE_HOURS,
+  resolveEffectiveDeadline,
+} from './inactivity.util';
 
-const STRIKE_HOURS = [72, 144, 192] as const;
 const STRIKE_MESSAGES = [
-  'Strike 1/3: Requestor has been inactive for 3 days. Please review the task to avoid auto-closure.',
-  'Strike 2/3: Requestor has been inactive for 6 days. Task will auto-close in 2 days if no action is taken.',
-  'Strike 3/3: Task has been automatically closed due to requestor inactivity.',
-];
+  'Reminder 1 of 3 — this completed task still needs a decision (accept work or raise a dispute).',
+  'Reminder 2 of 3 — still no decision on this task.',
+  'Reminder 3 of 3 — task closed automatically because no decision was made in time.',
+] as const;
 
 @Injectable()
 export class InactivityService {
@@ -48,23 +54,23 @@ export class InactivityService {
       return { strikesAdded: 0, autoClosed: false };
     }
 
+    const effectiveDeadline = resolveEffectiveDeadline(
+      task.deadline,
+      task.extendedDeadline,
+    );
+    const inactivityAnchor = computeInactivityAnchor(
+      task.statusEnteredAt,
+      effectiveDeadline,
+    );
     const events = await this.prisma.taskEvent.findMany({
       where: { taskId: task.id },
       orderBy: { createdAt: 'asc' },
     });
 
-    const existingStrikes = events.filter((e) => {
-      const meta = e.metadata as { alertType?: string } | null;
-      return e.entryType === 'alert' && meta?.alertType === 'sla_warning';
-    }).length;
-
+    const existingStrikes = countStrikesInDoneStint(events, inactivityAnchor);
     const hoursElapsed =
-      (Date.now() - task.statusEnteredAt.getTime()) / (1000 * 60 * 60);
-
-    let dueStrike = 0;
-    for (let i = 0; i < STRIKE_HOURS.length; i++) {
-      if (hoursElapsed >= STRIKE_HOURS[i]) dueStrike = i + 1;
-    }
+      (Date.now() - inactivityAnchor.getTime()) / (1000 * 60 * 60);
+    const dueStrike = computeDueStrikeLevel(hoursElapsed);
 
     if (dueStrike <= existingStrikes) {
       return { strikesAdded: 0, autoClosed: false };
@@ -90,7 +96,7 @@ export class InactivityService {
         strikesAdded += 1;
       }
 
-      if (dueStrike >= 3) {
+      if (dueStrike >= INACTIVITY_STRIKE_HOURS.length) {
         const fresh = await tx.task.findUniqueOrThrow({
           where: { id: task.id },
           include: { requestor: true, acceptor: true },
@@ -112,10 +118,14 @@ export class InactivityService {
             authorName: 'System',
             authorRole: 'system',
             message:
-              'Task auto-closed after 3 inactivity strikes (requestor did not accept work).',
+              'Task auto-closed after 3 reminders with no decision.',
             entryType: 'status_change',
             systemGenerated: true,
-            metadata: { fromStatus: 'done', toStatus: 'closed', reason: 'inactivity_3_strike' },
+            metadata: {
+              fromStatus: 'done',
+              toStatus: 'closed',
+              reason: 'inactivity_3_strike',
+            },
           },
         });
         autoClosed = true;

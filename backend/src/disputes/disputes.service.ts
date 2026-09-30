@@ -89,6 +89,9 @@ export class DisputesService {
             task.deadline,
             task.extendedDeadline,
           );
+          const effectiveDeadline = task.extendedDeadline ?? task.deadline;
+          const extendsDeadline =
+            reworkDeadline.getTime() > effectiveDeadline.getTime();
           await tx.task.update({
             where: { id: task.id },
             data: {
@@ -96,7 +99,7 @@ export class DisputesService {
               dsp4Status: 'resolved_valid',
               dsp4ResolvedValid: true,
               dsp4ReworkDeadline: reworkDeadline,
-              extendedDeadline: reworkDeadline,
+              ...(extendsDeadline ? { extendedDeadline: reworkDeadline } : {}),
             },
           });
           await tx.taskEvent.create({

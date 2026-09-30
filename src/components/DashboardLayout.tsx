@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, FileText, Search, Bell, UserRound, LogOut, Plus, Menu,
-  ChevronDown, ArrowRightLeft,
+  ChevronDown, ArrowRightLeft, LifeBuoy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -12,6 +12,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchUnreadNotificationCount } from "@/lib/notifications/api";
 import { getUserSettings, applyTheme } from "@/lib/userSettings";
+import { UserRatingDisplay } from "@/components/UserRatingDisplay";
+import { useUserRating } from "@/hooks/useUserRating";
 
 const getNavItems = (notifCount: number) => [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -81,9 +83,18 @@ const SidebarContent = ({ current, onNavigate, onLogout, notifCount }: {
 };
 
 // ── Header user dropdown ─────────────────────────────────────────────────────
-const HeaderUserDropdown = ({ userName, initial, onNavigate, onLogout }: {
+const HeaderUserDropdown = ({
+  userName,
+  initial,
+  averageRating,
+  ratingCount,
+  onNavigate,
+  onLogout,
+}: {
   userName: string;
   initial: string;
+  averageRating?: number | null;
+  ratingCount?: number;
   onNavigate: (p: string) => void;
   onLogout: () => void;
 }) => {
@@ -108,7 +119,14 @@ const HeaderUserDropdown = ({ userName, initial, onNavigate, onLogout }: {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted"
       >
-        <span className="text-sm font-medium text-foreground">{userName}</span>
+        <div className="hidden sm:flex flex-col items-end">
+          <span className="text-sm font-medium text-foreground">{userName}</span>
+          <UserRatingDisplay
+            averageRating={averageRating}
+            ratingCount={ratingCount}
+            showEmpty={false}
+          />
+        </div>
         <Avatar className="h-8 w-8">
           <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">{initial}</AvatarFallback>
         </Avatar>
@@ -148,18 +166,21 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { signOut, isAuthenticated } = useAuth();
+  const { signOut, isAuthenticated, user: authUser } = useAuth();
   const currentUser = getCurrentUser();
   const userName = currentUser?.name?.split(" ")[0] || "User";
+  const headerRating = useUserRating(authUser?.id);
 
   const [notifCount, setNotifCount] = useState(0);
 
-  // Apply theme on every dashboard render (ensures correct user context)
+  // Apply theme when user preferences load from server
   useEffect(() => {
-    const userId = currentUser?.id || "guest";
-    const settings = getUserSettings(userId);
+    const settings = getUserSettings(
+      currentUser?.id || "guest",
+      authUser?.preferences,
+    );
     applyTheme(settings.darkMode);
-  }, [currentUser?.id]);
+  }, [currentUser?.id, authUser?.preferences?.darkMode]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -196,12 +217,25 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <Menu className="h-5 w-5" />
           </Button>
           <div className="hidden lg:block" />
-          <HeaderUserDropdown
-            userName={currentUser?.name || "User"}
-            initial={currentUser?.name?.charAt(0) || "U"}
-            onNavigate={handleNav}
-            onLogout={handleLogout}
-          />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => navigate("/help-support?from=dashboard")}
+            >
+              <LifeBuoy className="h-4 w-4" />
+              <span className="hidden sm:inline">Support</span>
+            </Button>
+            <HeaderUserDropdown
+              userName={currentUser?.name || "User"}
+              initial={currentUser?.name?.charAt(0) || "U"}
+              averageRating={headerRating.averageRating ?? authUser?.averageRating}
+              ratingCount={headerRating.ratingCount || authUser?.ratingCount}
+              onNavigate={handleNav}
+              onLogout={handleLogout}
+            />
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
