@@ -30,6 +30,7 @@ const STATUS_PIE_COLORS: Record<TaskStatus, string> = {
   disputed: "hsl(var(--destructive))",
   closed: "hsl(var(--muted-foreground))",
   force_closed: "hsl(0, 70%, 45%)",
+  deleted: "hsl(var(--muted-foreground))",
 };
 
 const STATUS_BADGE_COLORS: Record<string, string> = {
@@ -40,6 +41,7 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   done: "bg-[hsl(220,70%,50%)] text-white",
   closed: "bg-muted text-muted-foreground",
   force_closed: "bg-destructive/80 text-destructive-foreground",
+  deleted: "bg-muted text-muted-foreground",
 };
 
 const PieTooltip = ({ active, payload }: any) => {

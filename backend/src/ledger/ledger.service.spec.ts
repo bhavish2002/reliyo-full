@@ -32,6 +32,10 @@ function mockTask(overrides: Partial<TaskForSettlement> = {}): TaskForSettlement
     ratingFeedback: null,
     dsp4ResolvedValid: false,
     cancelledAt: null,
+    cancelledById: null,
+    cancelReason: null,
+    dsp4Status: null,
+    dsp4ReworkDeadline: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     rewardFundHoldId: 'hold_reward',
@@ -69,7 +73,7 @@ function mockTask(overrides: Partial<TaskForSettlement> = {}): TaskForSettlement
       createdAt: new Date(),
     },
     ...overrides,
-  };
+  } as TaskForSettlement;
 }
 
 describe('LedgerService', () => {
@@ -135,17 +139,35 @@ describe('LedgerService', () => {
     prisma.journalEntry.findUnique.mockResolvedValue(null);
   });
 
-  it('posts force_closed with 3% trust penalty to compensation reserve', async () => {
+  it('posts force_closed: full reward plus 70% of the trust penalty to the requestor', async () => {
     const tx = prisma;
     await service.settleForceClosed(tx as never, mockTask());
 
     const { data } = tx.journalEntry.create.mock.calls.at(-1)[0];
     expect(data.scenario).toBe('force_closed');
-    const reserve = data.lines.create.find(
-      (l: { accountCode: string }) =>
-        l.accountCode === 'platform_compensation_reserve',
+    const lines = data.lines.create as Array<{
+      accountCode: string;
+      side: string;
+      amount: number;
+      userId?: string;
+    }>;
+    const debit = lines
+      .filter((l) => l.side === 'debit')
+      .reduce((s, l) => s + Number(l.amount), 0);
+    const credit = lines
+      .filter((l) => l.side === 'credit')
+      .reduce((s, l) => s + Number(l.amount), 0);
+    expect(debit).toBe(credit);
+
+    const requestor = lines.find((l) => l.accountCode === 'payable_requestor');
+    const acceptor = lines.find((l) => l.accountCode === 'payable_acceptor');
+    const reserve = lines.find(
+      (l) => l.accountCode === 'platform_compensation_reserve',
     );
-    expect(Number(reserve.amount)).toBe(3);
+    // Trust 100 × 3% = 3 penalty. Requestor gets 1000 + 70% of 3 = 1002.1. Platform keeps 0.9. Acceptor keeps 97.
+    expect(Number(requestor?.amount)).toBe(1002.1);
+    expect(Number(acceptor?.amount)).toBe(97);
+    expect(Number(reserve?.amount)).toBe(0.9);
   });
 
   it('rejects unbalanced journal', async () => {

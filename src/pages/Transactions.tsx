@@ -33,10 +33,10 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const SETTLEMENT_LABELS: Record<string, string> = {
-  closed: "Settled on close",
-  force_closed: "Force-close settlement",
-  cancel_open: "Refund (cancelled)",
-  quit_trust_refund: "Trust refund (quit)",
+  closed: "Reward payout successful",
+  force_closed: "Force-close settlement successful",
+  cancel_open: "Refund successful",
+  quit_trust_refund: "Trust deposit refund successful",
 };
 
 function matchesFilter(tx: UserTransaction, filter: FilterKey): boolean {
@@ -54,7 +54,7 @@ function matchesFilter(tx: UserTransaction, filter: FilterKey): boolean {
       tx.status === "confirmed" &&
       !tx.taskCancelled &&
       tx.taskStatus &&
-      !["closed", "force_closed"].includes(tx.taskStatus)
+      !["closed", "force_closed", "deleted"].includes(tx.taskStatus)
     );
   }
   return true;
@@ -220,9 +220,11 @@ const Transactions = () => {
                       <Badge variant="outline" className={STATUS_STYLE[tx.status] ?? ""}>
                         {tx.status}
                       </Badge>
-                      {tx.taskCancelled && (
+                      {tx.taskStatus === "deleted" ? (
+                        <Badge variant="secondary">Deleted</Badge>
+                      ) : tx.taskCancelled ? (
                         <Badge variant="secondary">Task cancelled</Badge>
-                      )}
+                      ) : null}
                     </div>
                     {tx.taskTitle && (
                       <p className="text-sm text-muted-foreground truncate">

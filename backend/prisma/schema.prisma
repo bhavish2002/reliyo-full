@@ -30,6 +30,7 @@ enum TaskStatus {
   disputed
   closed
   force_closed
+  deleted
 }
 
 enum FundHoldPurpose {

@@ -14,11 +14,12 @@ Status legend:
 
 - Status: `LOCKED`
 - Owner: Founder + Finance + Legal
-- Locked decision:
-  - Requestor receives 100% reward refund.
-  - Acceptor receives trust deposit refund minus 3% penalty.
-  - Penalty basis is 3% of trust deposit amount.
-  - Settlement rounding mode is half-up to 2 decimal places.
+- Locked decision (amended 2026-09-24):
+  - Requestor receives 100% reward refund **plus 70% of the trust-deposit penalty**.
+  - Penalty basis remains 3% of the trust deposit.
+  - Acceptor receives the trust deposit minus that 3% penalty.
+  - The remaining 30% of the penalty is credited to `platform_compensation_reserve`.
+  - Settlement rounding mode is half-up to 2 decimal places. The requestor share is rounded first; the platform share is the remainder so the penalty still sums.
 - Implementation notes:
   - Penalty handling must map to immutable ledger entries.
   - API responses should include explicit breakdown fields for refund and penalty.

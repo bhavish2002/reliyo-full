@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,13 +9,18 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AdminLayout from "@/components/AdminLayout";
 import AdminTaskDetailDialog from "@/components/AdminTaskDetailDialog";
-import { AlertTriangle, Eye, Clock, CheckCircle2, XCircle, Shield, MessageSquare } from "lucide-react";
+import { AlertTriangle, Eye, Clock, CheckCircle2, XCircle, Shield, MessageSquare, Flag } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
-  type AdminDispute, type Dsp4Status, DSP4_STATUS_LABELS,
+  type AdminDispute, type Dsp4Status, DSP4_STATUS_LABELS, DSP4_STATUS_FILTERS,
+  type EscalatedFlagFilter, type EscalatedDsp4Filter,
+  isEscalatedEntryFlagged, filterEscalatedDisputes,
 } from "@/lib/adminData";
 import { listAdminDisputes, resolveAdminDsp4 } from "@/lib/admin/api";
 import { mapApiTaskToTask, type ApiTask } from "@/lib/tasks/api";
@@ -36,6 +41,8 @@ const AdminDisputes = () => {
   const [viewTask, setViewTask] = useState<AdminDispute | null>(null);
   const [adminComment, setAdminComment] = useState("");
   const [tab, setTab] = useState("disputes");
+  const [flagFilter, setFlagFilter] = useState<EscalatedFlagFilter>("all");
+  const [dsp4Filter, setDsp4Filter] = useState<EscalatedDsp4Filter>("all");
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -73,6 +80,10 @@ const AdminDisputes = () => {
 
   const normalDisputes = disputes.filter((d) => !d.escalated);
   const escalatedDisputes = disputes.filter((d) => d.escalated);
+  const filteredEscalated = useMemo(
+    () => filterEscalatedDisputes(escalatedDisputes, flagFilter, dsp4Filter),
+    [escalatedDisputes, flagFilter, dsp4Filter],
+  );
 
   const activeNormal = normalDisputes.filter((d) => d.task.status === "disputed").length;
   const activeEscalated = escalatedDisputes.filter((d) => d.dsp4Status === "open" || d.dsp4Status === "resolved_valid").length;
@@ -158,13 +169,24 @@ const AdminDisputes = () => {
       <TableCell className="text-sm text-muted-foreground">{new Date(d.createdAt).toLocaleDateString()}</TableCell>
       <TableCell className="text-center">
         {d.escalated ? (
-          <Badge variant="outline" className={`text-[10px] gap-1 ${DSP4_STATUS_COLORS[d.dsp4Status ?? "open"]}`}>
-            {(d.dsp4Status ?? "open") === "open" && <Clock className="h-3 w-3" />}
-            {d.dsp4Status === "resolved_valid" && <AlertTriangle className="h-3 w-3" />}
-            {d.dsp4Status === "resolved_invalid" && <CheckCircle2 className="h-3 w-3" />}
-            {d.dsp4Status === "admin_closed" && <XCircle className="h-3 w-3" />}
-            {DSP4_STATUS_LABELS[d.dsp4Status ?? "open"]}
-          </Badge>
+          <div className="flex flex-col items-center gap-1">
+            <Badge variant="outline" className={`text-[10px] gap-1 ${DSP4_STATUS_COLORS[d.dsp4Status ?? "open"]}`}>
+              {(d.dsp4Status ?? "open") === "open" && <Clock className="h-3 w-3" />}
+              {d.dsp4Status === "resolved_valid" && <AlertTriangle className="h-3 w-3" />}
+              {d.dsp4Status === "resolved_invalid" && <CheckCircle2 className="h-3 w-3" />}
+              {d.dsp4Status === "admin_closed" && <XCircle className="h-3 w-3" />}
+              {DSP4_STATUS_LABELS[d.dsp4Status ?? "open"]}
+            </Badge>
+            {isEscalatedEntryFlagged(d.task.status, d.escalated) && (
+              <Badge
+                variant="outline"
+                className="text-[10px] gap-1 bg-[hsl(35,90%,50%)]/10 text-[hsl(35,90%,50%)] border-[hsl(35,90%,50%)]/20"
+                title="Task is Closed; this DSP4 row is still listed on Escalated"
+              >
+                <Flag className="h-3 w-3" /> Flagged
+              </Badge>
+            )}
+          </div>
         ) : (
           <Badge variant="outline" className="text-[10px] gap-1 bg-primary/10 text-primary border-primary/20">
             <MessageSquare className="h-3 w-3" />
@@ -275,25 +297,74 @@ const AdminDisputes = () => {
               </CardContent>
             </Card>
           ) : (
-            <Card className="rounded-xl overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs">Dispute ID</TableHead>
-                    <TableHead className="text-xs">Task</TableHead>
-                    <TableHead className="text-xs">Requestor</TableHead>
-                    <TableHead className="text-xs">Acceptor</TableHead>
-                    <TableHead className="text-xs text-center">Level</TableHead>
-                    <TableHead className="text-xs">Raised</TableHead>
-                    <TableHead className="text-xs text-center">DSP4 Status</TableHead>
-                    <TableHead className="text-xs w-32"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {escalatedDisputes.map(renderRow)}
-                </TableBody>
-              </Table>
-            </Card>
+            <>
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Flag</span>
+                  {(["all", "flagged", "unflagged"] as const).map((value) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant={flagFilter === value ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 text-xs capitalize"
+                      onClick={() => setFlagFilter(value)}
+                    >
+                      {value === "all" ? "All" : value === "flagged" ? "Flagged" : "Unflagged"}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">DSP4 Status</span>
+                  <Select
+                    value={dsp4Filter}
+                    onValueChange={(v) => setDsp4Filter(v as EscalatedDsp4Filter)}
+                  >
+                    <SelectTrigger className="h-8 w-[180px] text-xs">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      {DSP4_STATUS_FILTERS.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {DSP4_STATUS_LABELS[status]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Showing {filteredEscalated.length} of {escalatedDisputes.length}
+                </p>
+              </div>
+              <Card className="rounded-xl overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Dispute ID</TableHead>
+                      <TableHead className="text-xs">Task</TableHead>
+                      <TableHead className="text-xs">Requestor</TableHead>
+                      <TableHead className="text-xs">Acceptor</TableHead>
+                      <TableHead className="text-xs text-center">Level</TableHead>
+                      <TableHead className="text-xs">Raised</TableHead>
+                      <TableHead className="text-xs text-center">DSP4 Status</TableHead>
+                      <TableHead className="text-xs w-32"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEscalated.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                          No escalated disputes match these filters
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredEscalated.map(renderRow)
+                    )}
+                  </TableBody>
+                </Table>
+              </Card>
+            </>
           )}
         </TabsContent>
       </Tabs>

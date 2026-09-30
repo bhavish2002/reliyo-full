@@ -119,7 +119,8 @@ export class LifecycleService {
     cooldowns: CooldownMeta,
   ): TaskActionSummary {
     const status = task.status;
-    const isTerminal = status === 'closed' || status === 'force_closed';
+    const isTerminal =
+      status === 'closed' || status === 'force_closed' || status === 'deleted';
 
     const canComment = this.canComment(status, role);
 
@@ -222,7 +223,9 @@ export class LifecycleService {
         return role === 'requestor' || role === 'acceptor';
       case 'disputed':
         return role === 'requestor' || role === 'acceptor' || role === 'admin';
-      default:
+      case 'closed':
+      case 'force_closed':
+      case 'deleted':
         return false;
     }
   }

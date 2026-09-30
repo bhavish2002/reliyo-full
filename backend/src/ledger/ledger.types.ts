@@ -18,6 +18,8 @@ export type SettlementScenario =
 
 export const PLATFORM_FEE_ON_REWARD = 0.05;
 export const FORCE_CLOSE_TRUST_PENALTY = 0.03;
+/** Share of the force-close trust penalty credited to the requestor. The rest stays in the platform reserve. */
+export const FORCE_CLOSE_REQUESTOR_PENALTY_SHARE = 0.7;
 export const TRUST_DEPOSIT_RATE = 0.1;
 
 export type TaskForSettlement = Task & {

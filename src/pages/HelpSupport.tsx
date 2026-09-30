@@ -20,7 +20,7 @@ const helpGuides = [
 ];
 
 const faqItems = [
-  { q: "How do I create a task?", a: "Navigate to your dashboard and click 'Create Task'. Fill in the details including title, description, deadline, and reward amount. The platform fee will be calculated automatically." },
+  { q: "How do I create a task?", a: "Navigate to your dashboard and click 'Create Task'. Fill in the details including title, description, deadline, and reward amount. The final reward amount payable is subject to applicable fees and deductions, including the Platform fee and any applicable transaction charges." },
   { q: "What happens if a task is not completed on time?", a: "If the acceptor fails to meet the deadline, the requestor can raise a dispute or request a force close. The platform's dispute resolution process will handle the situation fairly." },
   { q: "How are payments secured?", a: "Task payments are held as platform-held funds. The reward amount is locked when a task is funded and released to the acceptor only after successful completion and approval by the requestor, subject to policy and fees." },
   { q: "Can I cancel a task after posting?", a: "You can cancel a task before it is accepted. Once accepted, you'll need to follow the dispute or force-close process if issues arise." },

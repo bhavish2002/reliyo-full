@@ -35,7 +35,6 @@ const DOMAINS = [
   "Delivery", "Cleaning", "Other",
 ];
 
-const PLATFORM_FEE_PERCENT = 5;
 const TITLE_MIN_WORDS = 2;
 
 // Country → currency mapping with independent minimum rewards (not derived from INR)
@@ -193,8 +192,6 @@ const CreateTask = () => {
   const currency = COUNTRY_CURRENCY[form.country] || COUNTRY_CURRENCY["India"];
   const cs = currency.symbol;
   const minReward = currency.minReward;
-  const platformFee = parseFloat((rewardNum * (PLATFORM_FEE_PERCENT / 100)).toFixed(2));
-  const totalPayout = rewardNum;
   const checkoutBlocksCurrency =
     Boolean(paymentsConfig?.checkoutEnabled) &&
     !isCheckoutCurrencySupported(currency.code, paymentsConfig!);
@@ -223,7 +220,6 @@ const CreateTask = () => {
     navigate("/payment", {
       state: {
         amount: rewardNum,
-        platformFee,
         currencySymbol: cs,
         currency: currency.code,
         taskDraft: {
@@ -544,19 +540,9 @@ const CreateTask = () => {
                 <h2 className="text-lg font-bold text-foreground">Lock Reward</h2>
               </div>
 
-              <div className="flex items-center gap-2 mb-3">
-                <Info className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Pay Breakdown</span>
-              </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span>Total Reward</span><span>{cs}{rewardNum.toLocaleString()}</span></div>
-                <div className="flex justify-between text-muted-foreground"><span>Platform Fee</span><span className="text-xs italic">Deducted at payout</span></div>
-              </div>
-
-              <div className="mt-4 flex justify-between rounded-lg bg-muted p-3 font-semibold">
-                <span>Total Payout</span>
-                <span className="text-lg">{cs}{totalPayout.toLocaleString()}</span>
+              <div className="flex justify-between rounded-lg bg-muted p-3 font-semibold">
+                <span>Reward to lock</span>
+                <span className="text-lg">{cs}{rewardNum.toLocaleString()}</span>
               </div>
             </CardContent>
           </Card>

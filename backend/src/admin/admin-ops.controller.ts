@@ -22,7 +22,9 @@ import { DisputesService } from '../disputes/disputes.service';
 import { ResolveDsp4Dto } from '../disputes/dto/resolve-dsp4.dto';
 import { InactivityService } from '../jobs/inactivity.service';
 import { ScheduledJobsService } from '../jobs/scheduled-jobs.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PLATFORM_POLICY } from '../common/platform/platform-policy.constants';
+import * as TaskNotify from '../notifications/task-notifications';
 
 class ResolveCloseRequestDto {
   @IsIn(['approved', 'rejected'])
@@ -50,6 +52,7 @@ export class AdminOpsController {
     private readonly disputes: DisputesService,
     private readonly inactivity: InactivityService,
     private readonly scheduledJobs: ScheduledJobsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Get('disputes')
@@ -230,6 +233,7 @@ export class AdminOpsController {
           },
         });
       });
+      void TaskNotify.notifyTaskClosed(this.notifications, task, 'force_closed');
     } else {
       await this.prisma.taskEvent.create({
         data: {

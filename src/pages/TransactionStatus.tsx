@@ -44,7 +44,7 @@ const STAGE_COLOR: Record<TimelineStageState, string> = {
 function StageRow({ stage, isLast }: { stage: FundTimelineStage; isLast: boolean }) {
   const isCurrent = stage.state === "current";
   const Icon =
-    isCurrent && (stage.id === "payment_initiated" || stage.id === "trust_initiated")
+    isCurrent && (stage.id === "reward_initiated" || stage.id === "trust_initiated")
       ? Loader2
       : STAGE_ICON[stage.state];
 
@@ -70,7 +70,7 @@ function StageRow({ stage, isLast }: { stage: FundTimelineStage; isLast: boolean
           className={cn(
             "h-4 w-4",
             isCurrent &&
-              stage.state !== "failed" &&
+              (stage.id === "reward_initiated" || stage.id === "trust_initiated") &&
               Icon === Loader2 &&
               "animate-spin",
           )}
@@ -241,16 +241,27 @@ const TransactionStatus = () => {
                 </div>
 
                 <div className="px-5 py-6">
-                  <h2 className="text-sm font-bold text-foreground mb-5">Fund movement timeline</h2>
+                  <h2 className="text-sm font-bold text-foreground mb-5">Transaction timeline</h2>
                   <div>
                     {timeline.stages.map((stage, idx) => (
                       <StageRow
                         key={stage.id}
                         stage={stage}
-                        isLast={idx === timeline.stages.length - 1}
+                        isLast={idx === timeline.stages.length - 1 && !timeline.noFurtherSettlements}
                       />
                     ))}
                   </div>
+                  {timeline.noFurtherSettlements && (
+                    <div className="mt-2 flex items-start gap-3 rounded-xl border border-[hsl(var(--success))]/30 bg-[hsl(var(--success))]/10 px-4 py-3">
+                      <CheckCircle2 className="h-5 w-5 text-[hsl(var(--success))] shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">No Further Settlements</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          All payments for this task have been settled.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -227,10 +227,7 @@ const MyTasks = () => {
         <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 mb-4 text-sm text-primary">
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <p>
-            <span className="font-semibold">Quit Task Policy:</span> You can quit a task only within the first{" "}
-            <span className="font-semibold">{QUIT_GRACE_HOURS} hours</span> after accepting it. After this period,
-            the &quot;Quit Task&quot; option will be disabled and you must complete the task. If you quit, you{" "}
-            <span className="font-semibold">cannot re-accept the same task</span> in the future.
+            <span className="font-semibold">Quit Task Policy:</span> You may quit a task only within the first 2 hours after accepting it, while the task is in COMMITTED state. After this period, the &apos;Quit Task&apos; option will be disabled, and you will be required to complete the task. Once you quit a task, you will not be able to accept the same task again.
           </p>
         </div>
       )}
