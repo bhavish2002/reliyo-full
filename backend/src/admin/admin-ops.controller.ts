@@ -15,7 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { toTaskDto } from '../tasks/tasks.mapper';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUserPayload } from '../auth/auth.types';
 import { DisputesService } from '../disputes/disputes.service';

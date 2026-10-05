@@ -73,7 +73,7 @@ const SignUp = () => {
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Strip numbers, emojis, and invalid special chars
-    let val = e.target.value.replace(/[^A-Za-z '\-]/g, "");
+    let val = e.target.value.replace(/[^A-Za-z' -]/g, "");
     // Prevent consecutive spaces
     val = val.replace(/ {2,}/g, " ");
     setValue("fullName", val, { shouldValidate: true });

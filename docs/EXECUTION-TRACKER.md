@@ -616,6 +616,9 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | 2026-08-11 | 8 | **Sprint 8 partial (~50%):** 8A cron/jobs, 8D-P0 profile/settings, 8F support UX, 8G admin cleanup, deadline-gated inactivity policy; `validate:jobs-cron`, `validate:profile-settings`, `validate:support-tickets`, extended `validate:inactivity`. |
 | 2026-09-24 | 8 | **Transaction status:** View Status tracks reward deposit, trust deposit, refunds, and reward payout against task status and the settlement journal. "No Further Settlements" appears only after `deleted`, `closed`, or `force_closed` is fully settled. Force-close requestor refund is the full reward plus 70% of the 3% trust-deposit penalty. |
 | 2026-09-10 | 8 | **Dispute cooldown:** DSP1 immediate; later rounds 48h → 24h → 12h from last raise; resets when acceptor marks `done` again. Raise Dispute stays visible in `done`/`disputed` and greys out with remaining time on hover. Server `cooldowns.disputeAfter` persists across refresh/re-login; raise blocked with `DISPUTE_COOLDOWN_ACTIVE`. **DSP4 rework:** `max(effectiveDeadline, review+10d)` — no change when 10+ days remain; otherwise 10 days from review. `extendedDeadline` written only when the date moves. |
+| 2026-10-05 | 8 | **Lint fixed (roadmap QA-09):** 25 ESLint errors resolved (BE 5, FE 20). Lint, typecheck, unit tests, and builds green locally; push to confirm GitHub CI. No behaviour change. |
+| 2026-10-01 | 8 | **Full verification:** Jest 68/68, Vitest 39/39, `tsc` BE+FE, `nest build`, `vite build`, and 12 local `validate:*` scripts pass. **ESLint fails** (BE 5 / FE 20 errors), so GitHub CI is red at Lint on `main` and `sprint9` (roadmap QA-09). |
+| 2026-10-01 | 8 | **Production roadmap:** [`PRODUCTION-ROADMAP.md`](PRODUCTION-ROADMAP.md) created as the launch source of truth (73 tasks; 13 completed). New P0 findings: generic webhook route accepts default mock secret in live mode (PAY-04); no PSP refund/payout execution (PAY-06/07); refresh cookie `secure` only on `NODE_ENV=production` (SEC-05). |
 | 2026-08-20 | 8 | **Inactivity fix:** job defaults on in dev/staging, startup `processDue`, UI pending-strike message (no stuck “1 minute”); `validate:inactivity` PASS. **Polish:** dynamic ratings, support ticket validation, public `/help-support` vs dashboard prefill split. |
 
 ---
@@ -625,6 +628,7 @@ See [`PRODUCT-WORKFLOW.md` §16](PRODUCT-WORKFLOW.md#known-deviations--technical
 | Resource | Path |
 |----------|------|
 | **Product workflow (validate here first)** | [`docs/PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) |
+| **Production roadmap (launch source of truth)** | [`docs/PRODUCTION-ROADMAP.md`](PRODUCTION-ROADMAP.md) |
 | Architecture & file guide | [`docs/PROJECT-OVERVIEW.md`](PROJECT-OVERVIEW.md) |
 | Sprint 4 detail | [`docs/sprint-4/README.md`](sprint-4/README.md) |
 | Sprint 5 payments / staging | [`docs/sprint-5/README.md`](sprint-5/README.md) |

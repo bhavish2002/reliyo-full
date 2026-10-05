@@ -1,5 +1,5 @@
 import { CronExpression } from '@nestjs/schedule';
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { InactivityService } from './inactivity.service';
 import { PaymentWebhookService } from '../payments/payment-webhook.service';
 import { ScheduledJobsService } from './scheduled-jobs.service';

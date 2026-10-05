@@ -13,7 +13,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { fetchUnreadNotificationCount } from "@/lib/notifications/api";
 import { listAdminDisputes, listAdminCloseRequests, listAdminSupportTickets } from "@/lib/admin/api";
 
-const overviewItems = [
+type AdminNavItem = {
+  label: string;
+  icon: typeof LayoutDashboard;
+  path: string;
+  dynamicBadge?: boolean;
+  badgeKey?: "disputes" | "close_requests" | "support_tickets";
+};
+
+const overviewItems: AdminNavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
   { label: "All Tasks", icon: FileText, path: "/admin/tasks" },
   { label: "Users", icon: Users, path: "/admin/users" },
@@ -25,7 +33,7 @@ const overviewItems = [
   { label: "Support", icon: Ticket, path: "/admin/support", dynamicBadge: true, badgeKey: "support_tickets" },
 ];
 
-const systemItems = [
+const systemItems: AdminNavItem[] = [
   { label: "Settings", icon: Settings, path: "/admin/settings" },
 ];
 
@@ -82,22 +90,22 @@ const SidebarContent = ({
             >
               <item.icon className="h-4 w-4" />
               {item.label}
-              {(item as any).badgeKey === "disputes" && disputeCount > 0 && (
+              {item.badgeKey === "disputes" && disputeCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {disputeCount}
                 </Badge>
               )}
-              {(item as any).badgeKey === "close_requests" && closeRequestCount > 0 && (
+              {item.badgeKey === "close_requests" && closeRequestCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {closeRequestCount}
                 </Badge>
               )}
-              {(item as any).badgeKey === "support_tickets" && supportTicketCount > 0 && (
+              {item.badgeKey === "support_tickets" && supportTicketCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {supportTicketCount}
                 </Badge>
               )}
-              {(item as any).dynamicBadge && !(item as any).badgeKey && adminNotifCount > 0 && (
+              {item.dynamicBadge && !item.badgeKey && adminNotifCount > 0 && (
                 <Badge variant="destructive" className="ml-auto h-5 min-w-[20px] rounded-full px-1.5 text-[10px]">
                   {adminNotifCount}
                 </Badge>
