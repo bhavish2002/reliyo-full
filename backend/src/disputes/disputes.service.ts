@@ -2,7 +2,7 @@ import {
   BadRequestException,
   Injectable,
 } from '@nestjs/common';
-import type { Dsp4Status, Prisma, Task, TaskStatus, User } from '@prisma/client';
+import type { Dsp4Status, Task, User } from '@prisma/client';
 import { LedgerService } from '../ledger/ledger.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { NotificationsService } from '../notifications/notifications.service';

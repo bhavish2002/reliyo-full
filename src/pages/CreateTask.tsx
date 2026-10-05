@@ -444,7 +444,7 @@ const CreateTask = () => {
                     }}
                     onBlur={() => {
                       if (form.reward === "" || (typeof form.reward === "number" && form.reward < 0)) {
-                        updateField("reward", 0 as any);
+                        updateField("reward", 0);
                       }
                     }}
                   />

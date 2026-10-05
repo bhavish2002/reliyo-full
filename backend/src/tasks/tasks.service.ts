@@ -754,9 +754,6 @@ export class TasksService {
     actor: AuthUserPayload,
   ): Promise<TaskDetailDto> {
     const task = await this.loadTaskOrThrow(id);
-    const events = await this.prisma.taskEvent.findMany({
-      where: { taskId: task.id },
-    });
     const role = this.lifecycle.resolveContextRole(
       task,
       actor.sub,

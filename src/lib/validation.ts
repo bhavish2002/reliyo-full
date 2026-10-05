@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const nameRegex = /^[A-Za-z][A-Za-z' -]*$/;
-const noConsecutiveSpaces = /^(?!.*  )/;
+const noConsecutiveSpaces = /^(?!.* {2})/;
 
 export const signUpSchema = z.object({
   fullName: z

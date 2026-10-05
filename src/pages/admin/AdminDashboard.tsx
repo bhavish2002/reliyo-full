@@ -44,7 +44,13 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   deleted: "bg-muted text-muted-foreground",
 };
 
-const PieTooltip = ({ active, payload }: any) => {
+const PieTooltip = ({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: { name?: string; value?: string | number }[];
+}) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-lg">

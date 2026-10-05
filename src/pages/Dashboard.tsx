@@ -106,13 +106,26 @@ const STATUS_PIE_COLORS: Record<TaskStatus, string> = {
   deleted: "hsl(var(--muted-foreground))",
 };
 
+type ChartPayloadEntry = {
+  dataKey?: string | number;
+  name?: string;
+  value?: string | number;
+  color?: string;
+};
+
+type ChartTooltipProps = {
+  active?: boolean;
+  payload?: ChartPayloadEntry[];
+  label?: string | number;
+};
+
 // ── Custom tooltip ──────────────────────────────────────────────────────────
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-lg">
       <p className="mb-1 font-medium text-popover-foreground">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <p key={p.dataKey} style={{ color: p.color }} className="flex justify-between gap-4">
           <span>{p.name}</span>
           <span className="font-semibold">{p.value}</span>
@@ -123,7 +136,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 // ── Pie tooltip (shows name + count on hover) ───────────────────────────────
-const PieTooltip = ({ active, payload }: any) => {
+const PieTooltip = ({ active, payload }: ChartTooltipProps) => {
   if (!active || !payload?.length) return null;
   const item = payload[0];
   return (
@@ -136,11 +149,11 @@ const PieTooltip = ({ active, payload }: any) => {
 };
 
 // ── Pie legend (color + label only, no count) ───────────────────────────────
-const PieLegendContent = ({ payload }: any) => {
+const PieLegendContent = ({ payload }: { payload?: ChartPayloadEntry[] }) => {
   if (!payload?.length) return null;
   return (
     <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-3">
-      {payload.map((entry: any) => (
+      {payload.map((entry) => (
         <div key={entry.value} className="flex items-center gap-1.5">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
@@ -280,12 +293,12 @@ const Dashboard = () => {
 
   const hasEarnings = monthlyData.some((d) => d.cumulativeEarnings > 0);
 
-  const EarningsTooltip = ({ active, payload, label }: any) => {
+  const EarningsTooltip = ({ active, payload, label }: ChartTooltipProps) => {
     if (!active || !payload?.length) return null;
     return (
       <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-lg">
         <p className="mb-1 font-medium text-popover-foreground">{label}</p>
-        {payload.map((p: any) => (
+        {payload.map((p) => (
           <p key={p.dataKey} style={{ color: p.color }} className="flex justify-between gap-4">
             <span>{p.name}</span>
             <span className="font-semibold">

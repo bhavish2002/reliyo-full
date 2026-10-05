@@ -3,7 +3,8 @@
 > **Purpose:** Single tracking document for everything remaining before production launch.  
 > **Consolidates:** Pending profile/settings work, Sprint 7.5 UI polish status, and Sprint 8A–8E.  
 > **Canonical workflow:** [`PRODUCT-WORKFLOW.md`](PRODUCT-WORKFLOW.md) · **Sprint history:** [`EXECUTION-TRACKER.md`](EXECUTION-TRACKER.md) · **Deploy & infra:** [`PRODUCTION-DEPLOYMENT-GUIDE.md`](PRODUCTION-DEPLOYMENT-GUIDE.md)  
-> **Last updated:** 2026-09-24 (transaction status timeline; force-close requestor share of trust penalty)
+> **Launch tracking moved to:** [`PRODUCTION-ROADMAP.md`](PRODUCTION-ROADMAP.md) (2026-10-01). Task IDs, statuses, and the readiness checklist live there; this file keeps sprint-level context.  
+> **Last updated:** 2026-10-01 (pointer to production roadmap); 2026-09-24 (transaction status timeline; force-close requestor share of trust penalty)
 
 ---
 
